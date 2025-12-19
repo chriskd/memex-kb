@@ -1,0 +1,39 @@
+[project]
+name = "voidlabs-kb"
+version = "0.1.0"
+description = "Organization-wide knowledge base with semantic search"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.14.1",
+    "pydantic>=2.12.0",
+    "whoosh>=2.7.4",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=3.0.0",
+    "python-frontmatter>=1.1.0",
+    "watchdog>=4.0.0",
+]
+
+[project.scripts]
+voidlabs-kb = "voidlabs_kb.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

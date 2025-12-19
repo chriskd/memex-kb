@@ -1,0 +1,24 @@
+# Worktrunk User Configuration
+# See: https://worktrunk.dev/
+#
+# This config provides sensible defaults for parallel AI agent workflows.
+
+# LLM Commit Message Generation
+# Uses ANTHROPIC_API_KEY from environment (set via Phase secrets)
+[commit-generation]
+command = "llm"
+args = ["-m", "claude-haiku-4.5"]
+
+# Worktree path template (siblings in parent directory)
+# Creates: ~/code/myproject.feature-branch for ~/code/myproject
+worktree-path = "../{{ main_worktree }}.{{ branch }}"
+
+# User hooks - run for ALL repositories before project hooks
+# These copy common files that aren't included in git worktrees
+[post-create]
+# Copy .env files from main worktree if they exist
+env = "test -f {{ repo_root }}/.env && cp {{ repo_root }}/.env .env || true"
+env-local = "test -f {{ repo_root }}/.env.local && cp {{ repo_root }}/.env.local .env.local || true"
+env-dev = "test -f {{ repo_root }}/.env.development && cp {{ repo_root }}/.env.development .env.development || true"
+# Copy Phase config if present
+phase = "test -f {{ repo_root }}/.phase.json && cp {{ repo_root }}/.phase.json .phase.json || true"

@@ -1,0 +1,44 @@
+# Voidlabs Development Container
+# Base configuration - synced via dc-sync
+#
+# Project-specific customizations go in docker-compose.override.yml
+# which is automatically merged and NOT synced.
+
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+
+    # Common volumes - shared across all voidlabs devcontainers
+    volumes:
+      - ..:/workspaces/src:cached
+      - /srv/fast:/srv/fast:cached
+      - /srv/fast/ai-cli-configs/claude:/home/chris/.claude:cached
+      - /srv/fast/ai-cli-configs/codex:/home/chris/.codex:cached
+      - /srv/fast/ai-cli-configs/factory:/home/chris/.factory:cached
+      - ${HOME}/.ssh:/home/chris/.ssh:cached
+
+    # Network configuration
+    networks:
+      - devtools-shared
+    dns:
+      - 192.168.51.53
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Environment variables
+    environment:
+      - IN_DEVCONTAINER=1
+      - CLAUDE_CONFIG_DIR=/home/chris/.claude
+      - PHASE_HOST=https://secrets.voidlabs.cc
+      - PHASE_SERVICE_TOKEN=${PHASE_SERVICE_TOKEN}
+      - PHASE_ENV=${PHASE_ENV}
+      - PHASE_APP=${PHASE_APP}
+
+    # Keep container running
+    command: sleep infinity
+
+networks:
+  devtools-shared:
+    external: true

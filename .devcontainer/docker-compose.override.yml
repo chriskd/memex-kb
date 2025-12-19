@@ -1,0 +1,17 @@
+# Project-specific overrides - NOT synced by pbs
+# This file is merged with docker-compose.yml automatically.
+#
+# Add project-specific volumes, ports, environment variables here.
+#
+# Examples:
+#   services:
+#     devcontainer:
+#       volumes:
+#         - /srv/fast/my-data:/workspaces/project/data:cached
+#       ports:
+#         - "8000:8000"
+#       environment:
+#         - MY_PROJECT_VAR=value
+
+services:
+  devcontainer: {}
