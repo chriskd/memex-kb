@@ -1,6 +1,6 @@
 """Pydantic models for the knowledge base."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -77,3 +77,11 @@ class QualityReport(BaseModel):
     accuracy: float
     total_queries: int
     details: list[QualityDetail] = Field(default_factory=list)
+
+
+class ViewStats(BaseModel):
+    """View statistics for a KB entry."""
+
+    total_views: int = 0
+    last_viewed: datetime | None = None
+    views_by_day: dict[str, int] = Field(default_factory=dict)  # ISO date -> count

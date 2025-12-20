@@ -4,7 +4,7 @@ import os
 import re
 import shutil
 import subprocess
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -538,6 +538,14 @@ async def get_tool(path: str) -> KBEntry:
     path_key = path[:-3] if path.endswith(".md") else path
     entry_backlinks = all_backlinks.get(path_key, [])
 
+    # Record the view (non-blocking, fire-and-forget)
+    try:
+        from .views_tracker import record_view
+
+        record_view(path)
+    except Exception:
+        pass  # Don't let view tracking failures affect get
+
     return KBEntry(
         path=path,
         metadata=metadata,
@@ -628,6 +636,173 @@ async def list_tool(
 
 
 @mcp.tool(
+    name="whats_new",
+    description=(
+        "List recently created or updated knowledge base entries, "
+        "sorted by most recent activity first."
+    ),
+)
+async def whats_new_tool(
+    days: int = 30,
+    limit: int = 10,
+    include_created: bool = True,
+    include_updated: bool = True,
+    category: str | None = None,
+    tag: str | None = None,
+) -> list[dict]:
+    """List recent KB entries.
+
+    Args:
+        days: Look back period in days (default 30).
+        limit: Maximum entries to return (default 10).
+        include_created: Include newly created entries (default True).
+        include_updated: Include recently updated entries (default True).
+        category: Optional category filter.
+        tag: Optional tag filter.
+
+    Returns:
+        List of {path, title, tags, created, updated, activity_type, activity_date}.
+    """
+    kb_root = get_kb_root()
+
+    if not kb_root.exists():
+        return []
+
+    # Determine search path
+    if category:
+        search_path = kb_root / category
+        if not search_path.exists() or not search_path.is_dir():
+            raise ValueError(f"Category not found: {category}")
+    else:
+        search_path = kb_root
+
+    cutoff_date = date.today() - timedelta(days=days)
+    candidates: list[dict] = []
+
+    for md_file in search_path.rglob("*.md"):
+        if md_file.name.startswith("_"):
+            continue
+
+        rel_path = str(md_file.relative_to(kb_root))
+
+        try:
+            metadata, _, _ = parse_entry(md_file)
+        except ParseError:
+            continue
+
+        # Filter by tag if specified
+        if tag and tag not in metadata.tags:
+            continue
+
+        # Determine activity type and date
+        activity_type: str | None = None
+        activity_date: date | None = None
+
+        # Check updated first (takes precedence if both qualify)
+        if include_updated and metadata.updated and metadata.updated >= cutoff_date:
+            activity_type = "updated"
+            activity_date = metadata.updated
+        elif include_created and metadata.created >= cutoff_date:
+            activity_type = "created"
+            activity_date = metadata.created
+
+        if activity_type is None:
+            continue
+
+        candidates.append(
+            {
+                "path": rel_path,
+                "title": metadata.title,
+                "tags": metadata.tags,
+                "created": metadata.created.isoformat() if metadata.created else None,
+                "updated": metadata.updated.isoformat() if metadata.updated else None,
+                "activity_type": activity_type,
+                "activity_date": activity_date.isoformat(),
+            }
+        )
+
+    # Sort by activity_date descending
+    candidates.sort(key=lambda x: x["activity_date"], reverse=True)
+
+    return candidates[:limit]
+
+
+@mcp.tool(
+    name="popular",
+    description=(
+        "List most frequently accessed knowledge base entries. "
+        "Tracks views from 'get' tool calls."
+    ),
+)
+async def popular_tool(
+    limit: int = 10,
+    days: int | None = None,
+    category: str | None = None,
+    tag: str | None = None,
+) -> list[dict]:
+    """List popular KB entries by view count.
+
+    Args:
+        limit: Maximum entries to return (default 10).
+        days: Optional time window (None = all time).
+        category: Optional category filter.
+        tag: Optional tag filter.
+
+    Returns:
+        List of {path, title, tags, view_count, last_viewed}.
+    """
+    from .views_tracker import get_popular
+
+    kb_root = get_kb_root()
+
+    if not kb_root.exists():
+        return []
+
+    # Get popular entries (fetch extra to allow for filtering)
+    popular_entries = get_popular(limit=limit * 3, days=days)
+
+    results: list[dict] = []
+
+    for entry_path, stats in popular_entries:
+        file_path = kb_root / entry_path
+
+        if not file_path.exists():
+            continue
+
+        # Apply category filter
+        if category:
+            parts = entry_path.split("/")
+            if len(parts) < 2 or parts[0] != category:
+                continue
+
+        try:
+            metadata, _, _ = parse_entry(file_path)
+        except ParseError:
+            continue
+
+        # Filter by tag if specified
+        if tag and tag not in metadata.tags:
+            continue
+
+        results.append(
+            {
+                "path": entry_path,
+                "title": metadata.title,
+                "tags": metadata.tags,
+                "view_count": stats.total_views,
+                "last_viewed": stats.last_viewed.isoformat()
+                if stats.last_viewed
+                else None,
+            }
+        )
+
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+@mcp.tool(
     name="backlinks",
     description="Find all entries that link to a specific entry.",
 )
@@ -663,6 +838,19 @@ async def reindex_tool() -> IndexStatus:
 
     searcher.reindex(kb_root)
     rebuild_backlink_cache(kb_root)
+
+    # Clean up views for deleted entries
+    try:
+        from .views_tracker import cleanup_stale_entries
+
+        valid_paths = {
+            str(p.relative_to(kb_root))
+            for p in kb_root.rglob("*.md")
+            if not p.name.startswith("_")
+        }
+        cleanup_stale_entries(valid_paths)
+    except Exception:
+        pass  # Don't fail reindex if cleanup fails
 
     status = searcher.status()
     return status
