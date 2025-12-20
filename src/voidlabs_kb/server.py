@@ -369,31 +369,27 @@ async def add_tool(
         Path of the created file.
     """
     kb_root = get_kb_root()
-    valid_categories = _get_valid_categories()
 
     # Determine target directory: prefer 'directory' over 'category'
     if directory:
-        # Validate the directory exists and is within KB
+        # Validate the directory is within KB, auto-create if needed
         abs_dir, normalized_dir = _validate_nested_path(directory)
-        if not abs_dir.exists():
-            raise ValueError(
-                f"Directory does not exist: {directory}. Use mkdir to create it first."
-            )
-        if not abs_dir.is_dir():
-            raise ValueError(f"Path is not a directory: {directory}")
+        if abs_dir.exists() and not abs_dir.is_dir():
+            raise ValueError(f"Path exists but is not a directory: {directory}")
+        # Auto-create directory if it doesn't exist
+        abs_dir.mkdir(parents=True, exist_ok=True)
         target_dir = abs_dir
         rel_dir = normalized_dir
     elif category:
-        if category not in valid_categories:
-            raise ValueError(
-                f"Invalid category '{category}'. Valid categories: {', '.join(valid_categories)}"
-            )
+        # Auto-create category directory if it doesn't exist
         target_dir = kb_root / category
+        target_dir.mkdir(parents=True, exist_ok=True)
         rel_dir = category
     else:
+        valid_categories = _get_valid_categories()
         raise ValueError(
             "Either 'category' or 'directory' must be provided. "
-            f"Valid categories: {', '.join(valid_categories)}"
+            f"Existing categories: {', '.join(valid_categories)}"
         )
 
     if not tags:
