@@ -197,28 +197,21 @@ class ChromaIndex:
 
     def clear(self) -> None:
         """Clear all documents from the index."""
+        # Force initialize client if needed
+        if self._client is None:
+            self._get_collection()
+
         if self._client is not None:
             # Delete and recreate collection
             try:
                 self._client.delete_collection(self.COLLECTION_NAME)
             except Exception:
                 pass
+            # Create fresh collection and update cached reference
             self._collection = self._client.get_or_create_collection(
                 name=self.COLLECTION_NAME,
                 metadata={"hnsw:space": "cosine"},
             )
-        else:
-            # Force initialize and clear
-            self._get_collection()
-            if self._client:
-                try:
-                    self._client.delete_collection(self.COLLECTION_NAME)
-                except Exception:
-                    pass
-                self._collection = self._client.get_or_create_collection(
-                    name=self.COLLECTION_NAME,
-                    metadata={"hnsw:space": "cosine"},
-                )
 
     def doc_count(self) -> int:
         """Return the number of documents in the index."""

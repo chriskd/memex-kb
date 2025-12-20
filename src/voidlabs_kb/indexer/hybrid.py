@@ -200,19 +200,9 @@ class HybridSearcher:
 
         for md_file in md_files:
             try:
-                # Parse the file
-                relative_path = md_file.relative_to(kb_root)
-                entry = parse_entry(md_file.read_text(), str(relative_path))
-
-                if entry:
-                    # Create chunk from entry
-                    chunk = DocumentChunk(
-                        path=str(relative_path),
-                        section=None,
-                        content=entry.content,
-                        metadata=entry.metadata,
-                    )
-                    chunks.append(chunk)
+                # Parse the file - returns (metadata, content, chunks)
+                _, _, file_chunks = parse_entry(md_file)
+                chunks.extend(file_chunks)
             except Exception:
                 # Skip files that can't be parsed
                 continue
