@@ -40,6 +40,14 @@ class SearchResult(BaseModel):
     created: date | None = None
     updated: date | None = None
     token_count: int = 0
+    content: str | None = None  # Full document content when requested
+
+
+class SearchResponse(BaseModel):
+    """Response wrapper for search results with optional warnings."""
+
+    results: list[SearchResult]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class KBEntry(BaseModel):

@@ -11,10 +11,10 @@ from typing import Literal
 from fastmcp import FastMCP
 
 from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
-from .config import get_kb_root
+from .config import MAX_CONTENT_RESULTS, get_kb_root
 from .evaluation import run_quality_checks
 from .indexer import HybridSearcher
-from .models import DocumentChunk, IndexStatus, KBEntry, QualityReport, SearchResult
+from .models import DocumentChunk, IndexStatus, KBEntry, QualityReport, SearchResponse, SearchResult
 from .parser import ParseError, extract_links, parse_entry, update_links_batch
 
 
@@ -230,11 +230,59 @@ def _get_parent_category(path: str) -> str:
     return parts[0]
 
 
+def _hydrate_content(results: list[SearchResult]) -> list[SearchResult]:
+    """Add full document content to search results.
+
+    Reads content from disk using parse_entry() for each result.
+
+    Args:
+        results: Search results to hydrate.
+
+    Returns:
+        New list of SearchResult with content populated.
+    """
+    if not results:
+        return results
+
+    kb_root = get_kb_root()
+    hydrated = []
+
+    for result in results:
+        file_path = kb_root / result.path
+        content = None
+
+        if file_path.exists():
+            try:
+                _, content, _ = parse_entry(file_path)
+            except ParseError:
+                # Fall back to None if parsing fails
+                pass
+
+        # Create new result with content
+        hydrated.append(
+            SearchResult(
+                path=result.path,
+                title=result.title,
+                snippet=result.snippet,
+                score=result.score,
+                tags=result.tags,
+                section=result.section,
+                created=result.created,
+                updated=result.updated,
+                token_count=result.token_count,
+                content=content,
+            )
+        )
+
+    return hydrated
+
+
 @mcp.tool(
     name="search",
     description=(
         "Search the knowledge base using hybrid keyword + semantic search. "
-        "Returns relevant entries ranked by relevance."
+        "Returns relevant entries ranked by relevance. "
+        "Use include_content=true to get full document content instead of snippets."
     ),
 )
 async def search_tool(
@@ -242,7 +290,8 @@ async def search_tool(
     limit: int = 10,
     mode: Literal["hybrid", "keyword", "semantic"] = "hybrid",
     tags: list[str] | None = None,
-) -> list[SearchResult]:
+    include_content: bool = False,
+) -> SearchResponse:
     """Search the knowledge base.
 
     Args:
@@ -250,19 +299,32 @@ async def search_tool(
         limit: Maximum number of results (default 10).
         mode: Search mode - "hybrid" (default), "keyword", or "semantic".
         tags: Optional list of tags to filter results.
+        include_content: If True, include full document content in results.
+                         Default False (snippet only). Limited to MAX_CONTENT_RESULTS.
 
     Returns:
-        List of SearchResult objects.
+        SearchResponse with results and optional warnings.
     """
     searcher = _get_searcher()
     results = searcher.search(query, limit=limit, mode=mode)
+    warnings: list[str] = []
 
     # Filter by tags if specified
     if tags:
         tag_set = set(tags)
         results = [r for r in results if tag_set.intersection(r.tags)]
 
-    return results
+    # Hydrate with full content if requested
+    if include_content:
+        if len(results) > MAX_CONTENT_RESULTS:
+            warnings.append(
+                f"Results limited to {MAX_CONTENT_RESULTS} for content hydration "
+                f"(requested {len(results)}). Reduce limit or use get tool for remaining."
+            )
+            results = results[:MAX_CONTENT_RESULTS]
+        results = _hydrate_content(results)
+
+    return SearchResponse(results=results, warnings=warnings)
 
 
 @mcp.tool(
