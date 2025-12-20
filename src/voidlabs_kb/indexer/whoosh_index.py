@@ -32,6 +32,7 @@ class WhooshIndex:
             chunk_id=STORED,
             created=STORED,
             updated=STORED,
+            token_count=STORED,
         )
 
     def _ensure_index(self) -> index.Index:
@@ -69,6 +70,7 @@ class WhooshIndex:
             chunk_id=chunk_id,
             created=chunk.metadata.created.isoformat() if chunk.metadata.created else None,
             updated=chunk.metadata.updated.isoformat() if chunk.metadata.updated else None,
+            token_count=chunk.token_count or 0,
         )
         writer.commit()
 
@@ -95,6 +97,7 @@ class WhooshIndex:
                 chunk_id=chunk_id,
                 created=chunk.metadata.created.isoformat() if chunk.metadata.created else None,
                 updated=chunk.metadata.updated.isoformat() if chunk.metadata.updated else None,
+                token_count=chunk.token_count or 0,
             )
 
         writer.commit()
@@ -161,6 +164,7 @@ class WhooshIndex:
                         section=hit.get("section") or None,
                         created=created_date,
                         updated=updated_date,
+                        token_count=hit.get("token_count") or 0,
                     )
                 )
 

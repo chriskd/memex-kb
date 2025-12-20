@@ -146,6 +146,7 @@ class HybridSearcher:
                     section=result.section,
                     created=result.created,
                     updated=result.updated,
+                    token_count=result.token_count,
                 )
             )
 

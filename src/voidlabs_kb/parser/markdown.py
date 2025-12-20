@@ -4,9 +4,28 @@ import re
 from pathlib import Path
 
 import frontmatter
+import tiktoken
 from pydantic import ValidationError
 
 from ..models import DocumentChunk, EntryMetadata
+
+# Cached encoder for token counting (cl100k_base is Claude/GPT-4 compatible)
+_encoder: tiktoken.Encoding | None = None
+
+
+def _get_token_count(text: str) -> int:
+    """Count tokens using cl100k_base encoding.
+
+    Args:
+        text: Text to count tokens for.
+
+    Returns:
+        Number of tokens in the text.
+    """
+    global _encoder
+    if _encoder is None:
+        _encoder = tiktoken.get_encoding("cl100k_base")
+    return len(_encoder.encode(text))
 
 
 class ParseError(Exception):
@@ -89,6 +108,7 @@ def _chunk_by_h2(path: str, content: str, metadata: EntryMetadata) -> list[Docum
                     section=None,
                     content=stripped,
                     metadata=metadata,
+                    token_count=_get_token_count(stripped),
                 )
             )
         return chunks
@@ -103,6 +123,7 @@ def _chunk_by_h2(path: str, content: str, metadata: EntryMetadata) -> list[Docum
                 section=None,
                 content=intro_content,
                 metadata=metadata,
+                token_count=_get_token_count(intro_content),
             )
         )
 
@@ -127,6 +148,7 @@ def _chunk_by_h2(path: str, content: str, metadata: EntryMetadata) -> list[Docum
                     section=section_name,
                     content=section_content,
                     metadata=metadata,
+                    token_count=_get_token_count(section_content),
                 )
             )
 

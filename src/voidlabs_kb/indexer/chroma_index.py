@@ -86,6 +86,7 @@ class ChromaIndex:
             "tags": ",".join(chunk.metadata.tags),
             "created": chunk.metadata.created.isoformat() if chunk.metadata.created else "",
             "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
+            "token_count": chunk.token_count or 0,
         }
 
         # Upsert to handle updates
@@ -123,6 +124,7 @@ class ChromaIndex:
                     "tags": ",".join(chunk.metadata.tags),
                     "created": chunk.metadata.created.isoformat() if chunk.metadata.created else "",
                     "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
+                    "token_count": chunk.token_count or 0,
                 }
             )
 
@@ -203,6 +205,7 @@ class ChromaIndex:
                     section=meta.get("section") or None,
                     created=created_date,
                     updated=updated_date,
+                    token_count=meta.get("token_count") or 0,
                 )
             )
 

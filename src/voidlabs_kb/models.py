@@ -25,6 +25,7 @@ class DocumentChunk(BaseModel):
     section: str | None = None
     content: str
     metadata: EntryMetadata
+    token_count: int | None = None
 
 
 class SearchResult(BaseModel):
@@ -38,6 +39,7 @@ class SearchResult(BaseModel):
     section: str | None = None
     created: date | None = None
     updated: date | None = None
+    token_count: int = 0
 
 
 class KBEntry(BaseModel):
