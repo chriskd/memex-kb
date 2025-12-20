@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from datetime import date
+
 from whoosh import index
 from whoosh.fields import ID, KEYWORD, STORED, TEXT, Schema
 from whoosh.qparser import MultifieldParser, OrGroup
@@ -28,6 +30,8 @@ class WhooshIndex:
             content=TEXT(stored=True),
             tags=KEYWORD(stored=True, commas=True),
             chunk_id=STORED,
+            created=STORED,
+            updated=STORED,
         )
 
     def _ensure_index(self) -> index.Index:
@@ -63,6 +67,8 @@ class WhooshIndex:
             content=chunk.content,
             tags=",".join(chunk.metadata.tags),
             chunk_id=chunk_id,
+            created=chunk.metadata.created.isoformat() if chunk.metadata.created else None,
+            updated=chunk.metadata.updated.isoformat() if chunk.metadata.updated else None,
         )
         writer.commit()
 
@@ -87,6 +93,8 @@ class WhooshIndex:
                 content=chunk.content,
                 tags=",".join(chunk.metadata.tags),
                 chunk_id=chunk_id,
+                created=chunk.metadata.created.isoformat() if chunk.metadata.created else None,
+                updated=chunk.metadata.updated.isoformat() if chunk.metadata.updated else None,
             )
 
         writer.commit()
@@ -137,6 +145,12 @@ class WhooshIndex:
                 tags = hit.get("tags", "")
                 tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
+                # Parse dates from stored ISO strings
+                created_str = hit.get("created")
+                updated_str = hit.get("updated")
+                created_date = date.fromisoformat(created_str) if created_str else None
+                updated_date = date.fromisoformat(updated_str) if updated_str else None
+
                 search_results.append(
                     SearchResult(
                         path=hit["path"],
@@ -145,6 +159,8 @@ class WhooshIndex:
                         score=hit.score / max_score,
                         tags=tag_list,
                         section=hit.get("section") or None,
+                        created=created_date,
+                        updated=updated_date,
                     )
                 )
 

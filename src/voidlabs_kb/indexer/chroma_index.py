@@ -1,5 +1,6 @@
 """ChromaDB-based semantic search index with embeddings."""
 
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -83,6 +84,8 @@ class ChromaIndex:
             "title": chunk.metadata.title,
             "section": chunk.section or "",
             "tags": ",".join(chunk.metadata.tags),
+            "created": chunk.metadata.created.isoformat() if chunk.metadata.created else "",
+            "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
         }
 
         # Upsert to handle updates
@@ -118,6 +121,8 @@ class ChromaIndex:
                     "title": chunk.metadata.title,
                     "section": chunk.section or "",
                     "tags": ",".join(chunk.metadata.tags),
+                    "created": chunk.metadata.created.isoformat() if chunk.metadata.created else "",
+                    "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
                 }
             )
 
@@ -182,6 +187,12 @@ class ChromaIndex:
             tags = meta.get("tags", "")
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
+            # Parse dates from stored ISO strings
+            created_str = meta.get("created", "")
+            updated_str = meta.get("updated", "")
+            created_date = date.fromisoformat(created_str) if created_str else None
+            updated_date = date.fromisoformat(updated_str) if updated_str else None
+
             search_results.append(
                 SearchResult(
                     path=meta.get("path", ""),
@@ -190,6 +201,8 @@ class ChromaIndex:
                     score=score,
                     tags=tag_list,
                     section=meta.get("section") or None,
+                    created=created_date,
+                    updated=updated_date,
                 )
             )
 

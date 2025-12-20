@@ -1,7 +1,7 @@
 """Markdown parsing with frontmatter and link extraction."""
 
 from ..models import DocumentChunk, EntryMetadata
-from .links import extract_links, resolve_backlinks
+from .links import extract_links, resolve_backlinks, update_links_batch, update_links_in_files
 from .markdown import ParseError, parse_entry
 
 __all__ = [
@@ -11,4 +11,6 @@ __all__ = [
     "DocumentChunk",
     "extract_links",
     "resolve_backlinks",
+    "update_links_in_files",
+    "update_links_batch",
 ]

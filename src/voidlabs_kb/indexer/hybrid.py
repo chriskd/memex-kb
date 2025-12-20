@@ -144,6 +144,8 @@ class HybridSearcher:
                     score=normalized_score,
                     tags=result.tags,
                     section=result.section,
+                    created=result.created,
+                    updated=result.updated,
                 )
             )
 

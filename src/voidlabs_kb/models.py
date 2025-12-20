@@ -36,6 +36,8 @@ class SearchResult(BaseModel):
     score: float
     tags: list[str] = Field(default_factory=list)
     section: str | None = None
+    created: date | None = None
+    updated: date | None = None
 
 
 class KBEntry(BaseModel):

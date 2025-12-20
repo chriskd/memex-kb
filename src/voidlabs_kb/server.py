@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -14,7 +15,7 @@ from .config import get_kb_root
 from .evaluation import run_quality_checks
 from .indexer import HybridSearcher
 from .models import DocumentChunk, IndexStatus, KBEntry, QualityReport, SearchResult
-from .parser import ParseError, extract_links, parse_entry
+from .parser import ParseError, extract_links, parse_entry, update_links_batch
 
 
 def _get_current_contributor() -> str | None:
@@ -172,6 +173,63 @@ def _get_backlink_index() -> dict[str, list[str]]:
     return ensure_backlink_cache(kb_root)
 
 
+def _validate_nested_path(path: str) -> tuple[Path, str]:
+    """Validate a nested path within the KB.
+
+    Args:
+        path: Relative path like "development/python/file.md" or "development/python/"
+
+    Returns:
+        Tuple of (absolute_path, normalized_relative_path)
+
+    Raises:
+        ValueError: If path is invalid or outside KB.
+    """
+    kb_root = get_kb_root()
+
+    # Security: prevent path traversal
+    normalized = Path(path).as_posix()
+    if ".." in normalized or normalized.startswith("/"):
+        raise ValueError(f"Invalid path: {path}")
+
+    # Check for hidden/special path components
+    for part in Path(path).parts:
+        if part.startswith(".") or part.startswith("_"):
+            raise ValueError(f"Invalid path component: {part}")
+
+    abs_path = (kb_root / path).resolve()
+
+    # Ensure path is within KB root
+    try:
+        abs_path.relative_to(kb_root.resolve())
+    except ValueError:
+        raise ValueError(f"Path escapes knowledge base: {path}")
+
+    return abs_path, normalized
+
+
+def _directory_exists(directory: str) -> bool:
+    """Check if a directory path exists within the KB."""
+    kb_root = get_kb_root()
+    dir_path = kb_root / directory
+    return dir_path.exists() and dir_path.is_dir()
+
+
+def _get_parent_category(path: str) -> str:
+    """Extract top-level category from a nested path.
+
+    Args:
+        path: "development/python/frameworks/file.md"
+
+    Returns:
+        "development"
+    """
+    parts = Path(path).parts
+    if not parts:
+        raise ValueError("Empty path")
+    return parts[0]
+
+
 @mcp.tool(
     name="search",
     description=(
@@ -222,14 +280,15 @@ async def quality_tool(limit: int = 5, cutoff: int = 3) -> QualityReport:
     name="add",
     description=(
         "Create a new knowledge base entry. Generates a slug from the title "
-        "and places the entry in the specified category."
+        "and places the entry in the specified category or directory."
     ),
 )
 async def add_tool(
     title: str,
     content: str,
     tags: list[str],
-    category: str,
+    category: str = "",
+    directory: str | None = None,
     links: list[str] | None = None,
 ) -> str:
     """Create a new KB entry.
@@ -238,7 +297,10 @@ async def add_tool(
         title: Entry title.
         content: Markdown content (without frontmatter).
         tags: List of tags for the entry.
-        category: Category directory (e.g., "development", "devops").
+        category: Top-level category directory (e.g., "development", "devops").
+                  Deprecated - use 'directory' for nested paths.
+        directory: Full directory path (e.g., "development/python/frameworks").
+                   Takes precedence over 'category' if both are provided.
         links: Optional list of paths to link to using [[link]] syntax.
 
     Returns:
@@ -247,9 +309,29 @@ async def add_tool(
     kb_root = get_kb_root()
     valid_categories = _get_valid_categories()
 
-    if category not in valid_categories:
+    # Determine target directory: prefer 'directory' over 'category'
+    if directory:
+        # Validate the directory exists and is within KB
+        abs_dir, normalized_dir = _validate_nested_path(directory)
+        if not abs_dir.exists():
+            raise ValueError(
+                f"Directory does not exist: {directory}. Use mkdir to create it first."
+            )
+        if not abs_dir.is_dir():
+            raise ValueError(f"Path is not a directory: {directory}")
+        target_dir = abs_dir
+        rel_dir = normalized_dir
+    elif category:
+        if category not in valid_categories:
+            raise ValueError(
+                f"Invalid category '{category}'. Valid categories: {', '.join(valid_categories)}"
+            )
+        target_dir = kb_root / category
+        rel_dir = category
+    else:
         raise ValueError(
-            f"Invalid category '{category}'. Valid categories: {', '.join(valid_categories)}"
+            "Either 'category' or 'directory' must be provided. "
+            f"Valid categories: {', '.join(valid_categories)}"
         )
 
     if not tags:
@@ -260,8 +342,8 @@ async def add_tool(
     if not slug:
         raise ValueError("Title must contain at least one alphanumeric character")
 
-    file_path = kb_root / category / f"{slug}.md"
-    rel_path = f"{category}/{slug}.md"
+    file_path = target_dir / f"{slug}.md"
+    rel_path = f"{rel_dir}/{slug}.md"
 
     if file_path.exists():
         raise ValueError(f"Entry already exists at {rel_path}")
@@ -467,30 +549,41 @@ async def get_tool(path: str) -> KBEntry:
 
 @mcp.tool(
     name="list",
-    description="List knowledge base entries, optionally filtered by category or tag.",
+    description="List knowledge base entries, optionally filtered by category, directory, or tag.",
 )
 async def list_tool(
     category: str | None = None,
+    directory: str | None = None,
     tag: str | None = None,
+    recursive: bool = True,
     limit: int = 20,
 ) -> list[dict]:
     """List KB entries.
 
     Args:
-        category: Optional category to filter by.
+        category: Optional top-level category to filter by (e.g., "development").
+        directory: Optional directory path to filter by (e.g., "development/python").
+                   Takes precedence over 'category' if both are provided.
         tag: Optional tag to filter by.
+        recursive: If True (default), include entries in subdirectories.
+                   If False, only list direct children of the directory.
         limit: Maximum number of entries to return (default 20).
 
     Returns:
-        List of {path, title, tags} dictionaries.
+        List of {path, title, tags, created, updated} dictionaries.
     """
     kb_root = get_kb_root()
 
     if not kb_root.exists():
         return []
 
-    # Determine search path
-    if category:
+    # Determine search path: prefer 'directory' over 'category'
+    if directory:
+        abs_path, _ = _validate_nested_path(directory)
+        if not abs_path.exists() or not abs_path.is_dir():
+            raise ValueError(f"Directory not found: {directory}")
+        search_path = abs_path
+    elif category:
         search_path = kb_root / category
         if not search_path.exists() or not search_path.is_dir():
             raise ValueError(f"Category not found: {category}")
@@ -499,7 +592,10 @@ async def list_tool(
 
     results = []
 
-    for md_file in search_path.rglob("*.md"):
+    # Choose glob pattern based on recursive flag
+    md_files = search_path.rglob("*.md") if recursive else search_path.glob("*.md")
+
+    for md_file in md_files:
         # Skip index files
         if md_file.name.startswith("_"):
             continue
@@ -520,6 +616,8 @@ async def list_tool(
                 "path": rel_path,
                 "title": metadata.title,
                 "tags": metadata.tags,
+                "created": metadata.created.isoformat() if metadata.created else None,
+                "updated": metadata.updated.isoformat() if metadata.updated else None,
             }
         )
 
@@ -568,6 +666,315 @@ async def reindex_tool() -> IndexStatus:
 
     status = searcher.status()
     return status
+
+
+@mcp.tool(
+    name="tree",
+    description="Display the directory structure of the knowledge base or a subdirectory.",
+)
+async def tree_tool(
+    path: str = "",
+    depth: int = 3,
+    include_files: bool = True,
+) -> dict:
+    """Show directory tree.
+
+    Args:
+        path: Starting path relative to KB root (empty for root).
+        depth: Maximum depth to display (default 3).
+        include_files: Whether to include .md files (default True).
+
+    Returns:
+        Dict with tree structure and counts.
+    """
+    kb_root = get_kb_root()
+
+    if path:
+        abs_path, _ = _validate_nested_path(path)
+        if not abs_path.is_dir():
+            raise ValueError(f"Path is not a directory: {path}")
+        start_path = abs_path
+    else:
+        start_path = kb_root
+
+    def _build_tree(current: Path, current_depth: int) -> dict:
+        """Recursively build tree structure."""
+        result = {}
+
+        if current_depth >= depth:
+            return result
+
+        try:
+            items = sorted(current.iterdir(), key=lambda p: (p.is_file(), p.name))
+        except PermissionError:
+            return result
+
+        for item in items:
+            # Skip hidden and special files
+            if item.name.startswith(".") or item.name.startswith("_"):
+                continue
+
+            if item.is_dir():
+                children = _build_tree(item, current_depth + 1)
+                result[item.name] = {"_type": "directory", **children}
+            elif item.is_file() and item.suffix == ".md" and include_files:
+                # Try to get title from frontmatter
+                title = None
+                try:
+                    metadata, _, _ = parse_entry(item)
+                    title = metadata.title
+                except (ParseError, Exception):
+                    pass
+                result[item.name] = {"_type": "file", "title": title}
+
+        return result
+
+    tree = _build_tree(start_path, 0)
+
+    # Count directories and files
+    def _count(node: dict) -> tuple[int, int]:
+        dirs, files = 0, 0
+        for key, value in node.items():
+            if key == "_type":
+                continue
+            if isinstance(value, dict):
+                if value.get("_type") == "directory":
+                    dirs += 1
+                    sub_dirs, sub_files = _count(value)
+                    dirs += sub_dirs
+                    files += sub_files
+                elif value.get("_type") == "file":
+                    files += 1
+        return dirs, files
+
+    total_dirs, total_files = _count(tree)
+
+    return {
+        "tree": tree,
+        "directories": total_dirs,
+        "files": total_files,
+    }
+
+
+@mcp.tool(
+    name="mkdir",
+    description="Create a new directory within the knowledge base hierarchy.",
+)
+async def mkdir_tool(path: str) -> str:
+    """Create a directory.
+
+    Args:
+        path: Directory path relative to KB root (e.g., "development/python/frameworks").
+              Must start with a valid top-level category.
+
+    Returns:
+        Created directory path.
+
+    Raises:
+        ValueError: If path is invalid or directory already exists.
+    """
+    kb_root = get_kb_root()
+
+    # Validate path format
+    abs_path, normalized = _validate_nested_path(path)
+
+    # Ensure it starts with a valid category
+    parent_category = _get_parent_category(normalized)
+    valid_categories = _get_valid_categories()
+
+    if parent_category not in valid_categories:
+        raise ValueError(
+            f"Path must start with a valid category. Valid categories: {', '.join(valid_categories)}"
+        )
+
+    # Check if already exists
+    if abs_path.exists():
+        raise ValueError(f"Directory already exists: {path}")
+
+    # Create the directory (and any missing parents within the category)
+    abs_path.mkdir(parents=True, exist_ok=False)
+
+    return normalized
+
+
+@mcp.tool(
+    name="move",
+    description=(
+        "Move an entry or directory to a new location. "
+        "Updates all bidirectional links and search indices."
+    ),
+)
+async def move_tool(
+    source: str,
+    destination: str,
+    update_links: bool = True,
+) -> dict:
+    """Move entry or directory.
+
+    Args:
+        source: Current path (e.g., "development/old-entry.md" or "development/python/").
+        destination: New path (e.g., "architecture/old-entry.md" or "patterns/python/").
+        update_links: Whether to update [[links]] in other files (default True).
+
+    Returns:
+        Dict with moved paths and updated link count.
+
+    Raises:
+        ValueError: If source doesn't exist or destination conflicts.
+    """
+    kb_root = get_kb_root()
+
+    # Validate source path
+    source_abs, source_normalized = _validate_nested_path(source)
+    if not source_abs.exists():
+        raise ValueError(f"Source not found: {source}")
+
+    # Validate destination path
+    dest_abs, dest_normalized = _validate_nested_path(destination)
+
+    # Check destination doesn't already exist
+    if dest_abs.exists():
+        raise ValueError(f"Destination already exists: {destination}")
+
+    # Ensure destination parent directory exists
+    dest_parent = dest_abs.parent
+    if not dest_parent.exists():
+        raise ValueError(
+            f"Destination parent directory does not exist: {dest_parent.relative_to(kb_root)}. "
+            "Use mkdir to create it first."
+        )
+
+    # Ensure destination is within a valid category
+    dest_category = _get_parent_category(dest_normalized)
+    valid_categories = _get_valid_categories()
+    if dest_category not in valid_categories:
+        raise ValueError(
+            f"Destination must be within a valid category. Valid categories: {', '.join(valid_categories)}"
+        )
+
+    # Protect category root directories from being moved
+    if source_normalized in valid_categories:
+        raise ValueError(f"Cannot move category root directory: {source}")
+
+    # Collect files to move and build path mapping for link updates
+    path_mapping: dict[str, str] = {}  # old_path -> new_path (without .md)
+    moved_files: list[str] = []
+
+    if source_abs.is_file():
+        # Moving a single file
+        old_rel = source_normalized[:-3] if source_normalized.endswith(".md") else source_normalized
+        new_rel = dest_normalized[:-3] if dest_normalized.endswith(".md") else dest_normalized
+        path_mapping[old_rel] = new_rel
+        moved_files.append(f"{source_normalized} -> {dest_normalized}")
+    else:
+        # Moving a directory - collect all .md files
+        for md_file in source_abs.rglob("*.md"):
+            old_rel_path = str(md_file.relative_to(kb_root))
+            old_rel = old_rel_path[:-3] if old_rel_path.endswith(".md") else old_rel_path
+
+            # Compute new path
+            relative_to_source = md_file.relative_to(source_abs)
+            new_rel_path = str(Path(dest_normalized) / relative_to_source)
+            new_rel = new_rel_path[:-3] if new_rel_path.endswith(".md") else new_rel_path
+
+            path_mapping[old_rel] = new_rel
+            moved_files.append(f"{old_rel_path} -> {new_rel_path}")
+
+    # Perform the move
+    shutil.move(str(source_abs), str(dest_abs))
+
+    # Update links in other files
+    links_updated = 0
+    if update_links and path_mapping:
+        links_updated = update_links_batch(kb_root, path_mapping)
+
+    # Reindex moved files
+    searcher = _get_searcher()
+    entries_reindexed = 0
+
+    for old_path, new_path in path_mapping.items():
+        old_path_md = f"{old_path}.md"
+        new_path_md = f"{new_path}.md"
+
+        # Delete old index entries
+        searcher.delete_document(old_path_md)
+
+        # Index under new path
+        new_file_path = kb_root / new_path_md
+        if new_file_path.exists():
+            try:
+                _, _, chunks = parse_entry(new_file_path)
+                if chunks:
+                    normalized_chunks = _normalize_chunks(chunks, new_path_md)
+                    searcher.index_chunks(normalized_chunks)
+                    entries_reindexed += 1
+            except ParseError:
+                pass
+
+    # Rebuild backlink cache
+    rebuild_backlink_cache(kb_root)
+
+    return {
+        "moved": moved_files,
+        "links_updated": links_updated,
+        "entries_reindexed": entries_reindexed,
+    }
+
+
+@mcp.tool(
+    name="rmdir",
+    description="Remove an empty directory from the knowledge base.",
+)
+async def rmdir_tool(path: str, force: bool = False) -> str:
+    """Remove directory.
+
+    Args:
+        path: Directory path relative to KB root.
+        force: If True, also remove empty subdirectories recursively.
+
+    Returns:
+        Removed directory path.
+
+    Raises:
+        ValueError: If directory not empty (without force), doesn't exist, or is a category root.
+    """
+    kb_root = get_kb_root()
+
+    # Validate path
+    abs_path, normalized = _validate_nested_path(path)
+
+    if not abs_path.exists():
+        raise ValueError(f"Directory not found: {path}")
+
+    if not abs_path.is_dir():
+        raise ValueError(f"Path is not a directory: {path}")
+
+    # Protect category root directories
+    valid_categories = _get_valid_categories()
+    if normalized in valid_categories:
+        raise ValueError(f"Cannot remove category root directory: {path}")
+
+    # Check if directory is empty (or force is True)
+    has_files = any(abs_path.rglob("*"))
+    has_md_files = any(abs_path.rglob("*.md"))
+
+    if has_md_files:
+        raise ValueError(
+            f"Directory contains entries: {path}. Move or delete entries first."
+        )
+
+    if has_files and not force:
+        raise ValueError(
+            f"Directory not empty: {path}. Use force=True to remove empty subdirectories."
+        )
+
+    # Remove the directory
+    if force:
+        shutil.rmtree(str(abs_path))
+    else:
+        abs_path.rmdir()
+
+    return normalized
 
 
 def main():
