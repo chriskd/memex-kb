@@ -31,3 +31,6 @@ MAX_SEARCH_LIMIT = 50
 
 # RRF constant for hybrid search
 RRF_K = 60
+
+# Maximum results to hydrate with full content
+MAX_CONTENT_RESULTS = 20
