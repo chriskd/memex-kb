@@ -9,7 +9,7 @@
       "name": "voidlabs-kb",
       "description": "Organization-wide knowledge base with semantic search. Query and contribute to shared organizational knowledge across all voidlabs projects.",
       "version": "0.1.0",
-      "source": "./.claude-plugin"
+      "source": "./"
     }
   ]
 }
