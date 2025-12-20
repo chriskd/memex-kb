@@ -1,15 +1,15 @@
 {
-  "hooks": [
-    {
-      "matcher": "",
-      "event": "SessionStart",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "uv --directory ${CLAUDE_PLUGIN_ROOT} run python ${CLAUDE_PLUGIN_ROOT}/hooks/session-context.py",
-          "timeout": 10000
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv --directory ${CLAUDE_PLUGIN_ROOT} run python ${CLAUDE_PLUGIN_ROOT}/hooks/session-context.py",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
 }

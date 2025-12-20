@@ -169,6 +169,29 @@ def get_popular(
     return sorted_views[:limit]
 
 
+def delete_entry_views(
+    path: str,
+    index_root: Path | None = None,
+) -> bool:
+    """Remove view record for a single entry.
+
+    Args:
+        path: Path to the entry to remove.
+        index_root: Optional override for index storage location.
+
+    Returns:
+        True if entry was found and removed, False otherwise.
+    """
+    views = load_views(index_root)
+
+    if path not in views:
+        return False
+
+    del views[path]
+    save_views(views, index_root)
+    return True
+
+
 def cleanup_stale_entries(
     valid_paths: set[str],
     index_root: Path | None = None,

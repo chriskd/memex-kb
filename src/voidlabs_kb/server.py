@@ -1223,6 +1223,285 @@ async def rmdir_tool(path: str, force: bool = False) -> str:
     return normalized
 
 
+@mcp.tool(
+    name="delete",
+    description=(
+        "Delete a knowledge base entry. "
+        "Warns if other entries link to it (has backlinks). "
+        "Use force=True to delete anyway."
+    ),
+)
+async def delete_tool(path: str, force: bool = False) -> dict:
+    """Delete an entry.
+
+    Args:
+        path: Path to the entry (e.g., "development/old-entry.md").
+        force: If True, delete even if other entries link to this one.
+
+    Returns:
+        Dict with deleted path and any backlinks that were pointing to it.
+
+    Raises:
+        ValueError: If entry doesn't exist or has backlinks (without force).
+    """
+    kb_root = get_kb_root()
+
+    # Validate path
+    abs_path, normalized = _validate_nested_path(path)
+
+    if not abs_path.exists():
+        raise ValueError(f"Entry not found: {path}")
+
+    if not abs_path.is_file():
+        raise ValueError(f"Path is not a file: {path}. Use rmdir for directories.")
+
+    if not normalized.endswith(".md"):
+        raise ValueError(f"Path must be a markdown file: {path}")
+
+    # Check for backlinks
+    path_key = normalized[:-3] if normalized.endswith(".md") else normalized
+    all_backlinks = _get_backlink_index()
+    entry_backlinks = all_backlinks.get(path_key, [])
+
+    if entry_backlinks and not force:
+        raise ValueError(
+            f"Entry has {len(entry_backlinks)} backlink(s): {', '.join(entry_backlinks)}. "
+            "Use force=True to delete anyway, or update linking entries first."
+        )
+
+    # Remove from search index
+    searcher = _get_searcher()
+    searcher.delete_document(normalized)
+
+    # Remove from view tracking
+    try:
+        from .views_tracker import delete_entry_views
+
+        delete_entry_views(normalized)
+    except Exception:
+        pass  # Don't fail delete if view cleanup fails
+
+    # Delete the file
+    abs_path.unlink()
+
+    # Rebuild backlink cache
+    rebuild_backlink_cache(kb_root)
+
+    return {
+        "deleted": normalized,
+        "had_backlinks": entry_backlinks,
+    }
+
+
+@mcp.tool(
+    name="tags",
+    description=(
+        "List all tags used in the knowledge base with usage counts. "
+        "Helps discover available tags and find inconsistencies."
+    ),
+)
+async def tags_tool(
+    min_count: int = 1,
+    include_entries: bool = False,
+) -> list[dict]:
+    """List all tags with usage counts.
+
+    Args:
+        min_count: Only include tags used at least this many times (default 1).
+        include_entries: If True, include list of entry paths for each tag.
+
+    Returns:
+        List of {tag, count, entries?} sorted by count descending.
+    """
+    kb_root = get_kb_root()
+
+    if not kb_root.exists():
+        return []
+
+    # Collect all tags
+    tag_entries: dict[str, list[str]] = {}
+
+    for md_file in kb_root.rglob("*.md"):
+        if md_file.name.startswith("_"):
+            continue
+
+        rel_path = str(md_file.relative_to(kb_root))
+
+        try:
+            metadata, _, _ = parse_entry(md_file)
+        except ParseError:
+            continue
+
+        for tag in metadata.tags:
+            if tag not in tag_entries:
+                tag_entries[tag] = []
+            tag_entries[tag].append(rel_path)
+
+    # Build results
+    results = []
+    for tag, entries in sorted(tag_entries.items(), key=lambda x: -len(x[1])):
+        if len(entries) >= min_count:
+            result: dict = {"tag": tag, "count": len(entries)}
+            if include_entries:
+                result["entries"] = entries
+            results.append(result)
+
+    return results
+
+
+@mcp.tool(
+    name="health",
+    description=(
+        "Audit the knowledge base for problems: orphaned entries (no incoming links), "
+        "broken links, stale content, and empty directories."
+    ),
+)
+async def health_tool(
+    stale_days: int = 90,
+    check_orphans: bool = True,
+    check_broken_links: bool = True,
+    check_stale: bool = True,
+    check_empty_dirs: bool = True,
+) -> dict:
+    """Audit KB health.
+
+    Args:
+        stale_days: Entries not updated in this many days are considered stale.
+        check_orphans: Check for entries with no incoming backlinks.
+        check_broken_links: Check for [[links]] pointing to non-existent entries.
+        check_stale: Check for entries not updated recently.
+        check_empty_dirs: Check for directories with no entries.
+
+    Returns:
+        Dict with lists of issues found in each category.
+    """
+    kb_root = get_kb_root()
+
+    if not kb_root.exists():
+        return {
+            "orphans": [],
+            "broken_links": [],
+            "stale": [],
+            "empty_dirs": [],
+            "summary": {"total_issues": 0},
+        }
+
+    results: dict = {
+        "orphans": [],
+        "broken_links": [],
+        "stale": [],
+        "empty_dirs": [],
+    }
+
+    # Collect all entries and their metadata
+    all_entries: dict[str, dict] = {}  # path -> {title, tags, created, updated, links}
+    cutoff_date = date.today() - timedelta(days=stale_days)
+
+    for md_file in kb_root.rglob("*.md"):
+        if md_file.name.startswith("_"):
+            continue
+
+        rel_path = str(md_file.relative_to(kb_root))
+        path_key = rel_path[:-3] if rel_path.endswith(".md") else rel_path
+
+        try:
+            metadata, content, _ = parse_entry(md_file)
+            links = extract_links(content)
+        except ParseError:
+            continue
+
+        all_entries[path_key] = {
+            "path": rel_path,
+            "title": metadata.title,
+            "tags": metadata.tags,
+            "created": metadata.created,
+            "updated": metadata.updated,
+            "links": links,
+        }
+
+    # Get backlink index
+    all_backlinks = _get_backlink_index()
+
+    # Check for orphans (entries with no incoming backlinks)
+    if check_orphans:
+        for path_key, entry in all_entries.items():
+            incoming = all_backlinks.get(path_key, [])
+            if not incoming:
+                results["orphans"].append({
+                    "path": entry["path"],
+                    "title": entry["title"],
+                })
+
+    # Check for broken links
+    if check_broken_links:
+        valid_targets = set(all_entries.keys())
+        # Also accept paths with .md extension
+        valid_targets.update(f"{k}.md" for k in all_entries.keys())
+        # Also accept titles as link targets
+        title_to_path = {e["title"]: k for k, e in all_entries.items()}
+
+        for path_key, entry in all_entries.items():
+            for link in entry["links"]:
+                # Normalize link target
+                link_normalized = link[:-3] if link.endswith(".md") else link
+
+                # Check if link is valid (by path or by title)
+                if (
+                    link not in valid_targets
+                    and link_normalized not in valid_targets
+                    and link not in title_to_path
+                ):
+                    results["broken_links"].append({
+                        "source": entry["path"],
+                        "broken_link": link,
+                    })
+
+    # Check for stale entries
+    if check_stale:
+        for path_key, entry in all_entries.items():
+            last_activity = entry["updated"] or entry["created"]
+            if last_activity and last_activity < cutoff_date:
+                days_old = (date.today() - last_activity).days
+                results["stale"].append({
+                    "path": entry["path"],
+                    "title": entry["title"],
+                    "last_activity": last_activity.isoformat(),
+                    "days_old": days_old,
+                })
+
+    # Check for empty directories
+    if check_empty_dirs:
+        for dir_path in kb_root.rglob("*"):
+            if not dir_path.is_dir():
+                continue
+            if dir_path.name.startswith(".") or dir_path.name.startswith("_"):
+                continue
+
+            # Check if directory has any .md files
+            has_entries = any(
+                f.suffix == ".md" and not f.name.startswith("_")
+                for f in dir_path.rglob("*")
+                if f.is_file()
+            )
+
+            if not has_entries:
+                rel_dir = str(dir_path.relative_to(kb_root))
+                results["empty_dirs"].append(rel_dir)
+
+    # Add summary
+    total_issues = sum(len(v) for v in results.values() if isinstance(v, list))
+    results["summary"] = {
+        "total_issues": total_issues,
+        "orphans_count": len(results["orphans"]),
+        "broken_links_count": len(results["broken_links"]),
+        "stale_count": len(results["stale"]),
+        "empty_dirs_count": len(results["empty_dirs"]),
+        "total_entries": len(all_entries),
+    }
+
+    return results
+
+
 def main():
     """Run the MCP server."""
     # Check for preload request via environment variable

@@ -2,19 +2,7 @@
   "mcpServers": {
     "voidlabs-kb": {
       "type": "stdio",
-      "command": "uv",
-      "args": [
-        "--directory",
-        "${CLAUDE_PLUGIN_ROOT}",
-        "run",
-        "python",
-        "-m",
-        "voidlabs_kb"
-      ],
-      "env": {
-        "KB_ROOT": "${CLAUDE_PLUGIN_ROOT}/kb",
-        "INDEX_ROOT": "${CLAUDE_PLUGIN_ROOT}/.indices"
-      }
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/run-mcp.sh"
     }
   }
 }
