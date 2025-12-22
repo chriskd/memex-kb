@@ -1364,8 +1364,14 @@
         // API helpers
         const api = {
             async get(path) {
-                const res = await fetch(`/api${path}`);
-                if (!res.ok) throw new Error(`API error: ${res.status}`);
+                const url = `/api${path}`;
+                console.log('API GET:', url);
+                const res = await fetch(url);
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error('API error response:', res.status, text);
+                    throw new Error(`API error: ${res.status} - ${text}`);
+                }
                 return res.json();
             },
 
@@ -1571,6 +1577,17 @@
             const results = $('#search-results');
             let timeout;
 
+            if (!input) {
+                console.error('Search setup failed: #search-input not found');
+                return;
+            }
+            if (!results) {
+                console.error('Search setup failed: #search-results not found');
+                return;
+            }
+
+            console.log('Search initialized');
+
             input.addEventListener('input', () => {
                 clearTimeout(timeout);
                 const query = input.value.trim();
@@ -1582,8 +1599,10 @@
 
                 timeout = setTimeout(async () => {
                     try {
+                        console.log('Searching for:', query);
                         const data = await api.search(query);
-                        if (data.results.length > 0) {
+                        console.log('Search results:', data);
+                        if (data.results && data.results.length > 0) {
                             results.innerHTML = data.results.map(r => `
                                 <div class="search-result" data-path="${r.path}">
                                     <div class="search-result-title">${r.title}</div>
@@ -1606,6 +1625,8 @@
                         }
                     } catch (e) {
                         console.error('Search failed:', e);
+                        results.innerHTML = `<div class="empty-state">Search error: ${e.message}</div>`;
+                        results.classList.add('active');
                     }
                 }, 200);
             });

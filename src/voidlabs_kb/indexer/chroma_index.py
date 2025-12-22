@@ -109,12 +109,20 @@ class ChromaIndex:
 
         collection = self._get_collection()
 
+        # Deduplicate chunks by ID, keeping the last occurrence
+        # (handles cases where documents have duplicate sections)
+        seen_ids: dict[str, int] = {}
+        for i, chunk in enumerate(chunks):
+            chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
+            seen_ids[chunk_id] = i  # Later occurrences overwrite earlier
+
+        # Build lists using deduplicated indices
         ids = []
         documents = []
         metadatas = []
 
-        for chunk in chunks:
-            chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
+        for chunk_id, idx in seen_ids.items():
+            chunk = chunks[idx]
             ids.append(chunk_id)
             documents.append(chunk.content)
             metadatas.append(
