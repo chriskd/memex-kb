@@ -686,8 +686,7 @@ async def update_tool(
     name="link_beads",
     description=(
         "Link a KB entry to beads issues. "
-        "Use this to connect documentation with related work items. "
-        "Returns the linked issues with their current status."
+        "Use this to connect documentation with related work items."
     ),
 )
 async def link_beads_tool(
@@ -703,7 +702,7 @@ async def link_beads_tool(
         project: Beads project name to link all its issues.
 
     Returns:
-        Dict with 'path', 'linked_issues' (validated), and 'project' if set.
+        Dict with 'path', 'linked_issues', and 'project' if set.
     """
     if not issues and not project:
         raise ValueError("Provide at least one of: issues, project")
@@ -719,29 +718,6 @@ async def link_beads_tool(
         metadata, content, _ = parse_entry(file_path)
     except ParseError as e:
         raise ValueError(f"Failed to parse entry: {e}") from e
-
-    # Validate issues exist using BeadsClient
-    from .beads_client import get_beads_client
-
-    client = get_beads_client()
-    validated_issues = []
-
-    if issues:
-        for issue_id in issues:
-            issue = client.get_issue(issue_id)
-            if issue:
-                validated_issues.append({
-                    "id": issue.id,
-                    "title": issue.title,
-                    "status": issue.status,
-                })
-            else:
-                # Still add it, but mark as unverified
-                validated_issues.append({
-                    "id": issue_id,
-                    "title": None,
-                    "status": "unverified",
-                })
 
     # Merge with existing beads_issues (avoid duplicates)
     existing_issues = set(metadata.beads_issues)
@@ -804,7 +780,7 @@ async def link_beads_tool(
 
     return {
         "path": path,
-        "linked_issues": validated_issues,
+        "linked_issues": new_issues,
         "project": new_project,
     }
 
