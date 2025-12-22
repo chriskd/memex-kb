@@ -622,6 +622,15 @@ async def update_tool(
         frontmatter_parts.append("edit_sources:")
         frontmatter_parts.append(edit_sources_yaml)
 
+    # Preserve beads integration fields
+    if metadata.beads_issues:
+        beads_issues_yaml = "\n".join(f"  - {i}" for i in metadata.beads_issues)
+        frontmatter_parts.append("beads_issues:")
+        frontmatter_parts.append(beads_issues_yaml)
+
+    if metadata.beads_project:
+        frontmatter_parts.append(f"beads_project: {metadata.beads_project}")
+
     frontmatter_parts.append("---\n\n")
     frontmatter = "\n".join(frontmatter_parts)
 
@@ -671,6 +680,133 @@ async def update_tool(
     )
 
     return {"path": relative_path, "suggested_links": suggested_links, "suggested_tags": suggested_tags}
+
+
+@mcp.tool(
+    name="link_beads",
+    description=(
+        "Link a KB entry to beads issues. "
+        "Use this to connect documentation with related work items. "
+        "Returns the linked issues with their current status."
+    ),
+)
+async def link_beads_tool(
+    path: str,
+    issues: list[str] | None = None,
+    project: str | None = None,
+) -> dict:
+    """Link a KB entry to beads issues.
+
+    Args:
+        path: Path to the entry relative to KB root (e.g., "projects/foo.md").
+        issues: List of beads issue IDs to link (e.g., ["proj-123", "proj-456"]).
+        project: Beads project name to link all its issues.
+
+    Returns:
+        Dict with 'path', 'linked_issues' (validated), and 'project' if set.
+    """
+    if not issues and not project:
+        raise ValueError("Provide at least one of: issues, project")
+
+    kb_root = get_kb_root()
+    file_path = kb_root / path
+
+    if not file_path.exists():
+        raise ValueError(f"Entry not found: {path}")
+
+    # Parse existing entry
+    try:
+        metadata, content, _ = parse_entry(file_path)
+    except ParseError as e:
+        raise ValueError(f"Failed to parse entry: {e}") from e
+
+    # Validate issues exist using BeadsClient
+    from .beads_client import get_beads_client
+
+    client = get_beads_client()
+    validated_issues = []
+
+    if issues:
+        for issue_id in issues:
+            issue = client.get_issue(issue_id)
+            if issue:
+                validated_issues.append({
+                    "id": issue.id,
+                    "title": issue.title,
+                    "status": issue.status,
+                })
+            else:
+                # Still add it, but mark as unverified
+                validated_issues.append({
+                    "id": issue_id,
+                    "title": None,
+                    "status": "unverified",
+                })
+
+    # Merge with existing beads_issues (avoid duplicates)
+    existing_issues = set(metadata.beads_issues)
+    new_issues = list(existing_issues)
+    for issue_id in (issues or []):
+        if issue_id not in existing_issues:
+            new_issues.append(issue_id)
+
+    # Update beads_project if provided
+    new_project = project if project else metadata.beads_project
+
+    # Rebuild frontmatter with beads fields
+    today = date.today()
+    tags_yaml = "\n".join(f"  - {tag}" for tag in metadata.tags)
+    contributors_yaml = "\n".join(f"  - {c}" for c in metadata.contributors)
+    aliases_yaml = "\n".join(f"  - {a}" for a in metadata.aliases)
+    edit_sources_yaml = "\n".join(f"  - {s}" for s in metadata.edit_sources)
+
+    frontmatter_parts = [
+        "---",
+        f"title: {metadata.title}",
+        "tags:",
+        tags_yaml,
+        f"created: {metadata.created.isoformat()}",
+        f"updated: {today.isoformat()}",
+    ]
+
+    if metadata.contributors:
+        frontmatter_parts.append("contributors:")
+        frontmatter_parts.append(contributors_yaml)
+
+    if metadata.aliases:
+        frontmatter_parts.append("aliases:")
+        frontmatter_parts.append(aliases_yaml)
+
+    if metadata.status != "published":
+        frontmatter_parts.append(f"status: {metadata.status}")
+
+    if metadata.source_project:
+        frontmatter_parts.append(f"source_project: {metadata.source_project}")
+
+    if metadata.edit_sources:
+        frontmatter_parts.append("edit_sources:")
+        frontmatter_parts.append(edit_sources_yaml)
+
+    # Add beads fields
+    if new_issues:
+        beads_issues_yaml = "\n".join(f"  - {i}" for i in new_issues)
+        frontmatter_parts.append("beads_issues:")
+        frontmatter_parts.append(beads_issues_yaml)
+
+    if new_project:
+        frontmatter_parts.append(f"beads_project: {new_project}")
+
+    frontmatter_parts.append("---\n\n")
+    frontmatter = "\n".join(frontmatter_parts)
+
+    # Write updated file
+    file_path.write_text(frontmatter + content, encoding="utf-8")
+
+    return {
+        "path": path,
+        "linked_issues": validated_issues,
+        "project": new_project,
+    }
 
 
 @mcp.tool(
