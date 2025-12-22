@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from voidlabs_kb import server
+from voidlabs_kb import core, server
 from voidlabs_kb.models import ViewStats
 from voidlabs_kb.views_tracker import save_views
 
@@ -22,8 +22,8 @@ async def _call_tool(tool_obj, /, *args, **kwargs):
 @pytest.fixture(autouse=True)
 def reset_searcher_state(monkeypatch):
     """Ensure cached searcher state does not leak across tests."""
-    monkeypatch.setattr(server, "_searcher", None)
-    monkeypatch.setattr(server, "_searcher_ready", False)
+    monkeypatch.setattr(core, "_searcher", None)
+    monkeypatch.setattr(core, "_searcher_ready", False)
 
 
 @pytest.fixture
@@ -46,16 +46,24 @@ def index_root(tmp_path, monkeypatch) -> Path:
     return root
 
 
-def _create_entry(path: Path, title: str, tags: list[str], created: date, updated: date | None = None):
+def _create_entry(
+    path: Path,
+    title: str,
+    tags: list[str],
+    created: date,
+    updated: date | None = None,
+    source_project: str | None = None,
+):
     """Helper to create a KB entry with frontmatter."""
     updated_line = f"updated: {updated.isoformat()}\n" if updated else ""
+    source_project_line = f"source_project: {source_project}\n" if source_project else ""
     tags_yaml = "\n".join(f"  - {tag}" for tag in tags)
     content = f"""---
 title: {title}
 tags:
 {tags_yaml}
 created: {created.isoformat()}
-{updated_line}---
+{updated_line}{source_project_line}---
 
 ## Content
 
@@ -236,6 +244,116 @@ class TestWhatsNewTool:
         )
         assert len(results_updated) == 1
         assert results_updated[0]["title"] == "Updated Entry"
+
+    @pytest.mark.asyncio
+    async def test_whats_new_filters_by_project_path(self, kb_root):
+        """Project filter matches entries in projects/{project}/ directory."""
+        today = date.today()
+
+        # Create projects directory structure
+        (kb_root / "projects" / "myapp").mkdir(parents=True)
+
+        _create_entry(
+            kb_root / "projects" / "myapp" / "setup.md",
+            "MyApp Setup",
+            ["setup"],
+            created=today - timedelta(days=1),
+        )
+        _create_entry(
+            kb_root / "development" / "other.md",
+            "Other Entry",
+            ["python"],
+            created=today - timedelta(days=1),
+        )
+
+        results = await _call_tool(server.whats_new_tool, days=30, project="myapp")
+
+        assert len(results) == 1
+        assert results[0]["title"] == "MyApp Setup"
+
+    @pytest.mark.asyncio
+    async def test_whats_new_filters_by_project_source_project(self, kb_root):
+        """Project filter matches entries with source_project metadata."""
+        today = date.today()
+
+        _create_entry(
+            kb_root / "development" / "myapp-guide.md",
+            "MyApp Guide",
+            ["guide"],
+            created=today - timedelta(days=1),
+            source_project="myapp",
+        )
+        _create_entry(
+            kb_root / "development" / "other.md",
+            "Other Entry",
+            ["python"],
+            created=today - timedelta(days=1),
+            source_project="otherapp",
+        )
+
+        results = await _call_tool(server.whats_new_tool, days=30, project="myapp")
+
+        assert len(results) == 1
+        assert results[0]["title"] == "MyApp Guide"
+
+    @pytest.mark.asyncio
+    async def test_whats_new_filters_by_project_tag(self, kb_root):
+        """Project filter matches entries with project name in tags."""
+        today = date.today()
+
+        _create_entry(
+            kb_root / "development" / "myapp-tips.md",
+            "MyApp Tips",
+            ["myapp", "tips"],
+            created=today - timedelta(days=1),
+        )
+        _create_entry(
+            kb_root / "development" / "other.md",
+            "Other Entry",
+            ["python"],
+            created=today - timedelta(days=1),
+        )
+
+        results = await _call_tool(server.whats_new_tool, days=30, project="myapp")
+
+        assert len(results) == 1
+        assert results[0]["title"] == "MyApp Tips"
+
+    @pytest.mark.asyncio
+    async def test_whats_new_project_filter_case_insensitive(self, kb_root):
+        """Project filter is case-insensitive."""
+        today = date.today()
+
+        _create_entry(
+            kb_root / "development" / "entry.md",
+            "MyApp Entry",
+            ["MyApp"],  # Capitalized tag
+            created=today - timedelta(days=1),
+        )
+
+        # Query with lowercase
+        results = await _call_tool(server.whats_new_tool, days=30, project="myapp")
+
+        assert len(results) == 1
+        assert results[0]["title"] == "MyApp Entry"
+
+    @pytest.mark.asyncio
+    async def test_whats_new_includes_source_project_in_results(self, kb_root):
+        """Results include source_project field."""
+        today = date.today()
+
+        _create_entry(
+            kb_root / "development" / "entry.md",
+            "Entry",
+            ["python"],
+            created=today - timedelta(days=1),
+            source_project="myapp",
+        )
+
+        results = await _call_tool(server.whats_new_tool, days=30)
+
+        assert len(results) == 1
+        assert results[0]["source_project"] == "myapp"
 
 
 class TestPopularTool:

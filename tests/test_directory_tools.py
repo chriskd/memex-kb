@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 
-from voidlabs_kb import server
+from voidlabs_kb import core, server
 
 
 async def _call_tool(tool_obj, /, *args, **kwargs):
@@ -20,8 +20,8 @@ async def _call_tool(tool_obj, /, *args, **kwargs):
 @pytest.fixture(autouse=True)
 def reset_searcher_state(monkeypatch):
     """Ensure cached searcher state does not leak across tests."""
-    monkeypatch.setattr(server, "_searcher", None)
-    monkeypatch.setattr(server, "_searcher_ready", False)
+    monkeypatch.setattr(core, "_searcher", None)
+    monkeypatch.setattr(core, "_searcher_ready", False)
 
 
 @pytest.fixture
