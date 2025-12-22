@@ -15,8 +15,10 @@ from ..config import get_kb_root
 from ..indexer import HybridSearcher
 from ..beads_client import (
     get_beads_client,
+    get_client_for_issue,
     get_kanban_for_project,
     list_registered_projects,
+    resolve_issue,
     resolve_issues,
 )
 from ..models import BeadsIssue, IndexStatus, KBEntry, SearchResult
@@ -150,8 +152,23 @@ class BeadsIssueResponse(BaseModel):
     created_at: str
     updated_at: str
     closed_at: str | None
+    close_reason: str | None = None
     dependency_count: int
     dependent_count: int
+
+
+class BeadsCommentResponse(BaseModel):
+    """Comment for API response."""
+    id: str
+    content: str
+    author: str
+    created_at: str
+
+
+class BeadsIssueDetailResponse(BaseModel):
+    """Detailed issue with comments for modal view."""
+    issue: BeadsIssueResponse
+    comments: list[BeadsCommentResponse]
 
 
 class BeadsKanbanColumnResponse(BaseModel):
@@ -519,6 +536,7 @@ def _format_beads_issue(issue: BeadsIssue) -> BeadsIssueResponse:
         created_at=issue.created_at.isoformat(),
         updated_at=issue.updated_at.isoformat(),
         closed_at=issue.closed_at.isoformat() if issue.closed_at else None,
+        close_reason=issue.close_reason,
         dependency_count=issue.dependency_count,
         dependent_count=issue.dependent_count,
     )
@@ -591,6 +609,44 @@ async def get_beads_kanban(project: str | None = None):
             for col in kanban_data.columns
         ],
         total_issues=kanban_data.total_issues,
+    )
+
+
+@app.get("/api/beads/issues/{issue_id}", response_model=BeadsIssueDetailResponse)
+async def get_beads_issue_detail(issue_id: str):
+    """Get detailed issue information including comments.
+
+    This endpoint fetches the full issue data plus any comments,
+    supporting cross-project issue resolution via the registry.
+    """
+    # Get the appropriate client for this issue (handles cross-project)
+    client = get_client_for_issue(issue_id)
+    if client is None:
+        # Fall back to default client
+        client = get_beads_client()
+
+    if not client or not client.is_available:
+        raise HTTPException(status_code=404, detail="Beads not available")
+
+    # Get the issue
+    issue = client.get_issue(issue_id)
+    if not issue:
+        raise HTTPException(status_code=404, detail=f"Issue not found: {issue_id}")
+
+    # Get comments for the issue
+    comments = client.get_comments(issue_id)
+
+    return BeadsIssueDetailResponse(
+        issue=_format_beads_issue(issue),
+        comments=[
+            BeadsCommentResponse(
+                id=c.id,
+                content=c.content,
+                author=c.author,
+                created_at=c.created_at.isoformat(),
+            )
+            for c in comments
+        ],
     )
 
 

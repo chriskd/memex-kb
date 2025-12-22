@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from .config import get_kb_root
-from .models import BeadsIssue, BeadsKanbanColumn, BeadsKanbanData
+from .models import BeadsComment, BeadsIssue, BeadsKanbanColumn, BeadsKanbanData
 
 # Registry file name
 REGISTRY_FILE = ".beads-registry.yaml"
@@ -385,6 +385,46 @@ class BeadsClient:
             if issue.id == issue_id:
                 return issue
         return None
+
+    def get_comments(self, issue_id: str) -> list[BeadsComment]:
+        """Get comments for an issue.
+
+        Args:
+            issue_id: The issue ID to get comments for.
+
+        Returns:
+            List of BeadsComment objects, ordered by creation date.
+        """
+        if not self._check_bd_available() or not self.beads_root:
+            return []
+
+        try:
+            result = subprocess.run(
+                ["bd", "comments", issue_id, "--json"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=self.beads_root,
+            )
+            if result.returncode != 0:
+                return []
+
+            comments_data = json.loads(result.stdout)
+            if not comments_data:
+                return []
+
+            return [
+                BeadsComment(
+                    id=c.get("id", ""),
+                    issue_id=issue_id,
+                    content=c.get("content", ""),
+                    author=c.get("author", "unknown"),
+                    created_at=self._parse_datetime(c.get("created_at", "")),
+                )
+                for c in comments_data
+            ]
+        except (subprocess.TimeoutExpired, json.JSONDecodeError):
+            return []
 
     def get_issues_by_ids(self, issue_ids: list[str]) -> list[BeadsIssue]:
         """Get multiple issues by ID."""

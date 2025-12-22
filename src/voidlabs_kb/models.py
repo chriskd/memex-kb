@@ -104,6 +104,16 @@ class ViewStats(BaseModel):
 # Beads integration models
 
 
+class BeadsComment(BaseModel):
+    """A comment on a beads issue."""
+
+    id: str
+    issue_id: str
+    content: str
+    author: str
+    created_at: datetime
+
+
 class BeadsIssue(BaseModel):
     """A beads issue for display."""
 

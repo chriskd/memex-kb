@@ -1159,6 +1159,93 @@
         .beads-issue-item:hover {
             background: var(--bg-elevated);
         }
+
+        /* Comments section in modal */
+        .modal-comments {
+            border-top: 1px solid var(--border-subtle);
+            margin-top: 20px;
+            padding-top: 20px;
+        }
+
+        .modal-comment {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+        }
+
+        .modal-comment:last-child {
+            margin-bottom: 0;
+        }
+
+        .modal-comment-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .modal-comment-author {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-gold);
+        }
+
+        .modal-comment-date {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .modal-comment-content {
+            font-family: 'Crimson Pro', serif;
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .modal-close-reason {
+            background: rgba(127, 186, 107, 0.1);
+            border: 1px solid rgba(127, 186, 107, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+
+        .modal-close-reason-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--accent-green);
+            margin-bottom: 8px;
+        }
+
+        .modal-close-reason-content {
+            font-family: 'Crimson Pro', serif;
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .modal-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            color: var(--text-muted);
+        }
+
+        .modal-no-comments {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 16px;
+        }
     </style>
 </head>
 <body>
@@ -1316,6 +1403,10 @@
 
             async getEntryBeads(path) {
                 return this.get(`/entries/${encodeURIComponent(path)}/beads`);
+            },
+
+            async getIssueDetail(issueId) {
+                return this.get(`/beads/issues/${encodeURIComponent(issueId)}`);
             },
         };
 
@@ -1805,95 +1896,156 @@
             `;
         }
 
-        // Find issue by ID from either kanban or sidebar linked issues
-        function findIssue(issueId) {
-            // Try kanban first
-            const kanbanIssue = state.kanban?.columns
-                .flatMap(col => col.issues)
-                .find(i => i.id === issueId);
-            if (kanbanIssue) return kanbanIssue;
-
-            // Try sidebar linked issues
-            return state.linkedBeadsIssues.find(i => i.id === issueId);
+        // Format date helper
+        function formatDate(dateStr) {
+            if (!dateStr) return null;
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         }
 
-        // Show issue modal
-        function showIssueModal(issueId) {
-            const issue = findIssue(issueId);
-            if (!issue) return;
-
+        // Show issue modal - fetches full details including comments
+        async function showIssueModal(issueId) {
             const overlay = $('#issue-modal-overlay');
             const modal = $('#issue-modal');
 
-            // Format dates
-            const formatDate = (dateStr) => {
-                if (!dateStr) return null;
-                const date = new Date(dateStr);
-                return date.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-            };
-
-            // Status label formatting
-            const statusLabel = issue.status.replace(/_/g, ' ');
-
-            // Build modal content
+            // Show loading state
             modal.innerHTML = `
                 <div class="modal-header">
                     <div class="modal-title-group">
-                        <div class="modal-title">${escapeHtml(issue.title)}</div>
+                        <div class="modal-title">Loading...</div>
                         <div class="modal-meta">
-                            <span class="modal-id">${escapeHtml(issue.id)}</span>
-                            <span class="modal-status">
-                                <span class="modal-status-dot status-${issue.status}"></span>
-                                ${escapeHtml(statusLabel)}
-                            </span>
-                            <span class="modal-badge type-${issue.issue_type}">${escapeHtml(issue.issue_type)}</span>
-                            <span class="modal-badge priority-${issue.priority_label}">P${issue.priority}</span>
+                            <span class="modal-id">${escapeHtml(issueId)}</span>
                         </div>
                     </div>
                     <button class="modal-close" onclick="closeIssueModal()">&times;</button>
                 </div>
                 <div class="modal-body">
-                    ${issue.description ? `
-                        <div class="modal-section">
-                            <div class="modal-section-label">Description</div>
-                            <div class="modal-description">${escapeHtml(issue.description)}</div>
-                        </div>
-                    ` : ''}
-                    <div class="modal-section">
-                        <div class="modal-section-label">Timestamps</div>
-                        <div class="modal-timestamps">
-                            <div class="modal-timestamp">
-                                Created
-                                <div class="modal-timestamp-value">${formatDate(issue.created_at) || 'Unknown'}</div>
-                            </div>
-                            <div class="modal-timestamp">
-                                Updated
-                                <div class="modal-timestamp-value">${formatDate(issue.updated_at) || 'Unknown'}</div>
-                            </div>
-                            ${issue.closed_at ? `
-                                <div class="modal-timestamp">
-                                    Closed
-                                    <div class="modal-timestamp-value">${formatDate(issue.closed_at)}</div>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                    ${issue.dependency_count > 0 ? `
-                        <div class="modal-section">
-                            <div class="modal-section-label">Dependencies</div>
-                            <div class="modal-description">${issue.dependency_count} issue(s) blocking this</div>
-                        </div>
-                    ` : ''}
+                    <div class="modal-loading">Loading issue details...</div>
                 </div>
             `;
-
             overlay.classList.add('active');
+
+            try {
+                // Fetch full issue details with comments
+                const data = await api.getIssueDetail(issueId);
+                const issue = data.issue;
+                const comments = data.comments || [];
+
+                // Status label formatting
+                const statusLabel = issue.status.replace(/_/g, ' ');
+
+                // Build comments HTML
+                let commentsHtml = '';
+                if (comments.length > 0) {
+                    commentsHtml = `
+                        <div class="modal-comments">
+                            <div class="modal-section-label">Comments (${comments.length})</div>
+                            ${comments.map(c => `
+                                <div class="modal-comment">
+                                    <div class="modal-comment-header">
+                                        <span class="modal-comment-author">${escapeHtml(c.author)}</span>
+                                        <span class="modal-comment-date">${formatDate(c.created_at)}</span>
+                                    </div>
+                                    <div class="modal-comment-content">${escapeHtml(c.content)}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+
+                // Build close reason HTML
+                let closeReasonHtml = '';
+                if (issue.close_reason) {
+                    closeReasonHtml = `
+                        <div class="modal-section">
+                            <div class="modal-close-reason">
+                                <div class="modal-close-reason-label">
+                                    <span>✓</span> Resolution
+                                </div>
+                                <div class="modal-close-reason-content">${escapeHtml(issue.close_reason)}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Build modal content
+                modal.innerHTML = `
+                    <div class="modal-header">
+                        <div class="modal-title-group">
+                            <div class="modal-title">${escapeHtml(issue.title)}</div>
+                            <div class="modal-meta">
+                                <span class="modal-id">${escapeHtml(issue.id)}</span>
+                                <span class="modal-status">
+                                    <span class="modal-status-dot status-${issue.status}"></span>
+                                    ${escapeHtml(statusLabel)}
+                                </span>
+                                <span class="modal-badge type-${issue.issue_type}">${escapeHtml(issue.issue_type)}</span>
+                                <span class="modal-badge priority-${issue.priority_label}">P${issue.priority}</span>
+                            </div>
+                        </div>
+                        <button class="modal-close" onclick="closeIssueModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        ${issue.description ? `
+                            <div class="modal-section">
+                                <div class="modal-section-label">Description</div>
+                                <div class="modal-description">${escapeHtml(issue.description)}</div>
+                            </div>
+                        ` : ''}
+                        ${closeReasonHtml}
+                        <div class="modal-section">
+                            <div class="modal-section-label">Timestamps</div>
+                            <div class="modal-timestamps">
+                                <div class="modal-timestamp">
+                                    Created
+                                    <div class="modal-timestamp-value">${formatDate(issue.created_at) || 'Unknown'}</div>
+                                </div>
+                                <div class="modal-timestamp">
+                                    Updated
+                                    <div class="modal-timestamp-value">${formatDate(issue.updated_at) || 'Unknown'}</div>
+                                </div>
+                                ${issue.closed_at ? `
+                                    <div class="modal-timestamp">
+                                        Closed
+                                        <div class="modal-timestamp-value">${formatDate(issue.closed_at)}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ${issue.dependency_count > 0 ? `
+                            <div class="modal-section">
+                                <div class="modal-section-label">Dependencies</div>
+                                <div class="modal-description">${issue.dependency_count} issue(s) blocking this</div>
+                            </div>
+                        ` : ''}
+                        ${commentsHtml}
+                    </div>
+                `;
+            } catch (e) {
+                console.error('Failed to load issue details:', e);
+                modal.innerHTML = `
+                    <div class="modal-header">
+                        <div class="modal-title-group">
+                            <div class="modal-title">Error</div>
+                            <div class="modal-meta">
+                                <span class="modal-id">${escapeHtml(issueId)}</span>
+                            </div>
+                        </div>
+                        <button class="modal-close" onclick="closeIssueModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="modal-section" style="color: var(--accent-red);">
+                            Failed to load issue details: ${escapeHtml(e.message)}
+                        </div>
+                    </div>
+                `;
+            }
         }
 
         // Close issue modal
