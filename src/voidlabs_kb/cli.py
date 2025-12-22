@@ -107,6 +107,8 @@ PRIME_OUTPUT = """# Voidlabs Knowledge Base
 
 > Search organizational knowledge before reinventing. Add discoveries for future agents.
 
+**⚡ Use `vl-kb` CLI instead of MCP tools** - CLI uses ~0 tokens vs MCP schema overhead.
+
 ## CLI Quick Reference
 
 ```bash
