@@ -13,7 +13,8 @@ from pydantic import BaseModel
 from ..backlinks_cache import ensure_backlink_cache
 from ..config import get_kb_root
 from ..indexer import HybridSearcher
-from ..models import IndexStatus, KBEntry, SearchResult
+from ..beads_client import get_beads_client
+from ..models import BeadsIssue, IndexStatus, KBEntry, SearchResult
 from ..parser import ParseError, extract_links, parse_entry, render_markdown
 
 
@@ -112,6 +113,52 @@ class StatsResponse(BaseModel):
     total_links: int
     categories: list[dict]
     recent_entries: list[dict]
+
+
+# Beads response models
+
+
+class BeadsConfigResponse(BaseModel):
+    """Beads configuration info."""
+    available: bool
+    project: str | None = None
+    beads_root: str | None = None
+
+
+class BeadsIssueResponse(BaseModel):
+    """Issue for API response."""
+    id: str
+    title: str
+    description: str | None
+    status: str
+    priority: int
+    priority_label: str  # "critical", "high", "medium", "low", "backlog"
+    issue_type: str
+    created_at: str
+    updated_at: str
+    closed_at: str | None
+    dependency_count: int
+    dependent_count: int
+
+
+class BeadsKanbanColumnResponse(BaseModel):
+    """Kanban column for API response."""
+    status: str
+    label: str
+    issues: list[BeadsIssueResponse]
+
+
+class BeadsKanbanResponse(BaseModel):
+    """Kanban board data."""
+    project: str
+    columns: list[BeadsKanbanColumnResponse]
+    total_issues: int
+
+
+class EntryBeadsResponse(BaseModel):
+    """Beads info for a KB entry."""
+    linked_issues: list[BeadsIssueResponse]
+    project_issues: list[BeadsIssueResponse] | None = None
 
 
 # API Routes
@@ -388,6 +435,129 @@ async def get_recent(limit: int = 10):
     )
 
     return entries[:limit]
+
+
+# Beads API Routes
+
+
+def _format_beads_issue(issue: BeadsIssue) -> BeadsIssueResponse:
+    """Format issue for API response."""
+    priority_labels = {
+        0: "critical",
+        1: "high",
+        2: "medium",
+        3: "low",
+        4: "backlog",
+    }
+    return BeadsIssueResponse(
+        id=issue.id,
+        title=issue.title,
+        description=issue.description,
+        status=issue.status,
+        priority=issue.priority,
+        priority_label=priority_labels.get(issue.priority, "medium"),
+        issue_type=issue.issue_type,
+        created_at=issue.created_at.isoformat(),
+        updated_at=issue.updated_at.isoformat(),
+        closed_at=issue.closed_at.isoformat() if issue.closed_at else None,
+        dependency_count=issue.dependency_count,
+        dependent_count=issue.dependent_count,
+    )
+
+
+@app.get("/api/beads/config", response_model=BeadsConfigResponse)
+async def get_beads_config():
+    """Get beads integration status and configuration."""
+    client = get_beads_client()
+    return BeadsConfigResponse(
+        available=client.is_available,
+        project=client.get_project_name() if client.is_available else None,
+        beads_root=str(client.beads_root) if client.beads_root else None,
+    )
+
+
+@app.get("/api/beads/issues", response_model=list[BeadsIssueResponse])
+async def list_beads_issues(
+    status: Literal["open", "in_progress", "closed", "all"] = "all",
+    limit: int = Query(50, ge=1, le=500),
+    priority: int | None = Query(None, ge=0, le=4),
+):
+    """List beads issues with optional filters."""
+    client = get_beads_client()
+    if not client.is_available:
+        raise HTTPException(status_code=404, detail="Beads not available for this KB")
+
+    issues = client.list_issues(status=status, limit=limit, priority=priority)
+    return [_format_beads_issue(i) for i in issues]
+
+
+@app.get("/api/beads/kanban", response_model=BeadsKanbanResponse)
+async def get_beads_kanban(project: str | None = None):
+    """Get issues grouped by status for kanban display."""
+    client = get_beads_client()
+    if not client.is_available:
+        raise HTTPException(status_code=404, detail="Beads not available for this KB")
+
+    kanban_data = client.get_kanban_data(project)
+    if not kanban_data:
+        raise HTTPException(status_code=404, detail="No beads project found")
+
+    return BeadsKanbanResponse(
+        project=kanban_data.project,
+        columns=[
+            BeadsKanbanColumnResponse(
+                status=col.status,
+                label=col.label,
+                issues=[_format_beads_issue(i) for i in col.issues],
+            )
+            for col in kanban_data.columns
+        ],
+        total_issues=kanban_data.total_issues,
+    )
+
+
+@app.get("/api/entries/{path:path}/beads", response_model=EntryBeadsResponse)
+async def get_entry_beads(path: str):
+    """Get beads issues linked from a KB entry."""
+    kb_root = get_kb_root()
+
+    # Ensure .md extension
+    if not path.endswith(".md"):
+        path = f"{path}.md"
+
+    file_path = kb_root / path
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Entry not found: {path}")
+
+    try:
+        metadata, content, _ = parse_entry(file_path)
+    except ParseError as e:
+        raise HTTPException(status_code=500, detail=f"Parse error: {e}")
+
+    client = get_beads_client()
+    if not client.is_available:
+        return EntryBeadsResponse(linked_issues=[], project_issues=None)
+
+    # Get specifically linked issues
+    linked_issues = []
+    if metadata.beads_issues:
+        linked_issues = client.get_issues_by_ids(metadata.beads_issues)
+
+    # Get project issues if linked to a project
+    project_issues = None
+    if metadata.beads_project:
+        all_project = client.list_issues(status="all", limit=100)
+        project_issues = [
+            i for i in all_project
+            if i.id.startswith(f"{metadata.beads_project}-")
+        ]
+
+    return EntryBeadsResponse(
+        linked_issues=[_format_beads_issue(i) for i in linked_issues],
+        project_issues=[_format_beads_issue(i) for i in project_issues]
+        if project_issues
+        else None,
+    )
 
 
 # Mount static files and serve index

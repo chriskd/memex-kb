@@ -764,6 +764,215 @@
         .node-projects { fill: #7fba6b; }
         .node-tooling { fill: #cf6679; }
         .node-default { fill: #d4a857; }
+
+        /* Kanban view */
+        .kanban-container {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+        }
+
+        .kanban-container.active {
+            display: flex;
+        }
+
+        .kanban-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            flex-shrink: 0;
+        }
+
+        .kanban-project-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--accent-gold);
+        }
+
+        .kanban-stats {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .kanban-board {
+            display: flex;
+            gap: 16px;
+            padding: 24px;
+            overflow-x: auto;
+            flex: 1;
+        }
+
+        .kanban-column {
+            flex: 1;
+            min-width: 280px;
+            max-width: 360px;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 180px);
+        }
+
+        .kanban-column-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .kanban-column-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .column-open .kanban-column-title { color: var(--accent-cyan); }
+        .column-in_progress .kanban-column-title { color: var(--accent-amber); }
+        .column-closed .kanban-column-title { color: var(--accent-green); }
+
+        .kanban-column-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .kanban-column-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .kanban-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .kanban-card:hover {
+            border-color: var(--border-focus);
+            background: var(--bg-elevated);
+        }
+
+        .kanban-card-title {
+            font-family: 'Crimson Pro', serif;
+            font-size: 14px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .kanban-card-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .kanban-card-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .kanban-card-type {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+
+        .type-task { background: var(--bg-elevated); color: var(--text-secondary); }
+        .type-feature { background: rgba(91, 181, 196, 0.2); color: var(--accent-cyan); }
+        .type-bug { background: rgba(207, 102, 121, 0.2); color: var(--accent-red); }
+        .type-chore { background: rgba(127, 186, 107, 0.2); color: var(--accent-green); }
+        .type-epic { background: rgba(212, 168, 87, 0.2); color: var(--accent-gold); }
+
+        .kanban-card-priority {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .priority-critical { background: rgba(207, 102, 121, 0.3); color: var(--accent-red); }
+        .priority-high { background: rgba(240, 180, 41, 0.3); color: var(--accent-amber); }
+        .priority-medium { background: rgba(212, 168, 87, 0.2); color: var(--accent-gold); }
+        .priority-low { background: var(--bg-elevated); color: var(--text-secondary); }
+        .priority-backlog { background: var(--bg-elevated); color: var(--text-muted); }
+
+        .kanban-empty {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+
+        .kanban-unavailable {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 48px;
+        }
+
+        .kanban-unavailable-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .kanban-unavailable-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .kanban-unavailable-message {
+            font-size: 14px;
+            color: var(--text-muted);
+            max-width: 400px;
+        }
+
+        .kanban-unavailable-message code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--accent-amber);
+        }
+
+        /* Beads section in right panel */
+        .beads-status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .beads-status-dot.status-open { background: var(--accent-cyan); }
+        .beads-status-dot.status-in_progress { background: var(--accent-amber); }
+        .beads-status-dot.status-closed { background: var(--accent-green); }
     </style>
 </head>
 <body>
@@ -818,10 +1027,15 @@
             <div class="view-toggle">
                 <button class="view-btn active" data-view="reader">Reader</button>
                 <button class="view-btn" data-view="graph">Graph</button>
+                <button class="view-btn" data-view="kanban">Kanban</button>
             </div>
 
             <div class="graph-container" id="graph-container">
                 <svg id="graph-svg"></svg>
+            </div>
+
+            <div class="kanban-container" id="kanban-container">
+                <!-- Populated by JavaScript -->
             </div>
 
             <div class="reader-container active" id="reader-container">
@@ -845,6 +1059,11 @@
                 <div class="panel-header">Backlinks</div>
                 <ul class="link-list" id="links-in"></ul>
             </div>
+
+            <div class="panel-section" id="beads-section" style="display: none;">
+                <div class="panel-header">Beads Issues</div>
+                <ul class="link-list" id="beads-issues"></ul>
+            </div>
         </aside>
     </div>
 
@@ -855,6 +1074,8 @@
             currentView: 'reader',
             graph: null,
             simulation: null,
+            kanban: null,
+            beadsAvailable: null,
         };
 
         // API helpers
@@ -887,6 +1108,18 @@
 
             async getRecent() {
                 return this.get('/recent?limit=20');
+            },
+
+            async getBeadsConfig() {
+                return this.get('/beads/config');
+            },
+
+            async getBeadsKanban() {
+                return this.get('/beads/kanban');
+            },
+
+            async getEntryBeads(path) {
+                return this.get(`/entries/${encodeURIComponent(path)}/beads`);
             },
         };
 
@@ -932,10 +1165,29 @@
             await loadStats();
             await loadTree();
             await loadRecent();
+            await initBeads();
             setupSearch();
             setupNavigation();
             setupViewToggle();
             setupKeyboard();
+        }
+
+        // Initialize beads
+        async function initBeads() {
+            try {
+                const config = await api.getBeadsConfig();
+                state.beadsAvailable = config.available;
+
+                // Update kanban button state
+                const kanbanBtn = document.querySelector('[data-view="kanban"]');
+                if (kanbanBtn && !config.available) {
+                    kanbanBtn.style.opacity = '0.5';
+                    kanbanBtn.title = 'Beads not available for this KB';
+                }
+            } catch (e) {
+                console.error('Failed to check beads config:', e);
+                state.beadsAvailable = false;
+            }
         }
 
         // Load stats
@@ -1169,6 +1421,49 @@
             } else {
                 linksIn.innerHTML = '<div class="empty-state">No backlinks</div>';
             }
+
+            // Update beads panel
+            await updateBeadsPanel(entry);
+        }
+
+        // Update beads issues panel for an entry
+        async function updateBeadsPanel(entry) {
+            const section = $('#beads-section');
+            const issuesList = $('#beads-issues');
+
+            if (!state.beadsAvailable) {
+                section.style.display = 'none';
+                return;
+            }
+
+            try {
+                const beadsData = await api.getEntryBeads(entry.path);
+
+                const allIssues = [
+                    ...beadsData.linked_issues,
+                    ...(beadsData.project_issues || [])
+                ];
+
+                if (allIssues.length === 0) {
+                    section.style.display = 'none';
+                    return;
+                }
+
+                section.style.display = 'block';
+                issuesList.innerHTML = allIssues.slice(0, 10).map(issue => `
+                    <li class="link-item beads-issue-item" data-issue-id="${escapeHtml(issue.id)}">
+                        <div class="link-title">
+                            <span class="beads-status-dot status-${issue.status}"></span>
+                            ${escapeHtml(issue.title)}
+                        </div>
+                        <div class="link-path">${escapeHtml(issue.id)} &bull; P${issue.priority} &bull; ${escapeHtml(issue.issue_type)}</div>
+                    </li>
+                `).join('');
+
+            } catch (e) {
+                console.error('Failed to load beads for entry:', e);
+                section.style.display = 'none';
+            }
         }
 
         // Navigation tabs
@@ -1201,10 +1496,128 @@
 
             $('#graph-container').classList.toggle('active', view === 'graph');
             $('#reader-container').classList.toggle('active', view === 'reader');
+            $('#kanban-container').classList.toggle('active', view === 'kanban');
 
             if (view === 'graph' && !state.graph) {
                 loadGraph();
             }
+            if (view === 'kanban' && !state.kanban) {
+                loadKanban();
+            }
+        }
+
+        // Load and render kanban
+        async function loadKanban() {
+            const container = $('#kanban-container');
+
+            if (!state.beadsAvailable) {
+                container.innerHTML = `
+                    <div class="kanban-unavailable">
+                        <div class="kanban-unavailable-icon">&#128203;</div>
+                        <h2 class="kanban-unavailable-title">Beads Not Available</h2>
+                        <p class="kanban-unavailable-message">
+                            No beads project found for this knowledge base.
+                            Initialize with <code>bd init</code> to enable issue tracking.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const data = await api.getBeadsKanban();
+                state.kanban = data;
+                renderKanban(data);
+            } catch (e) {
+                console.error('Failed to load kanban:', e);
+                container.innerHTML = `
+                    <div class="kanban-unavailable">
+                        <div class="kanban-unavailable-icon">&#9888;</div>
+                        <h2 class="kanban-unavailable-title">Failed to Load</h2>
+                        <p class="kanban-unavailable-message">${escapeHtml(e.message)}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderKanban(data) {
+            const container = $('#kanban-container');
+
+            const columnsHtml = data.columns.map(col => `
+                <div class="kanban-column column-${col.status}">
+                    <div class="kanban-column-header">
+                        <span class="kanban-column-title">${escapeHtml(col.label)}</span>
+                        <span class="kanban-column-count">${col.issues.length}</span>
+                    </div>
+                    <div class="kanban-column-body">
+                        ${col.issues.length === 0
+                            ? '<div class="kanban-empty">No issues</div>'
+                            : col.issues.map(issue => renderKanbanCard(issue)).join('')
+                        }
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="kanban-header">
+                    <span class="kanban-project-name">Project: ${escapeHtml(data.project)}</span>
+                    <span class="kanban-stats">${data.total_issues} total issues</span>
+                </div>
+                <div class="kanban-board">
+                    ${columnsHtml}
+                </div>
+            `;
+
+            // Add click handlers for cards
+            container.querySelectorAll('.kanban-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const issueId = card.dataset.issueId;
+                    showIssueDetails(issueId);
+                });
+            });
+        }
+
+        function renderKanbanCard(issue) {
+            return `
+                <div class="kanban-card" data-issue-id="${escapeHtml(issue.id)}">
+                    <div class="kanban-card-title">${escapeHtml(issue.title)}</div>
+                    <div class="kanban-card-meta">
+                        <span class="kanban-card-id">${escapeHtml(issue.id)}</span>
+                        <span class="kanban-card-type type-${issue.issue_type}">${escapeHtml(issue.issue_type)}</span>
+                        <span class="kanban-card-priority priority-${issue.priority_label}">P${issue.priority}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showIssueDetails(issueId) {
+            // Find issue in kanban data
+            const issue = state.kanban?.columns
+                .flatMap(col => col.issues)
+                .find(i => i.id === issueId);
+
+            if (!issue) return;
+
+            // Simple alert for now - could be enhanced with a modal
+            const details = [
+                `ID: ${issue.id}`,
+                `Title: ${issue.title}`,
+                `Status: ${issue.status}`,
+                `Priority: P${issue.priority} (${issue.priority_label})`,
+                `Type: ${issue.issue_type}`,
+                issue.description ? `\nDescription:\n${issue.description}` : '',
+            ].filter(Boolean).join('\n');
+
+            alert(details);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Load and render graph
@@ -1344,6 +1757,11 @@
                 // R for reader view
                 if (e.key === 'r' && !e.target.matches('input, textarea')) {
                     switchView('reader');
+                }
+
+                // K for kanban view
+                if (e.key === 'k' && !e.target.matches('input, textarea')) {
+                    switchView('kanban');
                 }
 
                 // Escape to close search

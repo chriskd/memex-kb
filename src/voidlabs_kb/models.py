@@ -18,6 +18,9 @@ class EntryMetadata(BaseModel):
     status: Literal["draft", "published", "archived"] = "published"
     source_project: str | None = None  # Project where entry was created
     edit_sources: list[str] = Field(default_factory=list)  # Projects that edited this
+    # Beads integration
+    beads_issues: list[str] = Field(default_factory=list)  # e.g., ["project-id1", "project-id2"]
+    beads_project: str | None = None  # Links to all issues in a beads project
 
 
 class DocumentChunk(BaseModel):
@@ -96,3 +99,39 @@ class ViewStats(BaseModel):
     total_views: int = 0
     last_viewed: datetime | None = None
     views_by_day: dict[str, int] = Field(default_factory=dict)  # ISO date -> count
+
+
+# Beads integration models
+
+
+class BeadsIssue(BaseModel):
+    """A beads issue for display."""
+
+    id: str
+    title: str
+    description: str | None = None
+    status: Literal["open", "in_progress", "closed"]
+    priority: int  # 0-4, where 0 is highest (critical)
+    issue_type: str  # task, feature, bug, chore, epic
+    created_at: datetime
+    updated_at: datetime
+    closed_at: datetime | None = None
+    close_reason: str | None = None
+    dependency_count: int = 0
+    dependent_count: int = 0
+
+
+class BeadsKanbanColumn(BaseModel):
+    """A kanban column with issues."""
+
+    status: str
+    label: str
+    issues: list[BeadsIssue]
+
+
+class BeadsKanbanData(BaseModel):
+    """Full kanban board data."""
+
+    project: str
+    columns: list[BeadsKanbanColumn]
+    total_issues: int
