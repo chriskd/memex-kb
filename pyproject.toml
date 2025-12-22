@@ -14,11 +14,13 @@ dependencies = [
     "tiktoken>=0.5.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
+    "click>=8.1.0",
 ]
 
 [project.scripts]
 voidlabs-kb = "voidlabs_kb.server:main"
 voidlabs-kb-web = "voidlabs_kb.webapp.api:main"
+vl-kb = "voidlabs_kb.cli:main"
 
 [build-system]
 requires = ["hatchling"]
