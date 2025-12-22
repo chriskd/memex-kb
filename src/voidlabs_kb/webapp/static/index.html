@@ -973,6 +973,192 @@
         .beads-status-dot.status-open { background: var(--accent-cyan); }
         .beads-status-dot.status-in_progress { background: var(--accent-amber); }
         .beads-status-dot.status-closed { background: var(--accent-green); }
+        .beads-status-dot.status-blocked { background: var(--accent-red); }
+
+        /* Issue Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow-lg), 0 0 60px rgba(212, 168, 87, 0.1);
+            transform: scale(0.95) translateY(10px);
+            transition: transform 0.2s ease;
+        }
+
+        .modal-overlay.active .modal {
+            transform: scale(1) translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            background: var(--bg-dark);
+        }
+
+        .modal-title-group {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .modal-title {
+            font-family: 'Crimson Pro', serif;
+            font-size: 20px;
+            font-weight: 500;
+            color: var(--text-primary);
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+
+        .modal-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .modal-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--accent-gold);
+        }
+
+        .modal-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .modal-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .modal-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .modal-status-dot.status-open { background: var(--accent-cyan); }
+        .modal-status-dot.status-in_progress { background: var(--accent-amber); }
+        .modal-status-dot.status-closed { background: var(--accent-green); }
+        .modal-status-dot.status-blocked { background: var(--accent-red); }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px;
+            margin: -4px -4px -4px 16px;
+            line-height: 1;
+            transition: color 0.15s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-section {
+            margin-bottom: 20px;
+        }
+
+        .modal-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .modal-section-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .modal-description {
+            font-family: 'Crimson Pro', serif;
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+
+        .modal-description code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            background: var(--bg-elevated);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .modal-timestamps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+        }
+
+        .modal-timestamp {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .modal-timestamp-value {
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Clickable beads issues in sidebar */
+        .beads-issue-item {
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .beads-issue-item:hover {
+            background: var(--bg-elevated);
+        }
     </style>
 </head>
 <body>
@@ -1069,6 +1255,13 @@
         </aside>
     </div>
 
+    <!-- Issue Modal -->
+    <div class="modal-overlay" id="issue-modal-overlay">
+        <div class="modal" id="issue-modal">
+            <!-- Content populated by JS -->
+        </div>
+    </div>
+
     <script>
         // State
         const state = {
@@ -1078,6 +1271,7 @@
             simulation: null,
             kanban: null,
             beadsAvailable: null,
+            linkedBeadsIssues: [],  // Issues linked from current entry sidebar
         };
 
         // API helpers
@@ -1172,6 +1366,7 @@
             setupNavigation();
             setupViewToggle();
             setupKeyboard();
+            setupModalBackdrop();
         }
 
         // Initialize beads
@@ -1436,6 +1631,7 @@
             const issuesList = $('#beads-issues');
 
             issuesList.innerHTML = '<li class="link-item">Checking beads...</li>';
+            state.linkedBeadsIssues = [];
 
             if (!state.beadsAvailable) {
                 issuesList.innerHTML = '<li class="link-item" style="color: orange;">Beads not available</li>';
@@ -1451,6 +1647,9 @@
                     ...(beadsData.project_issues || [])
                 ];
 
+                // Store for modal lookup
+                state.linkedBeadsIssues = allIssues;
+
                 if (allIssues.length === 0) {
                     issuesList.innerHTML = '<li class="link-item" style="color: #888;">No linked issues</li>';
                     return;
@@ -1465,6 +1664,14 @@
                         <div class="link-path">${escapeHtml(issue.id)} &bull; P${issue.priority} &bull; ${escapeHtml(issue.issue_type)}</div>
                     </li>
                 `).join('');
+
+                // Add click handlers for sidebar beads issues
+                issuesList.querySelectorAll('.beads-issue-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const issueId = item.dataset.issueId;
+                        showIssueModal(issueId);
+                    });
+                });
 
             } catch (e) {
                 console.error('Failed to load beads for entry:', e);
@@ -1580,7 +1787,7 @@
             container.querySelectorAll('.kanban-card').forEach(card => {
                 card.addEventListener('click', () => {
                     const issueId = card.dataset.issueId;
-                    showIssueDetails(issueId);
+                    showIssueModal(issueId);
                 });
             });
         }
@@ -1598,25 +1805,101 @@
             `;
         }
 
-        function showIssueDetails(issueId) {
-            // Find issue in kanban data
-            const issue = state.kanban?.columns
+        // Find issue by ID from either kanban or sidebar linked issues
+        function findIssue(issueId) {
+            // Try kanban first
+            const kanbanIssue = state.kanban?.columns
                 .flatMap(col => col.issues)
                 .find(i => i.id === issueId);
+            if (kanbanIssue) return kanbanIssue;
 
+            // Try sidebar linked issues
+            return state.linkedBeadsIssues.find(i => i.id === issueId);
+        }
+
+        // Show issue modal
+        function showIssueModal(issueId) {
+            const issue = findIssue(issueId);
             if (!issue) return;
 
-            // Simple alert for now - could be enhanced with a modal
-            const details = [
-                `ID: ${issue.id}`,
-                `Title: ${issue.title}`,
-                `Status: ${issue.status}`,
-                `Priority: P${issue.priority} (${issue.priority_label})`,
-                `Type: ${issue.issue_type}`,
-                issue.description ? `\nDescription:\n${issue.description}` : '',
-            ].filter(Boolean).join('\n');
+            const overlay = $('#issue-modal-overlay');
+            const modal = $('#issue-modal');
 
-            alert(details);
+            // Format dates
+            const formatDate = (dateStr) => {
+                if (!dateStr) return null;
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            };
+
+            // Status label formatting
+            const statusLabel = issue.status.replace(/_/g, ' ');
+
+            // Build modal content
+            modal.innerHTML = `
+                <div class="modal-header">
+                    <div class="modal-title-group">
+                        <div class="modal-title">${escapeHtml(issue.title)}</div>
+                        <div class="modal-meta">
+                            <span class="modal-id">${escapeHtml(issue.id)}</span>
+                            <span class="modal-status">
+                                <span class="modal-status-dot status-${issue.status}"></span>
+                                ${escapeHtml(statusLabel)}
+                            </span>
+                            <span class="modal-badge type-${issue.issue_type}">${escapeHtml(issue.issue_type)}</span>
+                            <span class="modal-badge priority-${issue.priority_label}">P${issue.priority}</span>
+                        </div>
+                    </div>
+                    <button class="modal-close" onclick="closeIssueModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    ${issue.description ? `
+                        <div class="modal-section">
+                            <div class="modal-section-label">Description</div>
+                            <div class="modal-description">${escapeHtml(issue.description)}</div>
+                        </div>
+                    ` : ''}
+                    <div class="modal-section">
+                        <div class="modal-section-label">Timestamps</div>
+                        <div class="modal-timestamps">
+                            <div class="modal-timestamp">
+                                Created
+                                <div class="modal-timestamp-value">${formatDate(issue.created_at) || 'Unknown'}</div>
+                            </div>
+                            <div class="modal-timestamp">
+                                Updated
+                                <div class="modal-timestamp-value">${formatDate(issue.updated_at) || 'Unknown'}</div>
+                            </div>
+                            ${issue.closed_at ? `
+                                <div class="modal-timestamp">
+                                    Closed
+                                    <div class="modal-timestamp-value">${formatDate(issue.closed_at)}</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ${issue.dependency_count > 0 ? `
+                        <div class="modal-section">
+                            <div class="modal-section-label">Dependencies</div>
+                            <div class="modal-description">${issue.dependency_count} issue(s) blocking this</div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            overlay.classList.add('active');
+        }
+
+        // Close issue modal
+        function closeIssueModal() {
+            const overlay = $('#issue-modal-overlay');
+            overlay.classList.remove('active');
         }
 
         function escapeHtml(text) {
@@ -1770,10 +2053,22 @@
                     switchView('kanban');
                 }
 
-                // Escape to close search
+                // Escape to close search and modals
                 if (e.key === 'Escape') {
                     $('#search-results').classList.remove('active');
                     $('#search-input').blur();
+                    closeIssueModal();
+                }
+            });
+        }
+
+        // Setup modal backdrop click
+        function setupModalBackdrop() {
+            const overlay = $('#issue-modal-overlay');
+            overlay.addEventListener('click', (e) => {
+                // Only close if clicking the overlay itself, not the modal content
+                if (e.target === overlay) {
+                    closeIssueModal();
                 }
             });
         }
