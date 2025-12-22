@@ -455,7 +455,9 @@ class BeadsClient:
             return []
 
         try:
-            conn = sqlite3.connect(str(db_path))
+            # Use immutable=1 for read-only access without needing journal files
+            # This is required when the database is on a read-only mount (e.g., Docker)
+            conn = sqlite3.connect(f"file:{db_path}?immutable=1", uri=True)
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 """
