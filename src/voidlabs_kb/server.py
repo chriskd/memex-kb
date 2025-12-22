@@ -18,6 +18,42 @@ from .models import DocumentChunk, IndexStatus, KBEntry, QualityReport, SearchRe
 from .parser import ParseError, extract_links, parse_entry, update_links_batch
 
 
+def _get_current_project() -> str | None:
+    """Get the current project name from git remote or working directory.
+
+    Returns:
+        Project name (e.g., "voidlabs-ansible") or None if unavailable.
+    """
+    cwd = Path.cwd()
+
+    # Try to get project name from git remote
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            remote_url = result.stdout.strip()
+
+            # Handle SSH format: git@github.com:user/repo.git
+            import re
+            ssh_match = re.search(r":([^/]+/[^/]+?)(?:\.git)?$", remote_url)
+            if ssh_match:
+                return ssh_match.group(1).split("/")[-1]
+
+            # Handle HTTPS format: https://github.com/user/repo.git
+            https_match = re.search(r"/([^/]+?)(?:\.git)?$", remote_url)
+            if https_match:
+                return https_match.group(1)
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+
+    # Fallback to directory name
+    return cwd.name
+
+
 def _get_current_contributor() -> str | None:
     """Get the current contributor identity from git config or environment.
 
@@ -306,7 +342,9 @@ async def search_tool(
         SearchResponse with results and optional warnings.
     """
     searcher = _get_searcher()
-    results = searcher.search(query, limit=limit, mode=mode)
+    # Auto-detect project context for boosting entries from current project
+    project_context = _get_current_project()
+    results = searcher.search(query, limit=limit, mode=mode, project_context=project_context)
     warnings: list[str] = []
 
     # Filter by tags if specified
@@ -342,7 +380,8 @@ async def quality_tool(limit: int = 5, cutoff: int = 3) -> QualityReport:
     name="add",
     description=(
         "Create a new knowledge base entry. Generates a slug from the title "
-        "and places the entry in the specified category or directory."
+        "and places the entry in the specified category or directory. "
+        "Returns the path and suggested links to related entries."
     ),
 )
 async def add_tool(
@@ -352,7 +391,7 @@ async def add_tool(
     category: str = "",
     directory: str | None = None,
     links: list[str] | None = None,
-) -> str:
+) -> dict:
     """Create a new KB entry.
 
     Args:
@@ -366,7 +405,7 @@ async def add_tool(
         links: Optional list of paths to link to using [[link]] syntax.
 
     Returns:
-        Path of the created file.
+        Dict with 'path' of created file and 'suggested_links' to consider adding.
     """
     kb_root = get_kb_root()
 
@@ -422,11 +461,15 @@ async def add_tool(
     contributor = _get_current_contributor()
     contributors_yaml = f"\ncontributors:\n  - {contributor}" if contributor else ""
 
+    # Get source project context
+    source_project = _get_current_project()
+    source_project_yaml = f"\nsource_project: {source_project}" if source_project else ""
+
     frontmatter = f"""---
 title: {title}
 tags:
 {tags_yaml}
-created: {today}{contributors_yaml}
+created: {today}{contributors_yaml}{source_project_yaml}
 ---
 
 """
@@ -446,14 +489,27 @@ created: {today}{contributors_yaml}
         # File was written but indexing failed - still return success
         pass
 
-    return rel_path
+    # Compute link suggestions for the new entry
+    existing_links = set(links) if links else set()
+    suggested_links = _compute_link_suggestions(
+        title=title,
+        content=final_content,
+        tags=tags,
+        self_path=rel_path,
+        existing_links=existing_links,
+        limit=3,  # Suggest up to 3 high-confidence links
+        min_score=0.5,
+    )
+
+    return {"path": rel_path, "suggested_links": suggested_links}
 
 
 @mcp.tool(
     name="update",
     description=(
         "Update an existing knowledge base entry. "
-        "Preserves frontmatter and updates the 'updated' date."
+        "Preserves frontmatter and updates the 'updated' date. "
+        "Returns the path and suggested links to related entries."
     ),
 )
 async def update_tool(
@@ -461,16 +517,17 @@ async def update_tool(
     content: str | None = None,
     tags: list[str] | None = None,
     section_updates: dict[str, str] | None = None,
-) -> str:
+) -> dict:
     """Update an existing KB entry.
 
     Args:
         path: Path to the entry relative to KB root (e.g., "development/python-tooling.md").
         content: New markdown content (without frontmatter).
         tags: Optional new list of tags. If provided, replaces existing tags.
+        section_updates: Optional dict of section heading -> new content.
 
     Returns:
-        Updated path.
+        Dict with 'path' of updated file and 'suggested_links' to consider adding.
     """
     kb_root = get_kb_root()
     file_path = kb_root / path
@@ -503,10 +560,19 @@ async def update_tool(
     if current_contributor and current_contributor not in contributors:
         contributors.append(current_contributor)
 
+    # Track edit sources (projects that have edited this entry)
+    edit_sources = list(metadata.edit_sources)
+    current_project = _get_current_project()
+    if current_project and current_project not in edit_sources:
+        # Don't add if it's the same as source_project (original creator)
+        if current_project != metadata.source_project:
+            edit_sources.append(current_project)
+
     # Build updated frontmatter
     tags_yaml = "\n".join(f"  - {tag}" for tag in new_tags)
     contributors_yaml = "\n".join(f"  - {c}" for c in contributors)
     aliases_yaml = "\n".join(f"  - {a}" for a in metadata.aliases)
+    edit_sources_yaml = "\n".join(f"  - {s}" for s in edit_sources)
 
     frontmatter_parts = [
         "---",
@@ -527,6 +593,15 @@ async def update_tool(
 
     if metadata.status != "published":
         frontmatter_parts.append(f"status: {metadata.status}")
+
+    # Preserve source_project from original creation
+    if metadata.source_project:
+        frontmatter_parts.append(f"source_project: {metadata.source_project}")
+
+    # Add edit_sources if any projects have edited this
+    if edit_sources:
+        frontmatter_parts.append("edit_sources:")
+        frontmatter_parts.append(edit_sources_yaml)
 
     frontmatter_parts.append("---\n\n")
     frontmatter = "\n".join(frontmatter_parts)
@@ -555,7 +630,19 @@ async def update_tool(
         # Indexing failed but file was updated
         pass
 
-    return relative_path
+    # Compute link suggestions based on updated content
+    existing_links = set(extract_links(new_content))
+    suggested_links = _compute_link_suggestions(
+        title=metadata.title,
+        content=new_content,
+        tags=new_tags,
+        self_path=relative_path,
+        existing_links=existing_links,
+        limit=3,  # Suggest up to 3 high-confidence links
+        min_score=0.5,
+    )
+
+    return {"path": relative_path, "suggested_links": suggested_links}
 
 
 @mcp.tool(
@@ -1488,18 +1575,294 @@ async def health_tool(
                 rel_dir = str(dir_path.relative_to(kb_root))
                 results["empty_dirs"].append(rel_dir)
 
-    # Add summary
+    # Add summary with health score
     total_issues = sum(len(v) for v in results.values() if isinstance(v, list))
+    total_entries = len(all_entries)
+
+    # Calculate health score (0-100)
+    # Deduct points for issues, weighted by severity
+    score = 100.0
+    if total_entries > 0:
+        # Broken links are serious (5 points each, max 30 deduction)
+        broken_penalty = min(30, len(results["broken_links"]) * 5)
+        # Orphans are moderate (2 points each, max 25 deduction)
+        orphan_penalty = min(25, len(results["orphans"]) * 2)
+        # Stale content is minor (1 point each, max 20 deduction)
+        stale_penalty = min(20, len(results["stale"]) * 1)
+        # Empty dirs are trivial (1 point each, max 10 deduction)
+        empty_penalty = min(10, len(results["empty_dirs"]) * 1)
+
+        score = max(0, 100 - broken_penalty - orphan_penalty - stale_penalty - empty_penalty)
+
     results["summary"] = {
+        "health_score": round(score),
         "total_issues": total_issues,
         "orphans_count": len(results["orphans"]),
         "broken_links_count": len(results["broken_links"]),
         "stale_count": len(results["stale"]),
         "empty_dirs_count": len(results["empty_dirs"]),
-        "total_entries": len(all_entries),
+        "total_entries": total_entries,
     }
 
     return results
+
+
+@mcp.tool(
+    name="hubs",
+    description=(
+        "Find the most connected entries in the knowledge base (hub notes). "
+        "These are key concepts that many other entries link to."
+    ),
+)
+async def hubs_tool(limit: int = 10) -> list[dict]:
+    """Find hub entries with most connections.
+
+    Args:
+        limit: Maximum entries to return (default 10).
+
+    Returns:
+        List of {path, title, incoming, outgoing, total} sorted by total connections.
+    """
+    kb_root = get_kb_root()
+
+    if not kb_root.exists():
+        return []
+
+    # Build connection counts
+    all_backlinks = _get_backlink_index()
+    connection_counts: dict[str, dict] = {}
+
+    # Count incoming links from backlinks index
+    for path_key, sources in all_backlinks.items():
+        if path_key not in connection_counts:
+            connection_counts[path_key] = {"incoming": 0, "outgoing": 0}
+        connection_counts[path_key]["incoming"] = len(sources)
+
+    # Count outgoing links from each entry
+    for md_file in kb_root.rglob("*.md"):
+        if md_file.name.startswith("_"):
+            continue
+
+        rel_path = str(md_file.relative_to(kb_root))
+        path_key = rel_path[:-3] if rel_path.endswith(".md") else rel_path
+
+        try:
+            _, content, _ = parse_entry(md_file)
+            links = extract_links(content)
+        except ParseError:
+            continue
+
+        if path_key not in connection_counts:
+            connection_counts[path_key] = {"incoming": 0, "outgoing": 0}
+        connection_counts[path_key]["outgoing"] = len(links)
+
+    # Calculate totals and sort
+    results = []
+    for path_key, counts in connection_counts.items():
+        total = counts["incoming"] + counts["outgoing"]
+        if total == 0:
+            continue
+
+        # Get title
+        file_path = kb_root / f"{path_key}.md"
+        title = path_key
+        if file_path.exists():
+            try:
+                metadata, _, _ = parse_entry(file_path)
+                title = metadata.title
+            except ParseError:
+                pass
+
+        results.append({
+            "path": f"{path_key}.md",
+            "title": title,
+            "incoming": counts["incoming"],
+            "outgoing": counts["outgoing"],
+            "total": total,
+        })
+
+    # Sort by total connections descending
+    results.sort(key=lambda x: x["total"], reverse=True)
+
+    return results[:limit]
+
+
+@mcp.tool(
+    name="dead_ends",
+    description=(
+        "Find dead-end entries: notes that receive links but don't link out. "
+        "These may need more context or related links added."
+    ),
+)
+async def dead_ends_tool(limit: int = 10) -> list[dict]:
+    """Find entries with incoming links but no outgoing links.
+
+    Args:
+        limit: Maximum entries to return (default 10).
+
+    Returns:
+        List of {path, title, incoming_count} sorted by incoming links descending.
+    """
+    kb_root = get_kb_root()
+
+    if not kb_root.exists():
+        return []
+
+    all_backlinks = _get_backlink_index()
+    results = []
+
+    for md_file in kb_root.rglob("*.md"):
+        if md_file.name.startswith("_"):
+            continue
+
+        rel_path = str(md_file.relative_to(kb_root))
+        path_key = rel_path[:-3] if rel_path.endswith(".md") else rel_path
+
+        try:
+            metadata, content, _ = parse_entry(md_file)
+            outgoing_links = extract_links(content)
+        except ParseError:
+            continue
+
+        incoming_count = len(all_backlinks.get(path_key, []))
+
+        # Dead end: has incoming links but no outgoing
+        if incoming_count > 0 and len(outgoing_links) == 0:
+            results.append({
+                "path": rel_path,
+                "title": metadata.title,
+                "incoming_count": incoming_count,
+            })
+
+    # Sort by incoming count descending (most linked-to dead ends first)
+    results.sort(key=lambda x: x["incoming_count"], reverse=True)
+
+    return results[:limit]
+
+
+# Paths to exclude from link suggestions (meta-entries that aren't useful to link to)
+_EXCLUDED_FROM_SUGGESTIONS = {"_index.md", "_index"}
+
+
+def _compute_link_suggestions(
+    title: str,
+    content: str,
+    tags: list[str],
+    self_path: str,
+    existing_links: set[str] | None = None,
+    limit: int = 5,
+    min_score: float = 0.5,
+) -> list[dict]:
+    """Compute link suggestions based on semantic similarity.
+
+    This is the core suggestion logic, extracted for reuse by add/update tools.
+
+    Args:
+        title: Entry title.
+        content: Entry content.
+        tags: Entry tags.
+        self_path: Path to the entry itself (to exclude from results).
+        existing_links: Set of paths already linked to (to exclude).
+        limit: Maximum suggestions to return.
+        min_score: Minimum similarity score threshold (0.0-1.0).
+
+    Returns:
+        List of {path, title, score, reason} for suggested links.
+    """
+    if existing_links is None:
+        existing_links = set()
+
+    # Normalize self path for comparison
+    self_key = self_path[:-3] if self_path.endswith(".md") else self_path
+    exclude_set = existing_links | {self_key, self_path} | _EXCLUDED_FROM_SUGGESTIONS
+
+    # Use semantic search to find similar entries
+    searcher = _get_searcher()
+
+    # Search using the entry's title and first part of content as query
+    query = f"{title} {content[:500]}"
+    search_results = searcher.search(query, limit=limit + len(exclude_set) + 10, mode="semantic")
+
+    suggestions = []
+    tags_set = set(tags)
+
+    for result in search_results:
+        result_key = result.path[:-3] if result.path.endswith(".md") else result.path
+
+        # Skip excluded paths (self, already linked, meta-entries)
+        if result_key in exclude_set or result.path in exclude_set:
+            continue
+
+        # Skip results below score threshold
+        if result.score < min_score:
+            continue
+
+        # Determine reason based on shared tags
+        shared_tags = tags_set & set(result.tags)
+        if shared_tags:
+            reason = f"Shares tags: {', '.join(sorted(shared_tags))}"
+        else:
+            reason = "Semantically similar content"
+
+        suggestions.append({
+            "path": result.path,
+            "title": result.title,
+            "score": round(result.score, 3),
+            "reason": reason,
+        })
+
+        if len(suggestions) >= limit:
+            break
+
+    return suggestions
+
+
+@mcp.tool(
+    name="suggest_links",
+    description=(
+        "Suggest entries to link to based on semantic similarity. "
+        "Uses embeddings to find conceptually related entries that aren't already linked. "
+        "Only returns suggestions above the min_score threshold (default 0.5)."
+    ),
+)
+async def suggest_links_tool(
+    path: str,
+    limit: int = 5,
+    min_score: float = 0.5,
+) -> list[dict]:
+    """Suggest links to add to an entry based on content similarity.
+
+    Args:
+        path: Path to the entry to suggest links for.
+        limit: Maximum suggestions to return (default 5).
+        min_score: Minimum similarity score threshold (default 0.5).
+
+    Returns:
+        List of {path, title, score, reason} for suggested links.
+    """
+    kb_root = get_kb_root()
+    file_path = kb_root / path
+
+    if not file_path.exists():
+        raise ValueError(f"Entry not found: {path}")
+
+    try:
+        metadata, content, _ = parse_entry(file_path)
+    except ParseError as e:
+        raise ValueError(f"Failed to parse entry: {e}") from e
+
+    # Get existing links to exclude
+    existing_links = set(extract_links(content))
+
+    return _compute_link_suggestions(
+        title=metadata.title,
+        content=content,
+        tags=list(metadata.tags),
+        self_path=path,
+        existing_links=existing_links,
+        limit=limit,
+        min_score=min_score,
+    )
 
 
 def main():
