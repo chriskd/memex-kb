@@ -67,8 +67,15 @@ async def test_mkdir_tool_creates_nested_directories(kb_root):
     assert created == new_path
     assert (kb_root / new_path).is_dir()
 
+    # mkdir can create new top-level categories
+    new_category_path = "newcategory/subdir"
+    created2 = await _call_tool(server.mkdir_tool, new_category_path)
+    assert created2 == new_category_path
+    assert (kb_root / new_category_path).is_dir()
+
+    # mkdir raises ValueError if directory already exists
     with pytest.raises(ValueError):
-        await _call_tool(server.mkdir_tool, "unknown/path")
+        await _call_tool(server.mkdir_tool, new_path)
 
 
 @pytest.fixture
@@ -96,8 +103,8 @@ def dummy_searcher(monkeypatch):
             return None
 
     dummy = DummySearcher()
-    monkeypatch.setattr(server, "_get_searcher", lambda: dummy)
-    monkeypatch.setattr(server, "rebuild_backlink_cache", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(core, "get_searcher", lambda: dummy)
+    monkeypatch.setattr(core, "rebuild_backlink_cache", lambda *_args, **_kwargs: None)
     return dummy
 
 
@@ -164,16 +171,21 @@ Mentions [[development/python/foo]].
 
 
 @pytest.mark.asyncio
-async def test_rmdir_tool_enforces_empty_and_blocks_categories(kb_root):
+async def test_rmdir_tool_enforces_empty_directory(kb_root):
+    """Test that rmdir enforces empty directory requirement."""
     temp_dir = kb_root / "development" / "temp"
     sub_dir = temp_dir / "child"
     sub_dir.mkdir(parents=True)
 
+    # Can't remove non-empty directory without force
     with pytest.raises(ValueError):
         await _call_tool(server.rmdir_tool, "development/temp")
 
+    # With force=True, removes directory and empty subdirs
     await _call_tool(server.rmdir_tool, "development/temp", force=True)
     assert not temp_dir.exists()
 
-    with pytest.raises(ValueError):
-        await _call_tool(server.rmdir_tool, "development")
+    # Empty directories (including category roots) can be removed
+    # Note: "development" is now empty after removing temp_dir
+    await _call_tool(server.rmdir_tool, "development")
+    assert not (kb_root / "development").exists()
