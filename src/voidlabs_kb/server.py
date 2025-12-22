@@ -1098,7 +1098,7 @@ async def mkdir_tool(path: str) -> str:
 
     Args:
         path: Directory path relative to KB root (e.g., "development/python/frameworks").
-              Must start with a valid top-level category.
+              Can create new top-level categories or nested directories.
 
     Returns:
         Created directory path.
@@ -1106,25 +1106,14 @@ async def mkdir_tool(path: str) -> str:
     Raises:
         ValueError: If path is invalid or directory already exists.
     """
-    kb_root = get_kb_root()
-
     # Validate path format
     abs_path, normalized = _validate_nested_path(path)
-
-    # Ensure it starts with a valid category
-    parent_category = _get_parent_category(normalized)
-    valid_categories = _get_valid_categories()
-
-    if parent_category not in valid_categories:
-        raise ValueError(
-            f"Path must start with a valid category. Valid categories: {', '.join(valid_categories)}"
-        )
 
     # Check if already exists
     if abs_path.exists():
         raise ValueError(f"Directory already exists: {path}")
 
-    # Create the directory (and any missing parents within the category)
+    # Create the directory (and any missing parents)
     abs_path.mkdir(parents=True, exist_ok=False)
 
     return normalized
