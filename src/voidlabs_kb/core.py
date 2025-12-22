@@ -116,6 +116,61 @@ def get_current_contributor() -> str | None:
     return None
 
 
+def get_llm_model() -> str | None:
+    """Get the current LLM model from environment variables.
+
+    Checks multiple env vars that might contain model info:
+    - LLM_MODEL: Generic model identifier (preferred)
+    - ANTHROPIC_MODEL: Anthropic-specific
+    - CLAUDE_MODEL: Claude-specific
+    - OPENAI_MODEL: OpenAI-specific
+
+    Returns:
+        Model identifier string or None if unavailable.
+    """
+    for var in ("LLM_MODEL", "ANTHROPIC_MODEL", "CLAUDE_MODEL", "OPENAI_MODEL"):
+        model = os.environ.get(var)
+        if model:
+            return model
+    return None
+
+
+def get_git_branch() -> str | None:
+    """Get the current git branch name.
+
+    Returns:
+        Branch name (e.g., "main", "feat/search") or None if not in a git repo.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            branch = result.stdout.strip()
+            return branch if branch else None
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return None
+
+
+def get_actor_identity() -> str | None:
+    """Get the current actor identity (agent or human).
+
+    Returns:
+        Actor identifier like 'claude-opus' (for agents) or 'chris' (for humans).
+    """
+    # Check for agent identity first
+    if actor := os.environ.get("BD_ACTOR"):
+        return actor
+    # Fall back to user
+    if user := os.environ.get("USER"):
+        return user
+    return None
+
+
 def _maybe_initialize_searcher(searcher: HybridSearcher) -> None:
     """Ensure search indices are populated before first query."""
     global _searcher_ready
@@ -665,11 +720,21 @@ async def add_entry(
     source_project = get_current_project()
     source_project_yaml = f"\nsource_project: {source_project}" if source_project else ""
 
+    # Get breadcrumb metadata (agent/LLM provenance)
+    model = get_llm_model()
+    model_yaml = f"\nmodel: {model}" if model else ""
+
+    git_branch = get_git_branch()
+    git_branch_yaml = f"\ngit_branch: {git_branch}" if git_branch else ""
+
+    actor = get_actor_identity()
+    last_edited_by_yaml = f"\nlast_edited_by: {actor}" if actor else ""
+
     frontmatter = f"""---
 title: {title}
 tags:
 {tags_yaml}
-created: {today}{contributors_yaml}{source_project_yaml}
+created: {today}{contributors_yaml}{source_project_yaml}{model_yaml}{git_branch_yaml}{last_edited_by_yaml}
 ---
 
 """
@@ -813,6 +878,19 @@ async def update_entry(
 
     if metadata.beads_project:
         frontmatter_parts.append(f"beads_project: {metadata.beads_project}")
+
+    # Update breadcrumb metadata (agent/LLM provenance)
+    model = get_llm_model()
+    if model:
+        frontmatter_parts.append(f"model: {model}")
+
+    git_branch = get_git_branch()
+    if git_branch:
+        frontmatter_parts.append(f"git_branch: {git_branch}")
+
+    actor = get_actor_identity()
+    if actor:
+        frontmatter_parts.append(f"last_edited_by: {actor}")
 
     frontmatter_parts.append("---\n\n")
     frontmatter = "\n".join(frontmatter_parts)

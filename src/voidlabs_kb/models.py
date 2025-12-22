@@ -18,6 +18,10 @@ class EntryMetadata(BaseModel):
     status: Literal["draft", "published", "archived"] = "published"
     source_project: str | None = None  # Project where entry was created
     edit_sources: list[str] = Field(default_factory=list)  # Projects that edited this
+    # Breadcrumb metadata - agent/LLM provenance
+    model: str | None = None  # LLM model that created/last updated the entry
+    git_branch: str | None = None  # Git branch during creation
+    last_edited_by: str | None = None  # Last contributor identity (agent or human)
     # Beads integration
     beads_issues: list[str] = Field(default_factory=list)  # e.g., ["project-id1", "project-id2"]
     beads_project: str | None = None  # Links to all issues in a beads project
