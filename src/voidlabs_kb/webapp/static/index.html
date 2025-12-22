@@ -1952,7 +1952,7 @@
                                         <span class="modal-comment-author">${escapeHtml(c.author)}</span>
                                         <span class="modal-comment-date">${formatDate(c.created_at)}</span>
                                     </div>
-                                    <div class="modal-comment-content">${escapeHtml(c.content)}</div>
+                                    <div class="modal-comment-content">${c.content_html}</div>
                                 </div>
                             `).join('')}
                         </div>

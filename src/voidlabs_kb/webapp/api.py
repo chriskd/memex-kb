@@ -161,6 +161,7 @@ class BeadsCommentResponse(BaseModel):
     """Comment for API response."""
     id: str
     content: str
+    content_html: str  # Rendered markdown
     author: str
     created_at: str
 
@@ -642,6 +643,7 @@ async def get_beads_issue_detail(issue_id: str):
             BeadsCommentResponse(
                 id=c.id,
                 content=c.content,
+                content_html=render_markdown(c.content).html,
                 author=c.author,
                 created_at=c.created_at.isoformat(),
             )
