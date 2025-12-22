@@ -16,6 +16,8 @@ class EntryMetadata(BaseModel):
     contributors: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     status: Literal["draft", "published", "archived"] = "published"
+    source_project: str | None = None  # Project where entry was created
+    edit_sources: list[str] = Field(default_factory=list)  # Projects that edited this
 
 
 class DocumentChunk(BaseModel):
@@ -41,6 +43,7 @@ class SearchResult(BaseModel):
     updated: date | None = None
     token_count: int = 0
     content: str | None = None  # Full document content when requested
+    source_project: str | None = None  # Project that created this entry
 
 
 class SearchResponse(BaseModel):

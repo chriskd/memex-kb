@@ -1,8 +1,9 @@
 #!/bin/bash
-# MCP server wrapper that sets up environment from CLAUDE_PLUGIN_ROOT
+# MCP server wrapper for voidlabs-kb
 set -e
 
-export KB_ROOT="${CLAUDE_PLUGIN_ROOT}/kb"
-export INDEX_ROOT="${CLAUDE_PLUGIN_ROOT}/.indices"
+# Use canonical source location for KB content (shared across all installs)
+export KB_ROOT="/srv/fast/code/voidlabs-kb/kb"
+export INDEX_ROOT="/srv/fast/code/voidlabs-kb/.indices"
 
 exec uv --directory "${CLAUDE_PLUGIN_ROOT}" run python -m voidlabs_kb

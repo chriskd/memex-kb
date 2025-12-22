@@ -37,6 +37,7 @@ class HybridSearcher:
         query: str,
         limit: int = DEFAULT_SEARCH_LIMIT,
         mode: SearchMode = "hybrid",
+        project_context: str | None = None,
     ) -> list[SearchResult]:
         """Search the knowledge base.
 
@@ -44,6 +45,7 @@ class HybridSearcher:
             query: Search query string.
             limit: Maximum number of results.
             mode: Search mode - "hybrid", "keyword", or "semantic".
+            project_context: Current project name for context boosting.
 
         Returns:
             List of search results, deduplicated by document path.
@@ -53,20 +55,25 @@ class HybridSearcher:
 
         if mode == "keyword":
             results = self._whoosh.search(query, limit=fetch_limit)
+            results = self._apply_ranking_adjustments(query, results, project_context)
         elif mode == "semantic":
             results = self._chroma.search(query, limit=fetch_limit)
+            results = self._apply_ranking_adjustments(query, results, project_context)
         else:
-            results = self._hybrid_search(query, limit=fetch_limit)
+            results = self._hybrid_search(query, limit=fetch_limit, project_context=project_context)
 
         # Deduplicate by path, keeping highest-scoring chunk per document
         return self._deduplicate_by_path(results, limit)
 
-    def _hybrid_search(self, query: str, limit: int) -> list[SearchResult]:
+    def _hybrid_search(
+        self, query: str, limit: int, project_context: str | None = None
+    ) -> list[SearchResult]:
         """Perform hybrid search using Reciprocal Rank Fusion.
 
         Args:
             query: Search query string.
             limit: Maximum number of results.
+            project_context: Current project name for context boosting.
 
         Returns:
             List of merged search results.
@@ -80,12 +87,12 @@ class HybridSearcher:
         if not whoosh_results and not chroma_results:
             return []
         if not whoosh_results:
-            return chroma_results[:limit]
+            return self._apply_ranking_adjustments(query, chroma_results[:limit], project_context)
         if not chroma_results:
-            return whoosh_results[:limit]
+            return self._apply_ranking_adjustments(query, whoosh_results[:limit], project_context)
 
         # Apply RRF
-        return self._rrf_merge(query, whoosh_results, chroma_results, limit)
+        return self._rrf_merge(query, whoosh_results, chroma_results, limit, project_context)
 
     def _rrf_merge(
         self,
@@ -93,6 +100,7 @@ class HybridSearcher:
         whoosh_results: list[SearchResult],
         chroma_results: list[SearchResult],
         limit: int,
+        project_context: str | None = None,
     ) -> list[SearchResult]:
         """Merge results using Reciprocal Rank Fusion.
 
@@ -102,6 +110,7 @@ class HybridSearcher:
             whoosh_results: Results from keyword search.
             chroma_results: Results from semantic search.
             limit: Maximum number of results to return.
+            project_context: Current project name for context boosting.
 
         Returns:
             Merged and re-ranked results.
@@ -147,35 +156,45 @@ class HybridSearcher:
                     created=result.created,
                     updated=result.updated,
                     token_count=result.token_count,
+                    source_project=result.source_project,
                 )
             )
 
-        return self._apply_ranking_adjustments(query, final_results)
+        return self._apply_ranking_adjustments(query, final_results, project_context)
 
     def _apply_ranking_adjustments(
-        self, query: str, results: list[SearchResult]
+        self, query: str, results: list[SearchResult], project_context: str | None = None
     ) -> list[SearchResult]:
-        """Boost results with matching tags and renormalize scores."""
+        """Boost results with matching tags and project context, then renormalize scores."""
 
         if not results:
             return results
 
+        # Tag boost: +0.05 per matching tag
         tokens = {tok for tok in re.split(r"\W+", query.lower()) if tok}
-        if not tokens:
-            return results
+        if tokens:
+            for result in results:
+                tag_tokens = {tag.lower() for tag in result.tags}
+                overlap = tokens.intersection(tag_tokens)
+                if overlap:
+                    result.score += 0.05 * len(overlap)
 
-        for result in results:
-            tag_tokens = {tag.lower() for tag in result.tags}
-            overlap = tokens.intersection(tag_tokens)
-            if overlap:
-                result.score += 0.05 * len(overlap)
+        # Project context boost: +0.15 for entries from current project
+        if project_context:
+            for result in results:
+                if result.source_project and result.source_project == project_context:
+                    result.score += 0.15
 
+        # Renormalize scores to 0-1
         max_score = max((res.score for res in results), default=1.0)
         if max_score <= 0:
             return results
 
         for res in results:
             res.score = min(1.0, res.score / max_score)
+
+        # Re-sort by adjusted scores
+        results.sort(key=lambda r: r.score, reverse=True)
 
         return results
 

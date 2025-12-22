@@ -1,0 +1,37 @@
+# Voidlabs KB Explorer - Docker Compose
+# Deploy with: docker compose up -d
+
+services:
+  kb-explorer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: voidlabs-kb-explorer:latest
+    container_name: voidlabs-kb-explorer
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    volumes:
+      # Mount knowledge base (read-only for web explorer)
+      - ./kb:/kb:ro
+      # Persistent storage for indices and view tracking
+      - kb-data:/data
+    environment:
+      - KB_ROOT=/kb
+      - INDEX_ROOT=/data/indices
+      - HOST=0.0.0.0
+      - PORT=8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/stats')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kb.rule=Host(`kb.voidlabs.local`)"
+      - "traefik.http.services.kb.loadbalancer.server.port=8080"
+
+volumes:
+  kb-data:
+    driver: local

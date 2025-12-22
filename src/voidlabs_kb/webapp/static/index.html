@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voidlabs Knowledge Base</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        :root {
+            --bg-deep: #0a0a0c;
+            --bg-dark: #111114;
+            --bg-card: #18181c;
+            --bg-elevated: #1f1f24;
+            --border-subtle: #2a2a32;
+            --border-focus: #3d3d48;
+            --text-primary: #e8e6e3;
+            --text-secondary: #9a9890;
+            --text-muted: #5c5a55;
+            --accent-gold: #d4a857;
+            --accent-amber: #f0b429;
+            --accent-warm: #e89a3c;
+            --accent-cyan: #5bb5c4;
+            --accent-green: #7fba6b;
+            --accent-red: #cf6679;
+            --glow-gold: rgba(212, 168, 87, 0.15);
+            --glow-cyan: rgba(91, 181, 196, 0.15);
+            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            --scanline: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.03) 2px,
+                rgba(0, 0, 0, 0.03) 4px
+            );
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Crimson Pro', Georgia, serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            line-height: 1.7;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Scanline overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            background: var(--scanline);
+            z-index: 9999;
+            opacity: 0.4;
+        }
+
+        /* Layout */
+        .app {
+            display: grid;
+            grid-template-columns: 280px 1fr 320px;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+            gap: 1px;
+            background: var(--border-subtle);
+        }
+
+        /* Header */
+        .header {
+            grid-column: 1 / -1;
+            background: var(--bg-dark);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-amber));
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--bg-deep);
+        }
+
+        .logo-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+        }
+
+        .logo-text span {
+            color: var(--accent-gold);
+        }
+
+        /* Search */
+        .search-container {
+            flex: 1;
+            max-width: 500px;
+            margin: 0 40px;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px 10px 42px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            transition: all 0.2s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-gold);
+            box-shadow: 0 0 0 3px var(--glow-gold);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            margin-top: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .search-results.active {
+            display: block;
+        }
+
+        .search-result {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .search-result:last-child {
+            border-bottom: none;
+        }
+
+        .search-result:hover {
+            background: var(--bg-elevated);
+        }
+
+        .search-result-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--accent-gold);
+            margin-bottom: 4px;
+        }
+
+        .search-result-snippet {
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Stats */
+        .stats {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stat-value {
+            color: var(--accent-gold);
+            font-weight: 500;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-dark);
+            overflow-y: auto;
+            padding: 16px 0;
+        }
+
+        .sidebar-section {
+            margin-bottom: 8px;
+        }
+
+        .sidebar-header {
+            padding: 8px 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 0 12px;
+            margin-bottom: 12px;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 8px 12px;
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .nav-tab:hover {
+            background: var(--bg-card);
+            border-color: var(--border-focus);
+        }
+
+        .nav-tab.active {
+            background: var(--accent-gold);
+            border-color: var(--accent-gold);
+            color: var(--bg-deep);
+        }
+
+        /* Tree */
+        .tree {
+            padding: 0 8px;
+        }
+
+        .tree-item {
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.15s ease;
+        }
+
+        .tree-item:hover {
+            background: var(--bg-card);
+        }
+
+        .tree-item.active {
+            background: var(--bg-elevated);
+        }
+
+        .tree-icon {
+            font-size: 12px;
+            color: var(--text-muted);
+            width: 16px;
+            text-align: center;
+        }
+
+        .tree-icon.folder {
+            color: var(--accent-amber);
+        }
+
+        .tree-icon.file {
+            color: var(--accent-cyan);
+        }
+
+        .tree-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tree-children {
+            margin-left: 16px;
+            border-left: 1px solid var(--border-subtle);
+            padding-left: 4px;
+        }
+
+        /* Main content */
+        .main {
+            background: var(--bg-deep);
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .view-toggle {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 4px;
+            z-index: 100;
+        }
+
+        .view-btn {
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .view-btn:hover {
+            background: var(--bg-elevated);
+        }
+
+        .view-btn.active {
+            background: var(--accent-gold);
+            border-color: var(--accent-gold);
+            color: var(--bg-deep);
+        }
+
+        /* Graph view */
+        .graph-container {
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        .graph-container.active {
+            display: block;
+        }
+
+        .graph-container svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .graph-node {
+            cursor: pointer;
+        }
+
+        .graph-node circle {
+            transition: all 0.2s ease;
+        }
+
+        .graph-node:hover circle {
+            filter: brightness(1.3);
+        }
+
+        .graph-node text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            fill: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        .graph-link {
+            stroke: var(--border-subtle);
+            stroke-opacity: 0.4;
+            stroke-width: 1;
+        }
+
+        /* Reader view */
+        .reader-container {
+            display: none;
+            padding: 48px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .reader-container.active {
+            display: block;
+        }
+
+        .entry-header {
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .entry-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .entry-title {
+            font-size: 32px;
+            font-weight: 500;
+            color: var(--accent-gold);
+            margin-bottom: 16px;
+            line-height: 1.3;
+        }
+
+        .entry-meta {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .entry-meta-item {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .entry-meta-item span {
+            color: var(--text-secondary);
+        }
+
+        .entry-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+
+        .tag {
+            padding: 4px 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--accent-cyan);
+        }
+
+        /* Entry content */
+        .entry-content {
+            font-size: 17px;
+            line-height: 1.8;
+        }
+
+        .entry-content h1, .entry-content h2, .entry-content h3,
+        .entry-content h4, .entry-content h5, .entry-content h6 {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+            margin: 32px 0 16px;
+            font-weight: 500;
+        }
+
+        .entry-content h1 { font-size: 24px; }
+        .entry-content h2 { font-size: 20px; color: var(--accent-gold); }
+        .entry-content h3 { font-size: 16px; }
+
+        .entry-content p {
+            margin-bottom: 16px;
+        }
+
+        .entry-content a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.15s ease;
+        }
+
+        .entry-content a:hover {
+            border-bottom-color: var(--accent-cyan);
+        }
+
+        .entry-content a.wikilink {
+            color: var(--accent-gold);
+            background: var(--glow-gold);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border-bottom: none;
+        }
+
+        .entry-content a.wikilink:hover {
+            background: var(--accent-gold);
+            color: var(--bg-deep);
+        }
+
+        .entry-content code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--accent-amber);
+        }
+
+        .entry-content pre {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 24px 0;
+            overflow-x: auto;
+        }
+
+        .entry-content pre code {
+            background: transparent;
+            padding: 0;
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+
+        .entry-content ul, .entry-content ol {
+            margin: 16px 0;
+            padding-left: 24px;
+        }
+
+        .entry-content li {
+            margin-bottom: 8px;
+        }
+
+        .entry-content blockquote {
+            border-left: 3px solid var(--accent-gold);
+            padding-left: 20px;
+            margin: 24px 0;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        /* Tables */
+        .entry-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+
+        .entry-content th,
+        .entry-content td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .entry-content th {
+            background: var(--bg-card);
+            color: var(--accent-gold);
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .entry-content tr:nth-child(even) {
+            background: var(--bg-card);
+        }
+
+        .entry-content tr:hover {
+            background: var(--bg-elevated);
+        }
+
+        /* Right panel */
+        .panel {
+            background: var(--bg-dark);
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .panel-section {
+            margin-bottom: 24px;
+        }
+
+        .panel-header {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-gold);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-header::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-subtle);
+        }
+
+        .link-list {
+            list-style: none;
+        }
+
+        .link-item {
+            padding: 8px 12px;
+            margin-bottom: 4px;
+            background: var(--bg-card);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+
+        .link-item:hover {
+            border-color: var(--border-focus);
+            background: var(--bg-elevated);
+        }
+
+        .link-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .link-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .empty-state {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 16px;
+        }
+
+        /* Welcome screen */
+        .welcome {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 48px;
+        }
+
+        .welcome-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-amber));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            margin-bottom: 24px;
+            box-shadow: 0 0 60px var(--glow-gold);
+        }
+
+        .welcome-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+        }
+
+        .welcome-subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+            max-width: 400px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-deep);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-subtle);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-focus);
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 2px solid var(--border-subtle);
+            border-top-color: var(--accent-gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Graph category colors */
+        .node-devops { fill: #e89a3c; }
+        .node-infrastructure { fill: #5bb5c4; }
+        .node-projects { fill: #7fba6b; }
+        .node-tooling { fill: #cf6679; }
+        .node-default { fill: #d4a857; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">KB</div>
+                <div class="logo-text">void<span>labs</span> knowledge</div>
+            </div>
+
+            <div class="search-container">
+                <div class="search-box">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" class="search-input" id="search-input" placeholder="Search entries... (Ctrl+K)">
+                    <div class="search-results" id="search-results"></div>
+                </div>
+            </div>
+
+            <div class="stats" id="stats">
+                <div class="stat">
+                    <span class="stat-value" id="stat-entries">-</span>
+                    <span>entries</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="stat-links">-</span>
+                    <span>links</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="tree">Browse</button>
+                <button class="nav-tab" data-tab="recent">Recent</button>
+            </div>
+
+            <div class="sidebar-section" id="tree-section">
+                <div class="sidebar-header">Categories</div>
+                <div class="tree" id="tree"></div>
+            </div>
+
+            <div class="sidebar-section" id="recent-section" style="display: none;">
+                <div class="sidebar-header">Recent Updates</div>
+                <div class="tree" id="recent-list"></div>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            <div class="view-toggle">
+                <button class="view-btn active" data-view="reader">Reader</button>
+                <button class="view-btn" data-view="graph">Graph</button>
+            </div>
+
+            <div class="graph-container" id="graph-container">
+                <svg id="graph-svg"></svg>
+            </div>
+
+            <div class="reader-container active" id="reader-container">
+                <div class="welcome" id="welcome">
+                    <div class="welcome-icon">&#x1F4DA;</div>
+                    <h1 class="welcome-title">Knowledge Base Explorer</h1>
+                    <p class="welcome-subtitle">Search or browse entries to get started. Switch to graph view to explore connections.</p>
+                </div>
+                <div id="entry-content" style="display: none;"></div>
+            </div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel" id="panel">
+            <div class="panel-section">
+                <div class="panel-header">Outgoing Links</div>
+                <ul class="link-list" id="links-out"></ul>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-header">Backlinks</div>
+                <ul class="link-list" id="links-in"></ul>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // State
+        const state = {
+            currentEntry: null,
+            currentView: 'reader',
+            graph: null,
+            simulation: null,
+        };
+
+        // API helpers
+        const api = {
+            async get(path) {
+                const res = await fetch(`/api${path}`);
+                if (!res.ok) throw new Error(`API error: ${res.status}`);
+                return res.json();
+            },
+
+            async search(query) {
+                return this.get(`/search?q=${encodeURIComponent(query)}&limit=10`);
+            },
+
+            async getEntry(path) {
+                return this.get(`/entries/${encodeURIComponent(path)}`);
+            },
+
+            async getTree() {
+                return this.get('/tree');
+            },
+
+            async getGraph() {
+                return this.get('/graph');
+            },
+
+            async getStats() {
+                return this.get('/stats');
+            },
+
+            async getRecent() {
+                return this.get('/recent?limit=20');
+            },
+        };
+
+        // DOM helpers
+        const $ = (sel) => document.querySelector(sel);
+        const $$ = (sel) => document.querySelectorAll(sel);
+
+        // Configure marked for markdown rendering
+        const wikiLinkExtension = {
+            name: 'wikilink',
+            level: 'inline',
+            start(src) { return src.indexOf('[['); },
+            tokenizer(src) {
+                const match = /^\[\[([^\]]+)\]\]/.exec(src);
+                if (match) {
+                    return {
+                        type: 'wikilink',
+                        raw: match[0],
+                        target: match[1].trim(),
+                    };
+                }
+            },
+            renderer(token) {
+                const target = token.target;
+                return `<a href="#" class="wikilink" data-path="${target}">${target}</a>`;
+            }
+        };
+
+        marked.use({
+            extensions: [wikiLinkExtension],
+            gfm: true,  // GitHub Flavored Markdown (tables, strikethrough, etc.)
+            breaks: false,
+            headerIds: false,
+        });
+
+        // Render markdown to HTML
+        function renderMarkdown(content) {
+            return marked.parse(content);
+        }
+
+        // Initialize
+        async function init() {
+            await loadStats();
+            await loadTree();
+            await loadRecent();
+            setupSearch();
+            setupNavigation();
+            setupViewToggle();
+            setupKeyboard();
+        }
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const stats = await api.getStats();
+                $('#stat-entries').textContent = stats.total_entries;
+                $('#stat-links').textContent = stats.total_links;
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+
+        // Load tree
+        async function loadTree() {
+            try {
+                const tree = await api.getTree();
+                renderTree(tree, $('#tree'));
+            } catch (e) {
+                console.error('Failed to load tree:', e);
+            }
+        }
+
+        // Load recent
+        async function loadRecent() {
+            try {
+                const recent = await api.getRecent();
+                const container = $('#recent-list');
+                container.innerHTML = recent.map(entry => `
+                    <div class="tree-item" data-path="${entry.path}">
+                        <span class="tree-icon file">&#9679;</span>
+                        <span class="tree-label">${entry.title}</span>
+                    </div>
+                `).join('');
+
+                container.querySelectorAll('.tree-item').forEach(item => {
+                    item.addEventListener('click', () => loadEntry(item.dataset.path));
+                });
+            } catch (e) {
+                console.error('Failed to load recent:', e);
+            }
+        }
+
+        // Render tree
+        function renderTree(nodes, container, level = 0) {
+            container.innerHTML = '';
+
+            nodes.forEach(node => {
+                if (node.type === 'directory') {
+                    const folder = document.createElement('div');
+                    folder.innerHTML = `
+                        <div class="tree-item" data-expanded="true">
+                            <span class="tree-icon folder">&#9660;</span>
+                            <span class="tree-label">${node.name}</span>
+                        </div>
+                        <div class="tree-children"></div>
+                    `;
+
+                    const toggle = folder.querySelector('.tree-item');
+                    const children = folder.querySelector('.tree-children');
+
+                    toggle.addEventListener('click', () => {
+                        const expanded = toggle.dataset.expanded === 'true';
+                        toggle.dataset.expanded = !expanded;
+                        toggle.querySelector('.tree-icon').innerHTML = expanded ? '&#9654;' : '&#9660;';
+                        children.style.display = expanded ? 'none' : 'block';
+                    });
+
+                    if (node.children.length > 0) {
+                        renderTree(node.children, children, level + 1);
+                    }
+
+                    container.appendChild(folder);
+                } else {
+                    const file = document.createElement('div');
+                    file.className = 'tree-item';
+                    file.dataset.path = node.path;
+                    file.innerHTML = `
+                        <span class="tree-icon file">&#9679;</span>
+                        <span class="tree-label">${node.title || node.name}</span>
+                    `;
+                    file.addEventListener('click', () => loadEntry(node.path));
+                    container.appendChild(file);
+                }
+            });
+        }
+
+        // Search
+        function setupSearch() {
+            const input = $('#search-input');
+            const results = $('#search-results');
+            let timeout;
+
+            input.addEventListener('input', () => {
+                clearTimeout(timeout);
+                const query = input.value.trim();
+
+                if (query.length < 2) {
+                    results.classList.remove('active');
+                    return;
+                }
+
+                timeout = setTimeout(async () => {
+                    try {
+                        const data = await api.search(query);
+                        if (data.results.length > 0) {
+                            results.innerHTML = data.results.map(r => `
+                                <div class="search-result" data-path="${r.path}">
+                                    <div class="search-result-title">${r.title}</div>
+                                    <div class="search-result-snippet">${r.snippet}</div>
+                                </div>
+                            `).join('');
+
+                            results.querySelectorAll('.search-result').forEach(item => {
+                                item.addEventListener('click', () => {
+                                    loadEntry(item.dataset.path);
+                                    results.classList.remove('active');
+                                    input.value = '';
+                                });
+                            });
+
+                            results.classList.add('active');
+                        } else {
+                            results.innerHTML = '<div class="empty-state">No results found</div>';
+                            results.classList.add('active');
+                        }
+                    } catch (e) {
+                        console.error('Search failed:', e);
+                    }
+                }, 200);
+            });
+
+            // Close on click outside
+            document.addEventListener('click', (e) => {
+                if (!input.contains(e.target) && !results.contains(e.target)) {
+                    results.classList.remove('active');
+                }
+            });
+        }
+
+        // Load entry
+        async function loadEntry(path) {
+            try {
+                const entry = await api.getEntry(path);
+                state.currentEntry = entry;
+
+                // Render markdown client-side with marked
+                const renderedContent = renderMarkdown(entry.content);
+
+                // Update content
+                $('#entry-content').innerHTML = `
+                    <div class="entry-header">
+                        <div class="entry-path">${entry.path}</div>
+                        <h1 class="entry-title">${entry.title}</h1>
+                        <div class="entry-meta">
+                            ${entry.created ? `<div class="entry-meta-item">Created: <span>${entry.created}</span></div>` : ''}
+                            ${entry.updated ? `<div class="entry-meta-item">Updated: <span>${entry.updated}</span></div>` : ''}
+                        </div>
+                        <div class="entry-tags">
+                            ${entry.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div class="entry-content">${renderedContent}</div>
+                `;
+
+                $('#welcome').style.display = 'none';
+                $('#entry-content').style.display = 'block';
+
+                // Setup wikilinks
+                $('#entry-content').querySelectorAll('.wikilink').forEach(link => {
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        loadEntry(link.dataset.path);
+                    });
+                });
+
+                // Highlight code
+                $('#entry-content').querySelectorAll('pre code').forEach(block => {
+                    hljs.highlightElement(block);
+                });
+
+                // Update links panel
+                updateLinksPanel(entry);
+
+                // Switch to reader view
+                if (state.currentView === 'graph') {
+                    switchView('reader');
+                }
+
+                // Mark active in tree
+                $$('.tree-item').forEach(item => item.classList.remove('active'));
+                const treeItem = document.querySelector(`.tree-item[data-path="${entry.path}"]`);
+                if (treeItem) treeItem.classList.add('active');
+
+            } catch (e) {
+                console.error('Failed to load entry:', e);
+            }
+        }
+
+        // Update links panel
+        async function updateLinksPanel(entry) {
+            const linksOut = $('#links-out');
+            const linksIn = $('#links-in');
+
+            if (entry.links.length > 0) {
+                linksOut.innerHTML = entry.links.map(link => `
+                    <li class="link-item" data-path="${link}">
+                        <div class="link-title">${link.split('/').pop().replace('.md', '')}</div>
+                        <div class="link-path">${link}</div>
+                    </li>
+                `).join('');
+
+                linksOut.querySelectorAll('.link-item').forEach(item => {
+                    item.addEventListener('click', () => loadEntry(item.dataset.path));
+                });
+            } else {
+                linksOut.innerHTML = '<div class="empty-state">No outgoing links</div>';
+            }
+
+            if (entry.backlinks.length > 0) {
+                linksIn.innerHTML = entry.backlinks.map(link => `
+                    <li class="link-item" data-path="${link}.md">
+                        <div class="link-title">${link.split('/').pop()}</div>
+                        <div class="link-path">${link}</div>
+                    </li>
+                `).join('');
+
+                linksIn.querySelectorAll('.link-item').forEach(item => {
+                    item.addEventListener('click', () => loadEntry(item.dataset.path));
+                });
+            } else {
+                linksIn.innerHTML = '<div class="empty-state">No backlinks</div>';
+            }
+        }
+
+        // Navigation tabs
+        function setupNavigation() {
+            $$('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    $$('.nav-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    const tabName = tab.dataset.tab;
+                    $('#tree-section').style.display = tabName === 'tree' ? 'block' : 'none';
+                    $('#recent-section').style.display = tabName === 'recent' ? 'block' : 'none';
+                });
+            });
+        }
+
+        // View toggle
+        function setupViewToggle() {
+            $$('.view-btn').forEach(btn => {
+                btn.addEventListener('click', () => switchView(btn.dataset.view));
+            });
+        }
+
+        function switchView(view) {
+            state.currentView = view;
+
+            $$('.view-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === view);
+            });
+
+            $('#graph-container').classList.toggle('active', view === 'graph');
+            $('#reader-container').classList.toggle('active', view === 'reader');
+
+            if (view === 'graph' && !state.graph) {
+                loadGraph();
+            }
+        }
+
+        // Load and render graph
+        async function loadGraph() {
+            try {
+                const data = await api.getGraph();
+                state.graph = data;
+                renderGraph(data);
+            } catch (e) {
+                console.error('Failed to load graph:', e);
+            }
+        }
+
+        function renderGraph(data) {
+            const container = $('#graph-container');
+            const svg = d3.select('#graph-svg');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            svg.selectAll('*').remove();
+
+            // Create arrow marker
+            svg.append('defs').append('marker')
+                .attr('id', 'arrow')
+                .attr('viewBox', '0 -5 10 10')
+                .attr('refX', 20)
+                .attr('refY', 0)
+                .attr('markerWidth', 6)
+                .attr('markerHeight', 6)
+                .attr('orient', 'auto')
+                .append('path')
+                .attr('d', 'M0,-5L10,0L0,5')
+                .attr('fill', '#3d3d48');
+
+            // Setup simulation
+            const simulation = d3.forceSimulation(data.nodes)
+                .force('link', d3.forceLink(data.edges)
+                    .id(d => d.id)
+                    .distance(100))
+                .force('charge', d3.forceManyBody().strength(-300))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(30));
+
+            state.simulation = simulation;
+
+            // Create container group for zoom
+            const g = svg.append('g');
+
+            // Add zoom behavior
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on('zoom', (event) => {
+                    g.attr('transform', event.transform);
+                });
+
+            svg.call(zoom);
+
+            // Draw links
+            const link = g.append('g')
+                .selectAll('line')
+                .data(data.edges)
+                .join('line')
+                .attr('class', 'graph-link')
+                .attr('marker-end', 'url(#arrow)');
+
+            // Draw nodes
+            const node = g.append('g')
+                .selectAll('g')
+                .data(data.nodes)
+                .join('g')
+                .attr('class', 'graph-node')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            // Node circles
+            node.append('circle')
+                .attr('r', 8)
+                .attr('class', d => `node-${d.group}`);
+
+            // Node labels
+            node.append('text')
+                .attr('dx', 12)
+                .attr('dy', 4)
+                .text(d => d.label.length > 25 ? d.label.substring(0, 25) + '...' : d.label);
+
+            // Click handler
+            node.on('click', (event, d) => {
+                loadEntry(d.path);
+            });
+
+            // Simulation tick
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            });
+
+            // Drag functions
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+
+        // Keyboard shortcuts
+        function setupKeyboard() {
+            document.addEventListener('keydown', (e) => {
+                // Ctrl+K for search
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    $('#search-input').focus();
+                }
+
+                // G for graph view
+                if (e.key === 'g' && !e.target.matches('input, textarea')) {
+                    switchView('graph');
+                }
+
+                // R for reader view
+                if (e.key === 'r' && !e.target.matches('input, textarea')) {
+                    switchView('reader');
+                }
+
+                // Escape to close search
+                if (e.key === 'Escape') {
+                    $('#search-results').classList.remove('active');
+                    $('#search-input').blur();
+                }
+            });
+        }
+
+        // Handle window resize for graph
+        window.addEventListener('resize', () => {
+            if (state.graph && state.currentView === 'graph') {
+                renderGraph(state.graph);
+            }
+        });
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

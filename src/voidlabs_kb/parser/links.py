@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from .title_index import build_title_index, resolve_link_target
+
 # Pattern for [[link]] syntax - captures content between double brackets
 # Handles [[path/to/entry]] and [[entry]] formats
 LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
@@ -66,6 +68,9 @@ def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
     Scans all .md files in the KB and builds an index mapping
     each entry to the list of entries that link to it.
 
+    Supports both path-style links ([[path/to/entry]]) and
+    title-style links ([[Entry Title]]).
+
     Args:
         kb_root: Root directory of the knowledge base.
 
@@ -76,15 +81,22 @@ def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
     if not kb_root.exists() or not kb_root.is_dir():
         return {}
 
+    # Build title index for resolving title-style links
+    title_index = build_title_index(kb_root)
+
     # Collect all markdown files and their links
     # Maps: normalized_path -> list of files that contain [[normalized_path]]
     backlinks: dict[str, list[str]] = {}
 
     # First pass: collect all links from each file
-    # forward_links: source_path -> list of target_paths
+    # forward_links: source_path -> list of raw link targets
     forward_links: dict[str, list[str]] = {}
 
     for md_file in kb_root.rglob("*.md"):
+        # Skip special files
+        if md_file.name.startswith("_"):
+            continue
+
         # Get path relative to kb_root, without .md extension
         rel_path = md_file.relative_to(kb_root)
         source_path = str(rel_path.with_suffix(""))
@@ -97,15 +109,20 @@ def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
         links = extract_links(content)
         forward_links[source_path] = links
 
-    # Second pass: invert to get backlinks
+    # Second pass: resolve and invert to get backlinks
     for source, targets in forward_links.items():
         for target in targets:
-            # Resolve relative paths
-            resolved = _resolve_relative_link(source, target)
+            # Try title resolution first, then fall back to path resolution
+            resolved = resolve_link_target(target, title_index, source)
+
+            if resolved is None:
+                # Fall back to relative path resolution for path-style links
+                resolved = _resolve_relative_link(source, target)
 
             if resolved not in backlinks:
                 backlinks[resolved] = []
-            backlinks[resolved].append(source)
+            if source not in backlinks[resolved]:
+                backlinks[resolved].append(source)
 
     return backlinks
 

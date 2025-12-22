@@ -87,6 +87,7 @@ class ChromaIndex:
             "created": chunk.metadata.created.isoformat() if chunk.metadata.created else "",
             "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
             "token_count": chunk.token_count or 0,
+            "source_project": chunk.metadata.source_project or "",
         }
 
         # Upsert to handle updates
@@ -125,6 +126,7 @@ class ChromaIndex:
                     "created": chunk.metadata.created.isoformat() if chunk.metadata.created else "",
                     "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
                     "token_count": chunk.token_count or 0,
+                    "source_project": chunk.metadata.source_project or "",
                 }
             )
 
@@ -206,6 +208,7 @@ class ChromaIndex:
                     created=created_date,
                     updated=updated_date,
                     token_count=meta.get("token_count") or 0,
+                    source_project=meta.get("source_project") or None,
                 )
             )
 

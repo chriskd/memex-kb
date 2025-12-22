@@ -33,6 +33,7 @@ class WhooshIndex:
             created=STORED,
             updated=STORED,
             token_count=STORED,
+            source_project=ID(stored=True),
         )
 
     def _ensure_index(self) -> index.Index:
@@ -71,6 +72,7 @@ class WhooshIndex:
             created=chunk.metadata.created.isoformat() if chunk.metadata.created else None,
             updated=chunk.metadata.updated.isoformat() if chunk.metadata.updated else None,
             token_count=chunk.token_count or 0,
+            source_project=chunk.metadata.source_project or "",
         )
         writer.commit()
 
@@ -98,6 +100,7 @@ class WhooshIndex:
                 created=chunk.metadata.created.isoformat() if chunk.metadata.created else None,
                 updated=chunk.metadata.updated.isoformat() if chunk.metadata.updated else None,
                 token_count=chunk.token_count or 0,
+                source_project=chunk.metadata.source_project or "",
             )
 
         writer.commit()
@@ -165,6 +168,7 @@ class WhooshIndex:
                         created=created_date,
                         updated=updated_date,
                         token_count=hit.get("token_count") or 0,
+                        source_project=hit.get("source_project") or None,
                     )
                 )
 

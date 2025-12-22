@@ -97,8 +97,9 @@ def get_kb_root() -> Path | None:
             return path
 
     # Find plugin root from environment
+    # CLAUDE_PLUGIN_ROOT points to .claude-plugin/, kb is at parent level
     if plugin_root := os.environ.get("CLAUDE_PLUGIN_ROOT"):
-        kb_path = Path(plugin_root) / "kb"
+        kb_path = Path(plugin_root).parent / "kb"
         if kb_path.exists():
             return kb_path
 
@@ -233,23 +234,29 @@ def select_relevant_entries(
 
 def format_output(entries: list[dict], project_name: str) -> str:
     """Format entries as markdown output."""
-    if not entries:
-        return ""
-
     lines = [
         "## Voidlabs Knowledge Base",
         "",
-        f"Relevant organizational knowledge for **{project_name}**:",
+        "You have access to an organizational knowledge base with documentation, patterns,",
+        "and operational guides. **Search before creating** to avoid duplicates.",
+        "",
+        "**Quick Reference:**",
+        "| Action | Tool/Command |",
+        "|--------|--------------|",
+        "| Search | `mcp__voidlabs-kb__search` or `/kb search <query>` |",
+        "| Browse | `mcp__voidlabs-kb__list` or `mcp__voidlabs-kb__tree` |",
+        "| Read entry | `mcp__voidlabs-kb__get` with path |",
+        "| Add new | `mcp__voidlabs-kb__add` with title, content, tags |",
         "",
     ]
 
-    for entry in entries:
-        lines.append(f"**{entry['title']}** ({entry['path']})")
-        if entry["summary"]:
-            lines.append(entry["summary"])
+    if entries:
+        lines.append(f"**Relevant entries for {project_name}:**")
         lines.append("")
-
-    lines.append('Use `/kb search <query>` to find more organizational knowledge.')
+        for entry in entries:
+            tags = f" [{entry['tags']}]" if entry["tags"] else ""
+            lines.append(f"- **{entry['title']}** (`{entry['path']}`){tags}")
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -280,12 +287,11 @@ def main() -> None:
     entries = scan_kb_entries(kb_root)
     relevant = select_relevant_entries(entries, project_name, project_tokens)
 
-    # Format and output
+    # Format and output (always show blurb, even without relevant entries)
     output = format_output(relevant, project_name)
-    if output:
-        # Cache the result
-        save_cached_context(project_name, output)
-        print(output)
+    # Cache the result
+    save_cached_context(project_name, output)
+    print(output)
 
 
 if __name__ == "__main__":

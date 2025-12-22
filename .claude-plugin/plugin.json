@@ -12,13 +12,5 @@
     "documentation",
     "organizational-knowledge",
     "obsidian"
-  ],
-  "hooks": {
-    "SessionStart": [
-      {
-        "type": "command",
-        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-kb.sh"
-      }
-    ]
-  }
+  ]
 }

@@ -2,11 +2,12 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "uv --directory ${CLAUDE_PLUGIN_ROOT} run python ${CLAUDE_PLUGIN_ROOT}/hooks/session-context.py",
-            "timeout": 10000
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-simple.sh",
+            "timeout": 30000
           }
         ]
       }
