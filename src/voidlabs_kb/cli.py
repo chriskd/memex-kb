@@ -120,29 +120,28 @@ def search(query: str, tags: Optional[str], mode: str, limit: int, content: bool
       vl-kb search "docker" --tags=infrastructure
       vl-kb search "api" --mode=semantic --limit=5
     """
-    from .server import _get_searcher, _get_current_project
+    from .core import search as core_search
 
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
 
-    searcher = _get_searcher()
-    project_context = _get_current_project()
-    results = searcher.search(query, limit=limit, mode=mode, project_context=project_context)
-
-    # Filter by tags if specified
-    if tag_list:
-        tag_set = set(tag_list)
-        results = [r for r in results if tag_set.intersection(r.tags)]
+    result = run_async(core_search(
+        query=query,
+        limit=limit,
+        mode=mode,
+        tags=tag_list,
+        include_content=content,
+    ))
 
     if as_json:
-        output([{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet} for r in results], as_json=True)
+        output([{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet} for r in result.results], as_json=True)
     else:
-        if not results:
+        if not result.results:
             click.echo("No results found.")
             return
 
         rows = [
             {"path": r.path, "title": r.title, "score": f"{r.score:.2f}"}
-            for r in results
+            for r in result.results
         ]
         click.echo(format_table(rows, ["path", "title", "score"], {"path": 40, "title": 35}))
 
@@ -165,10 +164,10 @@ def get(path: str, as_json: bool, metadata: bool):
       vl-kb get tooling/beads-issue-tracker.md --json
       vl-kb get tooling/beads-issue-tracker.md --metadata
     """
-    from .server import get_tool
+    from .core import get_entry
 
     try:
-        entry = run_async(get_tool(path=path))
+        entry = run_async(get_entry(path=path))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -220,7 +219,7 @@ def add(
       vl-kb add --title="My Entry" --tags="foo,bar" --file=content.md
       cat content.md | vl-kb add --title="My Entry" --tags="foo,bar" --stdin
     """
-    from .server import add_tool
+    from .core import add_entry
 
     # Resolve content source
     if stdin:
@@ -234,23 +233,23 @@ def add(
     tag_list = [t.strip() for t in tags.split(",")]
 
     try:
-        result = run_async(add_tool(title=title, content=content, tags=tag_list, category=category))
+        result = run_async(add_entry(title=title, content=content, tags=tag_list, category=category))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
     if as_json:
-        output(result.model_dump(), as_json=True)
+        output(result, as_json=True)
     else:
-        click.echo(f"Created: {result.path}")
-        if result.suggested_links:
+        click.echo(f"Created: {result['path']}")
+        if result.get('suggested_links'):
             click.echo("\nSuggested links:")
-            for link in result.suggested_links[:5]:
-                click.echo(f"  - {link.path} ({link.score:.2f})")
-        if result.suggested_tags:
+            for link in result['suggested_links'][:5]:
+                click.echo(f"  - {link['path']} ({link['score']:.2f})")
+        if result.get('suggested_tags'):
             click.echo("\nSuggested tags:")
-            for tag in result.suggested_tags[:5]:
-                click.echo(f"  - {tag.tag} ({tag.reason})")
+            for tag in result['suggested_tags'][:5]:
+                click.echo(f"  - {tag['tag']} ({tag['reason']})")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -272,7 +271,7 @@ def update(path: str, tags: Optional[str], content: Optional[str], file_path: Op
       vl-kb update path/entry.md --tags="new,tags"
       vl-kb update path/entry.md --file=updated-content.md
     """
-    from .server import update_tool
+    from .core import update_entry
 
     if file_path:
         content = Path(file_path).read_text()
@@ -280,20 +279,42 @@ def update(path: str, tags: Optional[str], content: Optional[str], file_path: Op
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
 
     try:
-        result = run_async(update_tool(path=path, content=content, tags=tag_list))
+        result = run_async(update_entry(path=path, content=content, tags=tag_list))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
     if as_json:
-        output(result.model_dump(), as_json=True)
+        output(result, as_json=True)
     else:
-        click.echo(f"Updated: {result.path}")
+        click.echo(f"Updated: {result['path']}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tree Command
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def format_tree(tree_data: dict, prefix: str = "") -> str:
+    """Format tree dict as ASCII tree."""
+    lines = []
+    items = [(k, v) for k, v in tree_data.items() if k != "_type"]
+    for i, (name, value) in enumerate(items):
+        is_last = i == len(items) - 1
+        connector = "└── " if is_last else "├── "
+
+        if isinstance(value, dict) and value.get("_type") == "directory":
+            lines.append(f"{prefix}{connector}{name}/")
+            extension = "    " if is_last else "│   "
+            lines.append(format_tree(value, prefix + extension))
+        elif isinstance(value, dict) and value.get("_type") == "file":
+            title = value.get("title", "")
+            if title:
+                lines.append(f"{prefix}{connector}{name} ({title})")
+            else:
+                lines.append(f"{prefix}{connector}{name}")
+
+    return "\n".join(line for line in lines if line)
 
 
 @cli.command()
@@ -308,14 +329,17 @@ def tree(path: str, depth: int, as_json: bool):
       vl-kb tree
       vl-kb tree tooling --depth=2
     """
-    from .server import tree_tool
+    from .core import tree as core_tree
 
-    result = run_async(tree_tool(path=path, depth=depth))
+    result = run_async(core_tree(path=path, depth=depth))
 
     if as_json:
-        output(result.model_dump(), as_json=True)
+        output(result, as_json=True)
     else:
-        click.echo(result.tree)
+        formatted = format_tree(result["tree"])
+        if formatted:
+            click.echo(formatted)
+        click.echo(f"\n{result['directories']} directories, {result['files']} files")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -337,18 +361,18 @@ def list_entries(tag: Optional[str], category: Optional[str], limit: int, as_jso
       vl-kb list --tag=tooling
       vl-kb list --category=infrastructure --limit=10
     """
-    from .server import list_tool
+    from .core import list_entries as core_list_entries
 
-    result = run_async(list_tool(tag=tag, category=category, limit=limit))
+    result = run_async(core_list_entries(tag=tag, category=category, limit=limit))
 
     if as_json:
-        output([e.model_dump() for e in result.entries], as_json=True)
+        output(result, as_json=True)
     else:
-        if not result.entries:
+        if not result:
             click.echo("No entries found.")
             return
 
-        rows = [{"path": e.path, "title": e.title} for e in result.entries]
+        rows = [{"path": e["path"], "title": e["title"]} for e in result]
         click.echo(format_table(rows, ["path", "title"], {"path": 45, "title": 40}))
 
 
@@ -369,20 +393,20 @@ def whats_new(days: int, limit: int, as_json: bool):
       vl-kb whats-new
       vl-kb whats-new --days=7 --limit=5
     """
-    from .server import whats_new_tool
+    from .core import whats_new as core_whats_new
 
-    result = run_async(whats_new_tool(days=days, limit=limit))
+    result = run_async(core_whats_new(days=days, limit=limit))
 
     if as_json:
-        output([e.model_dump() for e in result.entries], as_json=True)
+        output(result, as_json=True)
     else:
-        if not result.entries:
+        if not result:
             click.echo(f"No entries created or updated in the last {days} days.")
             return
 
         rows = [
-            {"path": e.path, "title": e.title, "date": str(e.activity_date)[:10]}
-            for e in result.entries
+            {"path": e["path"], "title": e["title"], "date": str(e["activity_date"])[:10]}
+            for e in result
         ]
         click.echo(format_table(rows, ["path", "title", "date"], {"path": 40, "title": 30}))
 
@@ -404,44 +428,51 @@ def health(as_json: bool):
       vl-kb health
       vl-kb health --json
     """
-    from .server import health_tool
+    from .core import health as core_health
 
-    result = run_async(health_tool())
+    result = run_async(core_health())
 
     if as_json:
-        output(result.model_dump(), as_json=True)
+        output(result, as_json=True)
     else:
+        summary = result.get("summary", {})
         click.echo("Knowledge Base Health Report")
         click.echo("=" * 40)
+        click.echo(f"Health Score: {summary.get('health_score', 0)}/100")
+        click.echo(f"Total Entries: {summary.get('total_entries', 0)}")
 
         # Orphans
-        if result.orphans:
-            click.echo(f"\n⚠ Orphaned entries ({len(result.orphans)}):")
-            for o in result.orphans[:10]:
-                click.echo(f"  - {o}")
+        orphans = result.get("orphans", [])
+        if orphans:
+            click.echo(f"\n⚠ Orphaned entries ({len(orphans)}):")
+            for o in orphans[:10]:
+                click.echo(f"  - {o['path']}")
         else:
             click.echo("\n✓ No orphaned entries")
 
         # Broken links
-        if result.broken_links:
-            click.echo(f"\n⚠ Broken links ({len(result.broken_links)}):")
-            for bl in result.broken_links[:10]:
-                click.echo(f"  - {bl.source} -> {bl.target}")
+        broken_links = result.get("broken_links", [])
+        if broken_links:
+            click.echo(f"\n⚠ Broken links ({len(broken_links)}):")
+            for bl in broken_links[:10]:
+                click.echo(f"  - {bl['source']} -> {bl['broken_link']}")
         else:
             click.echo("\n✓ No broken links")
 
         # Stale
-        if result.stale:
-            click.echo(f"\n⚠ Stale entries ({len(result.stale)}):")
-            for s in result.stale[:10]:
-                click.echo(f"  - {s}")
+        stale = result.get("stale", [])
+        if stale:
+            click.echo(f"\n⚠ Stale entries ({len(stale)}):")
+            for s in stale[:10]:
+                click.echo(f"  - {s['path']}")
         else:
             click.echo("\n✓ No stale entries")
 
         # Empty dirs
-        if result.empty_dirs:
-            click.echo(f"\n⚠ Empty directories ({len(result.empty_dirs)}):")
-            for d in result.empty_dirs[:10]:
+        empty_dirs = result.get("empty_dirs", [])
+        if empty_dirs:
+            click.echo(f"\n⚠ Empty directories ({len(empty_dirs)}):")
+            for d in empty_dirs[:10]:
                 click.echo(f"  - {d}")
         else:
             click.echo("\n✓ No empty directories")
@@ -463,19 +494,19 @@ def tags(min_count: int, as_json: bool):
       vl-kb tags
       vl-kb tags --min-count=3
     """
-    from .server import tags_tool
+    from .core import tags as core_tags
 
-    result = run_async(tags_tool(min_count=min_count))
+    result = run_async(core_tags(min_count=min_count))
 
     if as_json:
-        output(result.model_dump(), as_json=True)
+        output(result, as_json=True)
     else:
-        if not result.tags:
+        if not result:
             click.echo("No tags found.")
             return
 
-        for tag in result.tags:
-            click.echo(f"  {tag.tag}: {tag.count}")
+        for tag_info in result:
+            click.echo(f"  {tag_info['tag']}: {tag_info['count']}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -496,9 +527,9 @@ def hubs(limit: int, as_json: bool):
       vl-kb hubs
       vl-kb hubs --limit=5
     """
-    from .server import hubs_tool
+    from .core import hubs as core_hubs
 
-    result = run_async(hubs_tool(limit=limit))
+    result = run_async(core_hubs(limit=limit))
 
     if as_json:
         output(result, as_json=True)
@@ -507,8 +538,8 @@ def hubs(limit: int, as_json: bool):
             click.echo("No hub entries found.")
             return
 
-        rows = [{"path": h["path"], "backlinks": h["backlink_count"]} for h in result]
-        click.echo(format_table(rows, ["path", "backlinks"], {"path": 50}))
+        rows = [{"path": h["path"], "incoming": h["incoming"], "outgoing": h["outgoing"], "total": h["total"]} for h in result]
+        click.echo(format_table(rows, ["path", "incoming", "outgoing", "total"], {"path": 50}))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -527,21 +558,25 @@ def suggest_links(path: str, limit: int, as_json: bool):
     Examples:
       vl-kb suggest-links tooling/my-entry.md
     """
-    from .server import suggest_links_tool
+    from .core import suggest_links as core_suggest_links
 
-    result = run_async(suggest_links_tool(path=path, limit=limit))
+    try:
+        result = run_async(core_suggest_links(path=path, limit=limit))
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
     if as_json:
-        output(result.model_dump(), as_json=True)
+        output(result, as_json=True)
     else:
-        if not result.suggestions:
+        if not result:
             click.echo("No link suggestions found.")
             return
 
         click.echo(f"Suggested links for {path}:\n")
-        for s in result.suggestions:
-            click.echo(f"  {s.path} ({s.score:.2f})")
-            click.echo(f"    {s.reason}")
+        for s in result:
+            click.echo(f"  {s['path']} ({s['score']:.2f})")
+            click.echo(f"    {s['reason']}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -559,11 +594,11 @@ def reindex():
     Examples:
       vl-kb reindex
     """
-    from .server import reindex_tool
+    from .core import reindex as core_reindex
 
     click.echo("Reindexing knowledge base...")
-    result = run_async(reindex_tool())
-    click.echo(f"✓ Indexed {result.total_entries} entries, {result.total_chunks} chunks")
+    result = run_async(core_reindex())
+    click.echo(f"✓ Indexed {result.kb_files} entries, {result.whoosh_docs} keyword docs, {result.chroma_docs} semantic docs")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -583,10 +618,10 @@ def delete(path: str, force: bool, as_json: bool):
       vl-kb delete path/to/entry.md
       vl-kb delete path/to/entry.md --force
     """
-    from .server import delete_tool
+    from .core import delete_entry
 
     try:
-        result = run_async(delete_tool(path=path, force=force))
+        result = run_async(delete_entry(path=path, force=force))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -594,9 +629,9 @@ def delete(path: str, force: bool, as_json: bool):
     if as_json:
         output(result, as_json=True)
     else:
-        if result.get("warning"):
-            click.echo(f"Warning: {result['warning']}", err=True)
-        click.echo(f"Deleted: {path}")
+        if result.get("had_backlinks"):
+            click.echo(f"Warning: Entry had {len(result['had_backlinks'])} backlinks", err=True)
+        click.echo(f"Deleted: {result['deleted']}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
