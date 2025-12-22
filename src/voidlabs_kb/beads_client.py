@@ -3,13 +3,122 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from .config import get_kb_root
 from .models import BeadsIssue, BeadsKanbanColumn, BeadsKanbanData
+
+# Registry file name
+REGISTRY_FILE = ".beads-registry.yaml"
+
+
+def load_beads_registry() -> dict[str, Path]:
+    """Load the beads registry mapping prefixes to project paths.
+
+    Registry file format (.beads-registry.yaml):
+        # Maps issue ID prefixes to project directories
+        dv: /srv/fast/code/docviewer
+        kb: .
+        cp: /srv/fast/code/claude-plugins
+
+    Searches for registry in:
+        1. KB root directory (kb/)
+        2. KB project root (parent of kb/ where .beads/ typically lives)
+
+    Returns:
+        Dict mapping prefix to absolute Path.
+    """
+    kb_root = get_kb_root()
+
+    # Search locations for registry file
+    search_paths = [
+        kb_root / REGISTRY_FILE,
+        kb_root.parent / REGISTRY_FILE,  # Project root
+    ]
+
+    registry_path = None
+    base_path = kb_root  # For resolving relative paths
+
+    for path in search_paths:
+        if path.exists():
+            registry_path = path
+            base_path = path.parent
+            break
+
+    if not registry_path:
+        return {}
+
+    registry: dict[str, Path] = {}
+    for line in registry_path.read_text().splitlines():
+        line = line.strip()
+        # Skip comments and empty lines
+        if not line or line.startswith("#"):
+            continue
+
+        # Parse "prefix: path" format
+        if ":" in line:
+            prefix, path_str = line.split(":", 1)
+            prefix = prefix.strip()
+            path_str = path_str.strip()
+
+            # Resolve relative paths from registry file location
+            path = Path(path_str)
+            if not path.is_absolute():
+                path = (base_path / path).resolve()
+
+            registry[prefix] = path
+
+    return registry
+
+
+def parse_issue_prefix(issue_id: str) -> str | None:
+    """Extract prefix from issue ID (e.g., 'dv-45' -> 'dv', 'epstein-2h0' -> 'epstein').
+
+    Handles both numeric (dv-45) and alphanumeric (epstein-2h0) suffixes.
+    Also handles hyphenated prefixes (voidlabs-kb-1a2 -> voidlabs-kb).
+    """
+    # Find the last hyphen followed by alphanumeric (the issue number)
+    # This handles both "dv-45" and "voidlabs-kb-1a2"
+    match = re.match(r"^(.+)-[a-zA-Z0-9]+$", issue_id)
+    if match:
+        return match.group(1)
+    return None
+
+
+# Cache for project-specific clients
+_project_clients: dict[str, "BeadsClient"] = {}
+
+
+def get_client_for_issue(issue_id: str) -> "BeadsClient | None":
+    """Get a BeadsClient for the project that owns an issue.
+
+    Uses the registry to find the project path from the issue prefix.
+    """
+    prefix = parse_issue_prefix(issue_id)
+    if not prefix:
+        return None
+
+    # Check cache
+    if prefix in _project_clients:
+        return _project_clients[prefix]
+
+    # Look up in registry
+    registry = load_beads_registry()
+    if prefix not in registry:
+        return None
+
+    project_path = registry[prefix]
+    if not (project_path / ".beads").exists():
+        return None
+
+    client = BeadsClient(beads_root=project_path)
+    _project_clients[prefix] = client
+    return client
 
 
 class BeadsClient:
@@ -311,6 +420,7 @@ class BeadsClient:
         # Group by status
         columns: dict[str, list[BeadsIssue]] = {
             "open": [],
+            "blocked": [],
             "in_progress": [],
             "closed": [],
         }
@@ -325,6 +435,7 @@ class BeadsClient:
 
         status_labels = {
             "open": "Open",
+            "blocked": "Blocked",
             "in_progress": "In Progress",
             "closed": "Closed",
         }
@@ -337,19 +448,140 @@ class BeadsClient:
                     label=status_labels[status],
                     issues=columns[status],
                 )
-                for status in ["open", "in_progress", "closed"]
+                for status in ["open", "blocked", "in_progress", "closed"]
             ],
             total_issues=len(all_issues),
         )
 
 
-# Singleton instance
+# Singleton instance for KB's own beads
 _beads_client: BeadsClient | None = None
 
 
 def get_beads_client() -> BeadsClient:
-    """Get or create the BeadsClient singleton."""
+    """Get or create the BeadsClient singleton for KB's own beads."""
     global _beads_client
     if _beads_client is None:
         _beads_client = BeadsClient()
     return _beads_client
+
+
+# =============================================================================
+# Registry-aware cross-project functions
+# =============================================================================
+
+
+def resolve_issue(issue_id: str) -> BeadsIssue | None:
+    """Resolve an issue from any registered project.
+
+    Uses the registry to find the correct project based on issue prefix.
+    Falls back to the default KB client if not found in registry.
+
+    Args:
+        issue_id: Issue ID (e.g., "dv-45", "kb-12").
+
+    Returns:
+        BeadsIssue if found, None otherwise.
+    """
+    # Try registry-based lookup first
+    client = get_client_for_issue(issue_id)
+    if client:
+        return client.get_issue(issue_id)
+
+    # Fall back to default client
+    default_client = get_beads_client()
+    if default_client.is_available:
+        return default_client.get_issue(issue_id)
+
+    return None
+
+
+def resolve_issues(issue_ids: list[str]) -> list[BeadsIssue]:
+    """Resolve multiple issues across projects.
+
+    Groups issues by prefix for efficient batch lookups.
+
+    Args:
+        issue_ids: List of issue IDs.
+
+    Returns:
+        List of found BeadsIssue objects (missing issues omitted).
+    """
+    # Group by prefix for efficiency
+    by_prefix: dict[str | None, list[str]] = {}
+    for issue_id in issue_ids:
+        prefix = parse_issue_prefix(issue_id)
+        if prefix not in by_prefix:
+            by_prefix[prefix] = []
+        by_prefix[prefix].append(issue_id)
+
+    results: list[BeadsIssue] = []
+
+    for prefix, ids in by_prefix.items():
+        if prefix is None:
+            # Invalid format, try default client
+            default_client = get_beads_client()
+            for issue_id in ids:
+                issue = default_client.get_issue(issue_id)
+                if issue:
+                    results.append(issue)
+        else:
+            # Use registry or fall back to default
+            client = get_client_for_issue(ids[0])
+            if client is None:
+                client = get_beads_client()
+
+            if client and client.is_available:
+                for issue_id in ids:
+                    issue = client.get_issue(issue_id)
+                    if issue:
+                        results.append(issue)
+
+    return results
+
+
+def get_kanban_for_project(prefix: str) -> BeadsKanbanData | None:
+    """Get kanban data for a specific registered project.
+
+    Args:
+        prefix: Project prefix (e.g., "dv", "kb").
+
+    Returns:
+        BeadsKanbanData if project found and accessible, None otherwise.
+    """
+    registry = load_beads_registry()
+    if prefix not in registry:
+        # Try default client if prefix matches its project
+        default_client = get_beads_client()
+        if default_client.is_available:
+            project_name = default_client.get_project_name()
+            if project_name == prefix:
+                return default_client.get_kanban_data()
+        return None
+
+    project_path = registry[prefix]
+    if not (project_path / ".beads").exists():
+        return None
+
+    client = BeadsClient(beads_root=project_path)
+    return client.get_kanban_data()
+
+
+def list_registered_projects() -> list[dict]:
+    """List all registered projects with availability status.
+
+    Returns:
+        List of dicts with 'prefix', 'path', 'available' keys.
+    """
+    registry = load_beads_registry()
+    projects = []
+
+    for prefix, path in registry.items():
+        available = (path / ".beads").exists()
+        projects.append({
+            "prefix": prefix,
+            "path": str(path),
+            "available": available,
+        })
+
+    return projects

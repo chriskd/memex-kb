@@ -1,0 +1,16 @@
+# Beads Registry
+# Maps issue ID prefixes to project directories
+# Format: prefix: /path/to/project
+#
+# Example:
+#   dv: /srv/fast/code/docviewer
+#   kb: .
+#
+# The prefix is the part before the issue number (e.g., "dv" in "dv-45")
+# Paths can be absolute or relative to KB root
+
+# Projects with beads issue tracking
+epstein: /srv/fast/code/epstein
+voidlabs-ansible: /srv/fast/code/voidlabs-ansible
+voidlabs-devtools: /srv/fast/code/voidlabs-devtools
+voidlabs-kb: .

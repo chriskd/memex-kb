@@ -13,7 +13,12 @@ from pydantic import BaseModel
 from ..backlinks_cache import ensure_backlink_cache
 from ..config import get_kb_root
 from ..indexer import HybridSearcher
-from ..beads_client import get_beads_client
+from ..beads_client import (
+    get_beads_client,
+    get_kanban_for_project,
+    list_registered_projects,
+    resolve_issues,
+)
 from ..models import BeadsIssue, IndexStatus, KBEntry, SearchResult
 from ..parser import ParseError, extract_links, parse_entry, render_markdown
 
@@ -118,11 +123,19 @@ class StatsResponse(BaseModel):
 # Beads response models
 
 
+class RegisteredProjectResponse(BaseModel):
+    """Registered beads project."""
+    prefix: str
+    path: str
+    available: bool
+
+
 class BeadsConfigResponse(BaseModel):
     """Beads configuration info."""
     available: bool
     project: str | None = None
     beads_root: str | None = None
+    registered_projects: list[RegisteredProjectResponse] = []
 
 
 class BeadsIssueResponse(BaseModel):
@@ -469,10 +482,14 @@ def _format_beads_issue(issue: BeadsIssue) -> BeadsIssueResponse:
 async def get_beads_config():
     """Get beads integration status and configuration."""
     client = get_beads_client()
+    registered = list_registered_projects()
     return BeadsConfigResponse(
         available=client.is_available,
         project=client.get_project_name() if client.is_available else None,
         beads_root=str(client.beads_root) if client.beads_root else None,
+        registered_projects=[
+            RegisteredProjectResponse(**p) for p in registered
+        ],
     )
 
 
@@ -493,14 +510,29 @@ async def list_beads_issues(
 
 @app.get("/api/beads/kanban", response_model=BeadsKanbanResponse)
 async def get_beads_kanban(project: str | None = None):
-    """Get issues grouped by status for kanban display."""
-    client = get_beads_client()
-    if not client.is_available:
-        raise HTTPException(status_code=404, detail="Beads not available for this KB")
+    """Get issues grouped by status for kanban display.
 
-    kanban_data = client.get_kanban_data(project)
+    Args:
+        project: Project prefix to show (e.g., "dv", "kb").
+                 Uses registry for cross-project lookups.
+                 If None, uses the default KB beads project.
+    """
+    kanban_data = None
+
+    if project:
+        # Try registry-based lookup for cross-project
+        kanban_data = get_kanban_for_project(project)
+    else:
+        # Use default KB client
+        client = get_beads_client()
+        if client.is_available:
+            kanban_data = client.get_kanban_data()
+
     if not kanban_data:
-        raise HTTPException(status_code=404, detail="No beads project found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Beads project not found: {project}" if project else "No beads project available"
+        )
 
     return BeadsKanbanResponse(
         project=kanban_data.project,
@@ -518,7 +550,10 @@ async def get_beads_kanban(project: str | None = None):
 
 @app.get("/api/entries/{path:path}/beads", response_model=EntryBeadsResponse)
 async def get_entry_beads(path: str):
-    """Get beads issues linked from a KB entry."""
+    """Get beads issues linked from a KB entry.
+
+    Uses the beads registry to resolve issues from any registered project.
+    """
     kb_root = get_kb_root()
 
     # Ensure .md extension
@@ -534,23 +569,20 @@ async def get_entry_beads(path: str):
     except ParseError as e:
         raise HTTPException(status_code=500, detail=f"Parse error: {e}")
 
-    client = get_beads_client()
-    if not client.is_available:
-        return EntryBeadsResponse(linked_issues=[], project_issues=None)
-
-    # Get specifically linked issues
+    # Get specifically linked issues using registry-aware resolution
     linked_issues = []
     if metadata.beads_issues:
-        linked_issues = client.get_issues_by_ids(metadata.beads_issues)
+        linked_issues = resolve_issues(metadata.beads_issues)
 
     # Get project issues if linked to a project
     project_issues = None
     if metadata.beads_project:
-        all_project = client.list_issues(status="all", limit=100)
-        project_issues = [
-            i for i in all_project
-            if i.id.startswith(f"{metadata.beads_project}-")
-        ]
+        kanban = get_kanban_for_project(metadata.beads_project)
+        if kanban:
+            # Flatten all columns into a single list
+            project_issues = []
+            for col in kanban.columns:
+                project_issues.extend(col.issues)
 
     return EntryBeadsResponse(
         linked_issues=[_format_beads_issue(i) for i in linked_issues],

@@ -110,7 +110,7 @@ class BeadsIssue(BaseModel):
     id: str
     title: str
     description: str | None = None
-    status: Literal["open", "in_progress", "closed"]
+    status: Literal["open", "in_progress", "closed", "blocked"]
     priority: int  # 0-4, where 0 is highest (critical)
     issue_type: str  # task, feature, bug, chore, epic
     created_at: datetime
