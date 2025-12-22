@@ -125,6 +125,7 @@ vl-kb get tooling/beads.md --metadata  # Just metadata
 vl-kb tree                             # Directory structure
 vl-kb list --tag=infrastructure        # Filter by tag
 vl-kb whats-new --days=7               # Recent changes
+vl-kb whats-new --project=myapp        # Recent changes for a project
 
 # Contribute
 vl-kb add --title="My Entry" --tags="foo,bar" --content="..."

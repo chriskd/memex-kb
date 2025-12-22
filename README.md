@@ -68,6 +68,7 @@ vl-kb get tooling/beads.md --json      # JSON output
 vl-kb tree                             # Directory structure
 vl-kb list --tag=infrastructure        # Filter by tag
 vl-kb whats-new --days=7               # Recent changes
+vl-kb whats-new --project=myapp        # Recent changes for a project
 vl-kb tags                             # List all tags with counts
 
 # Create entries

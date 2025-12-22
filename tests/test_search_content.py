@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from voidlabs_kb import server
+from voidlabs_kb import core, server
 from voidlabs_kb.models import SearchResponse
 
 
@@ -20,8 +20,8 @@ async def _call_tool(tool_obj, /, *args, **kwargs):
 @pytest.fixture(autouse=True)
 def reset_searcher_state(monkeypatch):
     """Ensure cached searcher state does not leak across tests."""
-    monkeypatch.setattr(server, "_searcher", None)
-    monkeypatch.setattr(server, "_searcher_ready", False)
+    monkeypatch.setattr(core, "_searcher", None)
+    monkeypatch.setattr(core, "_searcher_ready", False)
 
 
 @pytest.fixture
@@ -163,8 +163,8 @@ class TestSearchContentLimit:
     @pytest.mark.asyncio
     async def test_limit_warning_when_exceeded(self, kb_root, index_root, monkeypatch):
         """Warning added when results exceed MAX_CONTENT_RESULTS."""
-        # Set a low limit for testing
-        monkeypatch.setattr(server, "MAX_CONTENT_RESULTS", 2)
+        # Set a low limit for testing (patch in core where it's used)
+        monkeypatch.setattr(core, "MAX_CONTENT_RESULTS", 2)
 
         for i in range(5):
             _create_entry(
@@ -186,7 +186,7 @@ class TestSearchContentLimit:
     @pytest.mark.asyncio
     async def test_no_warning_when_under_limit(self, kb_root, index_root, monkeypatch):
         """No warning when results are under MAX_CONTENT_RESULTS."""
-        monkeypatch.setattr(server, "MAX_CONTENT_RESULTS", 10)
+        monkeypatch.setattr(core, "MAX_CONTENT_RESULTS", 10)
 
         for i in range(3):
             _create_entry(
