@@ -1,5 +1,6 @@
+# syntax=docker/dockerfile:1
 # Voidlabs KB Explorer - Production Dockerfile
-# Multi-stage build for optimized image size
+# Multi-stage build with aggressive caching for fast rebuilds
 
 # Stage 1: Build
 FROM python:3.12-slim AS builder
@@ -15,17 +16,36 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy project files
+# Copy ONLY dependency specification first (layer caching optimization)
+# This layer is cached until pyproject.toml changes
 COPY pyproject.toml .
+
+# Create stub source structure for hatchling to find the package
+RUN mkdir -p src/voidlabs_kb && \
+    echo '__version__ = "0.0.0"' > src/voidlabs_kb/__init__.py
+
+# Create virtual environment and install dependencies with BuildKit cache
+# The mount caches persist across builds, so repeated builds reuse downloaded packages
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=cache,target=/root/.cache/pip \
+    uv venv /app/.venv && \
+    . /app/.venv/bin/activate && \
+    uv pip install -e .
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# NOW copy real source code (changes here don't invalidate dependency layer)
 COPY src/ src/
 
-# Create virtual environment and install dependencies
-RUN uv venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
-RUN uv pip install .
+# Reinstall package with actual source (deps already installed, this is fast)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install . --reinstall-package voidlabs-kb
 
-# Pre-download the embedding model to include in image
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+# Pre-download the embedding model with BuildKit cache
+# Cache persists across builds - model only downloads once
+RUN --mount=type=cache,target=/root/.cache/huggingface \
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" && \
+    cp -r /root/.cache/huggingface /tmp/huggingface-cache
 
 # Stage 2: Runtime
 FROM python:3.12-slim AS runtime
@@ -47,8 +67,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy source code
 COPY --from=builder /app/src /app/src
 
-# Copy pre-downloaded model cache
-COPY --from=builder /root/.cache/huggingface /home/appuser/.cache/huggingface
+# Copy pre-downloaded model cache (from temp location due to BuildKit cache mount)
+COPY --from=builder /tmp/huggingface-cache /home/appuser/.cache/huggingface
 RUN chown -R appuser:appuser /home/appuser/.cache || true
 
 # Create directories for indices and views
