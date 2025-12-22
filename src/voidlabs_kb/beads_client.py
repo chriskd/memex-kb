@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 import subprocess
 from datetime import datetime
 from functools import lru_cache
@@ -395,9 +396,24 @@ class BeadsClient:
         Returns:
             List of BeadsComment objects, ordered by creation date.
         """
-        if not self._check_bd_available() or not self.beads_root:
+        if not self.beads_root:
             return []
 
+        # Try bd CLI first (uses daemon, faster if available)
+        if self._check_bd_available():
+            comments = self._get_comments_via_bd(issue_id)
+            if comments is not None:
+                return comments
+
+        # Fallback: parse directly from SQLite database
+        return self._get_comments_via_db(issue_id)
+
+    def _get_comments_via_bd(self, issue_id: str) -> list[BeadsComment] | None:
+        """Get comments using bd CLI.
+
+        Returns:
+            List of comments, or None if CLI failed (to trigger fallback).
+        """
         try:
             result = subprocess.run(
                 ["bd", "comments", issue_id, "--json"],
@@ -407,7 +423,7 @@ class BeadsClient:
                 cwd=self.beads_root,
             )
             if result.returncode != 0:
-                return []
+                return None
 
             comments_data = json.loads(result.stdout)
             if not comments_data:
@@ -415,15 +431,55 @@ class BeadsClient:
 
             return [
                 BeadsComment(
-                    id=c.get("id", ""),
+                    id=str(c.get("id", "")),
                     issue_id=issue_id,
-                    content=c.get("content", ""),
+                    content=c.get("text", c.get("content", "")),
                     author=c.get("author", "unknown"),
                     created_at=self._parse_datetime(c.get("created_at", "")),
                 )
                 for c in comments_data
             ]
         except (subprocess.TimeoutExpired, json.JSONDecodeError):
+            return None
+
+    def _get_comments_via_db(self, issue_id: str) -> list[BeadsComment]:
+        """Get comments by parsing SQLite database directly.
+
+        This fallback method works when bd CLI isn't available (e.g., in Docker).
+        """
+        if not self.beads_root:
+            return []
+
+        db_path = self.beads_root / ".beads/beads.db"
+        if not db_path.exists():
+            return []
+
+        try:
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                """
+                SELECT id, issue_id, author, text, created_at
+                FROM comments
+                WHERE issue_id = ?
+                ORDER BY created_at ASC
+                """,
+                (issue_id,),
+            )
+            rows = cursor.fetchall()
+            conn.close()
+
+            return [
+                BeadsComment(
+                    id=str(row["id"]),
+                    issue_id=row["issue_id"],
+                    content=row["text"],
+                    author=row["author"],
+                    created_at=self._parse_datetime(row["created_at"]),
+                )
+                for row in rows
+            ]
+        except sqlite3.Error:
             return []
 
     def get_issues_by_ids(self, issue_ids: list[str]) -> list[BeadsIssue]:
