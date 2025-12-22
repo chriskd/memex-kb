@@ -501,24 +501,29 @@ def list_entries(tag: Optional[str], category: Optional[str], limit: int, as_jso
 @cli.command("whats-new")
 @click.option("--days", "-d", default=30, help="Look back N days")
 @click.option("--limit", "-n", default=10, help="Max results")
+@click.option("--project", "-p", help="Filter by project name (matches path, source_project, or tags)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def whats_new(days: int, limit: int, as_json: bool):
+def whats_new(days: int, limit: int, project: Optional[str], as_json: bool):
     """Show recently created or updated entries.
 
     \b
     Examples:
       vl-kb whats-new
       vl-kb whats-new --days=7 --limit=5
+      vl-kb whats-new --project=docviewer  # Filter by project
     """
     from .core import whats_new as core_whats_new
 
-    result = run_async(core_whats_new(days=days, limit=limit))
+    result = run_async(core_whats_new(days=days, limit=limit, project=project))
 
     if as_json:
         output(result, as_json=True)
     else:
         if not result:
-            click.echo(f"No entries created or updated in the last {days} days.")
+            if project:
+                click.echo(f"No entries for project '{project}' in the last {days} days.")
+            else:
+                click.echo(f"No entries created or updated in the last {days} days.")
             return
 
         rows = [

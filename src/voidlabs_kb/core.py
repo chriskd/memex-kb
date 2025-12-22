@@ -1243,6 +1243,7 @@ async def whats_new(
     include_updated: bool = True,
     category: str | None = None,
     tag: str | None = None,
+    project: str | None = None,
 ) -> list[dict]:
     """List recent KB entries.
 
@@ -1253,9 +1254,13 @@ async def whats_new(
         include_updated: Include recently updated entries (default True).
         category: Optional category filter.
         tag: Optional tag filter.
+        project: Optional project filter. Matches entries where:
+            - Path starts with "projects/{project}/" (project-specific docs)
+            - source_project metadata equals the project name
+            - Tags contain the project name
 
     Returns:
-        List of {path, title, tags, created, updated, activity_type, activity_date}.
+        List of {path, title, tags, created, updated, activity_type, activity_date, source_project}.
     """
     kb_root = get_kb_root()
 
@@ -1288,6 +1293,24 @@ async def whats_new(
         if tag and tag not in metadata.tags:
             continue
 
+        # Filter by project if specified
+        if project:
+            project_lower = project.lower()
+            matches_project = False
+
+            # Check 1: Path starts with projects/{project}/
+            if rel_path.lower().startswith(f"projects/{project_lower}/"):
+                matches_project = True
+            # Check 2: source_project metadata matches
+            elif metadata.source_project and metadata.source_project.lower() == project_lower:
+                matches_project = True
+            # Check 3: Project name appears in tags
+            elif any(t.lower() == project_lower for t in metadata.tags):
+                matches_project = True
+
+            if not matches_project:
+                continue
+
         # Determine activity type and date
         activity_type: str | None = None
         activity_date: date | None = None
@@ -1312,6 +1335,7 @@ async def whats_new(
                 "updated": metadata.updated.isoformat() if metadata.updated else None,
                 "activity_type": activity_type,
                 "activity_date": activity_date.isoformat(),
+                "source_project": metadata.source_project,
             }
         )
 

@@ -204,7 +204,8 @@ async def list_tool(
     name="whats_new",
     description=(
         "List recently created or updated knowledge base entries, "
-        "sorted by most recent activity first."
+        "sorted by most recent activity first. "
+        "Use 'project' to filter by project name (matches path, source_project metadata, or tags)."
     ),
 )
 async def whats_new_tool(
@@ -214,6 +215,7 @@ async def whats_new_tool(
     include_updated: bool = True,
     category: str | None = None,
     tag: str | None = None,
+    project: str | None = None,
 ) -> list[dict]:
     """List recent KB entries."""
     return await core.whats_new(
@@ -223,6 +225,7 @@ async def whats_new_tool(
         include_updated=include_updated,
         category=category,
         tag=tag,
+        project=project,
     )
 
 
