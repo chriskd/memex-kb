@@ -11,8 +11,9 @@ services:
       dockerfile: .devcontainer/Dockerfile
 
     # Common volumes - shared across all voidlabs devcontainers
+    # Note: Project is accessed via /srv/fast/code/<project> (no separate mount needed)
+    # workspaceFolder in devcontainer.json uses ${localWorkspaceFolderBasename} to match
     volumes:
-      - ..:/workspaces/src:cached
       - /srv/fast:/srv/fast:cached
       - /srv/fast/ai-cli-configs/claude:/home/chris/.claude:cached
       - /srv/fast/ai-cli-configs/codex:/home/chris/.codex:cached

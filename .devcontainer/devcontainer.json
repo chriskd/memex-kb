@@ -9,7 +9,7 @@
         "docker-compose.override.yml"
     ],
     "service": "devcontainer",
-    "workspaceFolder": "/workspaces/src",
+    "workspaceFolder": "/srv/fast/code/${localWorkspaceFolderBasename}",
 
     // No features needed - tools installed in base image:
     // uv, terraform, claude-code, codex, go, node, phase, etc.

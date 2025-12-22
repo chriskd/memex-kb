@@ -15,6 +15,8 @@ log_feature() { printf '[voidlabs-devtools:%s] %s\n' "$1" "$2"; }
 # --- Configuration ---
 # Defaults (all features enabled)
 VOIDLABS_BEADS="${VOIDLABS_BEADS:-true}"
+VOIDLABS_VLMAIL="${VOIDLABS_VLMAIL:-true}"
+VOIDLABS_VLKB="${VOIDLABS_VLKB:-true}"
 VOIDLABS_FACTORY="${VOIDLABS_FACTORY:-true}"
 VOIDLABS_CHEZMOI="${VOIDLABS_CHEZMOI:-true}"
 VOIDLABS_WORKTRUNK="${VOIDLABS_WORKTRUNK:-true}"
@@ -145,6 +147,115 @@ setup_beads() {
     if [[ -d "$workspace/.beads" ]]; then
         log_feature "beads" "Installing/updating git hooks..."
         (cd "$workspace" && bd --quiet hooks install 2>/dev/null) || true
+    fi
+}
+
+# --- vl-mail Agent Messaging ---
+setup_vlmail() {
+    local VLMAIL_BIN="$HOME/.local/bin/vl-mail"
+    local DEVTOOLS_DIR="/srv/fast/code/voidlabs-devtools"
+    local VLMAIL_SRC="$DEVTOOLS_DIR/cmd/vl-mail"
+
+    # Check if voidlabs-devtools is available
+    if [[ ! -d "$VLMAIL_SRC" ]]; then
+        log_feature "vl-mail" "voidlabs-devtools not found at $DEVTOOLS_DIR, skipping"
+        return 0
+    fi
+
+    # Check if Go is available
+    local GO_BIN="/usr/local/go/bin/go"
+    if [[ ! -x "$GO_BIN" ]]; then
+        log_feature "vl-mail" "Go not found at $GO_BIN, skipping"
+        return 0
+    fi
+
+    # Build vl-mail if binary doesn't exist or source is newer
+    mkdir -p "$(dirname "$VLMAIL_BIN")"
+    if [[ ! -f "$VLMAIL_BIN" ]] || [[ "$VLMAIL_SRC/main.go" -nt "$VLMAIL_BIN" ]]; then
+        log_feature "vl-mail" "Building vl-mail..."
+        if (cd "$DEVTOOLS_DIR" && $GO_BIN build -o "$VLMAIL_BIN" ./cmd/vl-mail/); then
+            log_feature "vl-mail" "Installed vl-mail to $VLMAIL_BIN"
+        else
+            log_feature "vl-mail" "Failed to build vl-mail"
+            return 0
+        fi
+    else
+        log_feature "vl-mail" "vl-mail already up to date"
+    fi
+
+    # Configure BEADS_MAIL_DELEGATE env var for bd mail integration
+    local ENV_MARKER="# >>> vl-mail-delegate >>>"
+    local ENV_BLOCK="
+$ENV_MARKER
+# vl-mail as bd mail delegate
+export BEADS_MAIL_DELEGATE=\"vl-mail\"
+# <<< vl-mail-delegate <<<"
+
+    # Add to shell profiles if not present
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [[ -f "$rc" ]] && ! grep -q "$ENV_MARKER" "$rc" 2>/dev/null; then
+            echo "$ENV_BLOCK" >> "$rc"
+            log_feature "vl-mail" "Added BEADS_MAIL_DELEGATE to $rc"
+        fi
+    done
+
+    # Export for current session
+    export BEADS_MAIL_DELEGATE="vl-mail"
+    log_feature "vl-mail" "bd mail delegate configured"
+}
+
+# --- vl-kb Knowledge Base CLI ---
+setup_vlkb() {
+    local VLKB_REPO="/srv/fast/code/voidlabs-kb"
+
+    # Check if voidlabs-kb repo is available
+    if [[ ! -d "$VLKB_REPO" ]]; then
+        log_feature "vl-kb" "voidlabs-kb repo not found at $VLKB_REPO, skipping"
+        return 0
+    fi
+
+    # Check if uv is available
+    if ! command -v uv &>/dev/null; then
+        log_feature "vl-kb" "uv not found, skipping"
+        return 0
+    fi
+
+    # Ensure ~/.local/bin is in PATH (where uv tool installs binaries)
+    export PATH="$HOME/.local/bin:$PATH"
+
+    # Install/update vl-kb if not present or if source changed
+    # Use a marker file to track installation timestamp
+    local MARKER="$HOME/.local/share/vl-kb-installed"
+    local NEEDS_INSTALL=false
+
+    if ! command -v vl-kb &>/dev/null; then
+        NEEDS_INSTALL=true
+    elif [[ ! -f "$MARKER" ]]; then
+        NEEDS_INSTALL=true
+    elif [[ "$VLKB_REPO/src/voidlabs_kb/cli.py" -nt "$MARKER" ]] || \
+         [[ "$VLKB_REPO/src/voidlabs_kb/core.py" -nt "$MARKER" ]] || \
+         [[ "$VLKB_REPO/pyproject.toml" -nt "$MARKER" ]]; then
+        NEEDS_INSTALL=true
+    fi
+
+    if [[ "$NEEDS_INSTALL" == "true" ]]; then
+        log_feature "vl-kb" "Installing vl-kb from $VLKB_REPO..."
+        # Use uv tool install for isolated environment with CLI in PATH
+        if uv tool install --force --quiet -e "$VLKB_REPO" 2>/dev/null; then
+            mkdir -p "$(dirname "$MARKER")"
+            touch "$MARKER"
+            log_feature "vl-kb" "Installed vl-kb CLI"
+        else
+            log_feature "vl-kb" "Failed to install vl-kb"
+            return 0
+        fi
+    else
+        log_feature "vl-kb" "vl-kb already up to date"
+    fi
+
+    # Verify installation
+    if command -v vl-kb &>/dev/null; then
+        log_feature "vl-kb" "vl-kb ready ($(vl-kb --version 2>/dev/null || echo 'version unknown'))"
     fi
 }
 
@@ -286,6 +397,35 @@ alias wsc='wt switch --create --execute=claude'
     log_feature "worktrunk" "Setup complete"
 }
 
+# --- pbs Environment ---
+setup_pbs_env() {
+    local DEVTOOLS_DIR="/srv/fast/code/voidlabs-devtools"
+
+    # Skip if devtools not available
+    if [[ ! -d "$DEVTOOLS_DIR" ]]; then
+        return 0
+    fi
+
+    local ENV_MARKER="# >>> pbs-env >>>"
+    local ENV_BLOCK="$ENV_MARKER
+export PBS_TEMPLATE_DIR=\"$DEVTOOLS_DIR/devcontainers/template/.devcontainer\"
+export PBS_PROJECTS_ROOT=\"/srv/fast/code\"
+# <<< pbs-env <<<"
+
+    # Add to shell profiles if not present
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [[ -f "$rc" ]] && ! grep -q "$ENV_MARKER" "$rc" 2>/dev/null; then
+            echo "$ENV_BLOCK" >> "$rc"
+            log_feature "pbs" "Added PBS env vars to $rc"
+        fi
+    done
+
+    # Export for current session
+    export PBS_TEMPLATE_DIR="$DEVTOOLS_DIR/devcontainers/template/.devcontainer"
+    export PBS_PROJECTS_ROOT="/srv/fast/code"
+    log_feature "pbs" "Environment configured"
+}
+
 # --- Project-Specific Post-Start ---
 run_project_post_start() {
     local PROJECT_POST_START="$workspace/.devcontainer/scripts/post-start-project.sh"
@@ -315,9 +455,14 @@ main() {
 
     # Optional features (controlled by config)
     [[ "$VOIDLABS_BEADS" == "true" ]] && setup_beads
+    [[ "$VOIDLABS_VLMAIL" == "true" ]] && setup_vlmail
+    [[ "$VOIDLABS_VLKB" == "true" ]] && setup_vlkb
     [[ "$VOIDLABS_FACTORY" == "true" ]] && setup_factory
     [[ "$VOIDLABS_CHEZMOI" == "true" ]] && setup_chezmoi
     [[ "$VOIDLABS_WORKTRUNK" == "true" ]] && setup_worktrunk
+
+    # pbs environment (for template sync)
+    setup_pbs_env
 
     # Project-specific setup
     run_project_post_start
