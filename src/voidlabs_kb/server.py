@@ -110,6 +110,12 @@ Best practices:
 - Search before creating to avoid duplicates
 - Use consistent tags from the existing taxonomy
 - Add [[bidirectional links]] to related entries
+
+Beads integration:
+- Link KB entries to beads issues using frontmatter fields:
+  - `beads_issues: [issue-id1, issue-id2]` - link to specific issues
+  - `beads_project: project-name` - link to all issues in a project
+- Use this to connect documentation with related work items
 """,
 )
 
