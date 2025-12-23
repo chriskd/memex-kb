@@ -241,12 +241,15 @@ setup_vlkb() {
     if [[ "$NEEDS_INSTALL" == "true" ]]; then
         log_feature "vl-kb" "Installing vl-kb from $VLKB_REPO..."
         # Use uv tool install for isolated environment with CLI in PATH
-        if uv tool install --force --quiet -e "$VLKB_REPO" 2>/dev/null; then
+        # Note: chromadb/sentence-transformers require build tools (gcc, rust)
+        local install_output
+        if install_output=$(uv tool install --force -e "$VLKB_REPO" 2>&1); then
             mkdir -p "$(dirname "$MARKER")"
             touch "$MARKER"
             log_feature "vl-kb" "Installed vl-kb CLI"
         else
-            log_feature "vl-kb" "Failed to install vl-kb"
+            log_feature "vl-kb" "Failed to install vl-kb:"
+            echo "$install_output" | head -20
             return 0
         fi
     else
