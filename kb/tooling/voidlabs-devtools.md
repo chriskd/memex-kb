@@ -31,7 +31,7 @@ Central tooling repository that provides:
 ## Architecture
 
 ```
-docker.voidlabs.local (Host)
+devbox.voidlabs.local (Host)
 ├── /srv/fast/claude-linux/    → Shared Claude config (~/.claude mount)
 ├── /srv/fast/codex/           → Shared Codex config
 └── /srv/fast/code/
@@ -100,7 +100,7 @@ When in a devcontainer:
 Real-time web dashboard for viewing beads issues:
 
 ```bash
-# Build binary (one-time on docker.voidlabs.local)
+# Build binary (one-time on devbox.voidlabs.local)
 cd /srv/fast/code/voidlabs-devtools
 docker build -t beads-webui-builder services/beads-webui
 docker create --name tmp-beads beads-webui-builder

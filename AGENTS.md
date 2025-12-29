@@ -71,11 +71,11 @@ Read file A → Read file B → Read file C
 
 ### Infrastructure
 
-Development happens in **devcontainers** running on `docker.voidlabs.local` (a remote Docker host), not on the local Mac.
+Development happens in **devcontainers** running on `devbox.voidlabs.local` (a remote Docker host), not on the local Mac.
 
 ```
 ┌─────────────┐    Mutagen     ┌─────────────────────────┐
-│    Mac      │ ──────sync───▶ │  docker.voidlabs.local  │
+│    Mac      │ ──────sync───▶ │  devbox.voidlabs.local  │
 │  (beta)     │                │       (alpha)           │
 │             │                │                         │
 │  Cursor ────┼── SSH remote ─▶│  ┌─────────────────┐    │
@@ -87,9 +87,9 @@ Development happens in **devcontainers** running on `docker.voidlabs.local` (a r
 
 **Key implications for agents:**
 
-- **"Local" means the container** - Commands run inside devcontainers on docker.voidlabs.local
+- **"Local" means the container** - Commands run inside devcontainers on devbox.voidlabs.local
 - **Code lives at `/srv/fast/code/`** - This is bind-mounted into containers
-- **Docker builds are fast** - Images build on docker.voidlabs.local, no network overhead for layers
+- **Docker builds are fast** - Images build on devbox.voidlabs.local, no network overhead for layers
 - **Mutagen sync has slight delays** - If a file seems stale after editing, wait a moment
 - **SSH agent forwarding works** - Git operations use forwarded keys through the SSH chain
 
@@ -111,7 +111,7 @@ Development happens in **devcontainers** running on `docker.voidlabs.local` (a r
 **Docker context on Mac:**
 ```bash
 # Mac's docker CLI points to the remote
-docker context use quasar  # quasar = ssh://chris@docker.voidlabs.local
+docker context use quasar  # quasar = ssh://chris@devbox.voidlabs.local
 ```
 
 ### Shared Tooling (voidlabs-devtools)
