@@ -42,13 +42,25 @@ class ChromaIndex:
             return self._collection
 
         import chromadb
+        import shutil
 
         self._index_dir.mkdir(parents=True, exist_ok=True)
         self._client = chromadb.PersistentClient(path=str(self._index_dir))
-        self._collection = self._client.get_or_create_collection(
-            name=self.COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},
-        )
+        try:
+            self._collection = self._client.get_or_create_collection(
+                name=self.COLLECTION_NAME,
+                metadata={"hnsw:space": "cosine"},
+            )
+        except KeyError:
+            # Schema incompatibility from chromadb version change - reset the index
+            del self._client
+            shutil.rmtree(self._index_dir, ignore_errors=True)
+            self._index_dir.mkdir(parents=True, exist_ok=True)
+            self._client = chromadb.PersistentClient(path=str(self._index_dir))
+            self._collection = self._client.get_or_create_collection(
+                name=self.COLLECTION_NAME,
+                metadata={"hnsw:space": "cosine"},
+            )
         return self._collection
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
