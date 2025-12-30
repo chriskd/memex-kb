@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 
 from . import core
 from .config import DEFAULT_SEARCH_LIMIT, LINK_SUGGESTION_MIN_SCORE
-from .models import KBEntry, SearchResponse
+from .models import KBEntry, QualityReport, SearchResponse
 
 
 mcp = FastMCP(
@@ -205,6 +205,15 @@ async def tags_tool() -> list[dict]:
 async def health_tool(stale_days: int = 90) -> dict:
     """Audit KB health."""
     return await core.health(stale_days=stale_days)
+
+
+@mcp.tool(
+    name="quality",
+    description="Evaluate KB search accuracy against test queries.",
+)
+async def quality_tool(limit: int = 5, cutoff: int = 3) -> QualityReport:
+    """Run KB quality checks."""
+    return await core.quality(limit=limit, cutoff=cutoff)
 
 
 @mcp.tool(

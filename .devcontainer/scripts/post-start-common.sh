@@ -206,11 +206,11 @@ export BEADS_MAIL_DELEGATE=\"vl-mail\"
 
 # --- vl-kb Knowledge Base CLI ---
 setup_vlkb() {
-    local VLKB_REPO="/srv/fast/code/voidlabs-kb"
+    local VLKB_REPO="/srv/fast/code/memex"
 
-    # Check if voidlabs-kb repo is available
+    # Check if memex repo is available
     if [[ ! -d "$VLKB_REPO" ]]; then
-        log_feature "vl-kb" "voidlabs-kb repo not found at $VLKB_REPO, skipping"
+        log_feature "vl-kb" "memex repo not found at $VLKB_REPO, skipping"
         return 0
     fi
 

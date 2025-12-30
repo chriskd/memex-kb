@@ -1,7 +1,7 @@
 ---
 title: Markdown-it-py AST Parser
 tags:
-  - voidlabs-kb
+  - memex
   - markdown
   - parsing
   - ast
@@ -9,12 +9,12 @@ tags:
 created: 2025-12-22
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
-source_project: voidlabs-kb
+source_project: memex
 ---
 
 # Markdown-it-py AST Parser
 
-The voidlabs-kb uses [markdown-it-py](https://markdown-it-py.readthedocs.io/) for AST-based markdown parsing, replacing the original regex-based approach.
+Memex uses [markdown-it-py](https://markdown-it-py.readthedocs.io/) for AST-based markdown parsing, replacing the original regex-based approach.
 
 ## Why markdown-it-py?
 
@@ -88,7 +88,7 @@ Benefits:
 ## Usage
 
 ```python
-from voidlabs_kb.parser import render_markdown, extract_links
+from memex.parser import render_markdown, extract_links
 
 # Full rendering with links
 result = render_markdown("See [[foo/bar|docs]] for details.")
@@ -110,4 +110,4 @@ links = extract_links("Check [[overview]] and [[details]].")
 
 ## Related
 
-- [[Voidlabs KB MCP Server]] - The MCP server using this parser
+- [[Memex Knowledge Base]] - The MCP server using this parser

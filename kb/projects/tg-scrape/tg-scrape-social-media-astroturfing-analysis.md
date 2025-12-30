@@ -12,7 +12,7 @@ tags:
 created: 2025-12-30
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
-source_project: voidlabs-kb
+source_project: memex
 model: claude-opus-4-5
 git_branch: main
 last_edited_by: chris

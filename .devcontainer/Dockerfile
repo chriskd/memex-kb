@@ -17,4 +17,4 @@ FROM localhost:5000/devcontainer-base:latest
 #     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
-WORKDIR /workspaces/voidlabs-kb
+WORKDIR /workspaces/memex

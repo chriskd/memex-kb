@@ -1,19 +1,21 @@
 ---
-title: Voidlabs Knowledge Base Plugin
+title: Memex Knowledge Base
 tags:
   - infrastructure
   - plugins
   - documentation
   - claude-code
   - mcp
+  - memex
 created: 2025-12-20
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
+source_project: memex
 ---
 
-# Voidlabs Knowledge Base Plugin
+# Memex Knowledge Base
 
-The voidlabs-kb plugin is an organization-wide knowledge management system integrated with Claude Code. It provides persistent, searchable documentation for patterns, decisions, guides, and institutional knowledge.
+Memex is a knowledge management system integrated with Claude Code. It provides persistent, searchable documentation for patterns, decisions, guides, and institutional knowledge.
 
 ## Purpose
 

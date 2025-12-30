@@ -12,7 +12,7 @@ created: 2025-12-22
 updated: 2025-12-22
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
-source_project: voidlabs-kb
+source_project: memex
 ---
 
 # Dokploy Compose Networking - Definitive Guide

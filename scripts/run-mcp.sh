@@ -2,8 +2,8 @@
 # MCP server wrapper for memex
 set -e
 
-# Use canonical source location for KB content (shared across all installs)
-export KB_ROOT="/srv/fast/code/voidlabs-kb/kb"
-export INDEX_ROOT="/srv/fast/code/voidlabs-kb/.indices"
+# Use plugin's own KB content directory (portable across installations)
+export KB_ROOT="${CLAUDE_PLUGIN_ROOT}/kb"
+export INDEX_ROOT="${CLAUDE_PLUGIN_ROOT}/.indices"
 
 exec uv --directory "${CLAUDE_PLUGIN_ROOT}" run python -m memex

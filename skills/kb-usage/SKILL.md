@@ -1,11 +1,11 @@
 ---
 name: kb-usage
-description: Use this skill when working with the voidlabs organizational knowledge base. Triggers on queries about "organizational docs", "how do we do X at voidlabs", "check the knowledge base", "add to KB", or when an agent discovers reusable knowledge worth documenting.
+description: Use this skill when working with the memex knowledge base. Triggers on queries about "organizational docs", "check the knowledge base", "add to KB", or when an agent discovers reusable knowledge worth documenting.
 ---
 
-# Using the Voidlabs Knowledge Base
+# Using the Memex Knowledge Base
 
-The voidlabs-kb is an organization-wide knowledge base for documenting patterns, infrastructure, troubleshooting guides, and operational knowledge. This skill teaches you how to search, contribute, and maintain the KB effectively.
+Memex is a knowledge base for documenting patterns, infrastructure, troubleshooting guides, and operational knowledge. This skill teaches you how to search, contribute, and maintain the KB effectively.
 
 ## When to Search the KB
 
