@@ -19,6 +19,7 @@ from typing import Literal
 
 from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
 from .config import MAX_CONTENT_RESULTS, get_kb_root
+from .context import KBContext, get_kb_context
 from .evaluation import run_quality_checks
 from .indexer import HybridSearcher
 from .models import DocumentChunk, IndexStatus, KBEntry, QualityReport, SearchResponse, SearchResult
@@ -594,6 +595,7 @@ async def search(
     mode: Literal["hybrid", "keyword", "semantic"] = "hybrid",
     tags: list[str] | None = None,
     include_content: bool = False,
+    kb_context: KBContext | None = None,
 ) -> SearchResponse:
     """Search the knowledge base.
 
@@ -604,6 +606,8 @@ async def search(
         tags: Optional list of tags to filter results.
         include_content: If True, include full document content in results.
                          Default False (snippet only). Limited to MAX_CONTENT_RESULTS.
+        kb_context: Optional project context for path-based boosting.
+                    If not provided, auto-discovered from cwd.
 
     Returns:
         SearchResponse with results and optional warnings.
@@ -611,7 +615,12 @@ async def search(
     searcher = get_searcher()
     # Auto-detect project context for boosting entries from current project
     project_context = get_current_project()
-    results = searcher.search(query, limit=limit, mode=mode, project_context=project_context)
+    # Auto-discover KB context if not provided
+    if kb_context is None:
+        kb_context = get_kb_context()
+    results = searcher.search(
+        query, limit=limit, mode=mode, project_context=project_context, kb_context=kb_context
+    )
     warnings: list[str] = []
 
     # Filter by tags if specified
@@ -645,6 +654,7 @@ async def add_entry(
     category: str = "",
     directory: str | None = None,
     links: list[str] | None = None,
+    kb_context: KBContext | None = None,
 ) -> dict:
     """Create a new KB entry.
 
@@ -657,6 +667,8 @@ async def add_entry(
         directory: Full directory path (e.g., "development/python/frameworks").
                    Takes precedence over 'category' if both are provided.
         links: Optional list of paths to link to using [[link]] syntax.
+        kb_context: Optional project context. If not provided, auto-discovered from cwd.
+                   Used for default directory (primary) and tag suggestions (default_tags).
 
     Returns:
         Dict with 'path' of created file, 'suggested_links' to consider adding,
@@ -664,7 +676,11 @@ async def add_entry(
     """
     kb_root = get_kb_root()
 
-    # Determine target directory: prefer 'directory' over 'category'
+    # Auto-discover KB context if not provided
+    if kb_context is None:
+        kb_context = get_kb_context()
+
+    # Determine target directory: prefer 'directory' over 'category' over context.primary
     if directory:
         # Validate the directory is within KB, auto-create if needed
         abs_dir, normalized_dir = validate_nested_path(directory)
@@ -679,10 +695,24 @@ async def add_entry(
         target_dir = kb_root / category
         target_dir.mkdir(parents=True, exist_ok=True)
         rel_dir = category
+    elif kb_context and kb_context.primary:
+        # Use context primary directory
+        abs_dir, normalized_dir = validate_nested_path(kb_context.primary)
+        if abs_dir.exists() and not abs_dir.is_dir():
+            raise ValueError(f"Context primary path exists but is not a directory: {kb_context.primary}")
+        # Auto-create directory if it doesn't exist
+        abs_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = abs_dir
+        rel_dir = normalized_dir
     else:
         valid_categories = get_valid_categories()
+        context_hint = (
+            " (no .kbcontext file found with 'primary' field)"
+            if kb_context is None
+            else ""
+        )
         raise ValueError(
-            "Either 'category' or 'directory' must be provided. "
+            f"Either 'category' or 'directory' must be provided{context_hint}. "
             f"Existing categories: {', '.join(valid_categories)}"
         )
 
@@ -774,6 +804,21 @@ created: {today}{contributors_yaml}{source_project_yaml}{model_yaml}{git_branch_
         limit=5,
         min_score=0.3,
     )
+
+    # Prepend context default_tags (if not already in tags or suggestions)
+    if kb_context and kb_context.default_tags:
+        existing_tag_set = set(tags)
+        suggested_tag_set = {s["tag"] for s in suggested_tags}
+        context_suggestions = []
+        for tag in kb_context.default_tags:
+            if tag not in existing_tag_set and tag not in suggested_tag_set:
+                context_suggestions.append({
+                    "tag": tag,
+                    "score": 1.0,  # High priority for context tags
+                    "reason": "From project .kbcontext",
+                })
+        # Prepend context suggestions to semantic suggestions
+        suggested_tags = context_suggestions + suggested_tags
 
     return {"path": rel_path, "suggested_links": suggested_links, "suggested_tags": suggested_tags}
 

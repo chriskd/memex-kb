@@ -725,6 +725,162 @@ def reindex():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Context Command Group
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def context(ctx):
+    """Manage project KB context (.kbcontext file).
+
+    The .kbcontext file configures KB behavior for a project:
+    - primary: Default directory for new entries
+    - paths: Boost these paths in search results
+    - default_tags: Suggested tags for new entries
+
+    \b
+    Examples:
+      vl-kb context            # Show current context
+      vl-kb context init       # Create a new .kbcontext file
+      vl-kb context validate   # Check context paths exist in KB
+    """
+    # If no subcommand provided, show context
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(context_show)
+
+
+@context.command("show")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def context_show(as_json: bool):
+    """Show the current project context.
+
+    Searches for .kbcontext file starting from current directory.
+
+    \b
+    Examples:
+      vl-kb context show
+      vl-kb context show --json
+    """
+    from .context import get_kb_context
+
+    ctx = get_kb_context()
+
+    if ctx is None:
+        if as_json:
+            output({"found": False, "message": "No .kbcontext file found"}, as_json=True)
+        else:
+            click.echo("No .kbcontext file found.")
+            click.echo("Run 'vl-kb context init' to create one.")
+        return
+
+    if as_json:
+        output({
+            "found": True,
+            "source_file": str(ctx.source_file) if ctx.source_file else None,
+            "primary": ctx.primary,
+            "paths": ctx.paths,
+            "default_tags": ctx.default_tags,
+            "project": ctx.project,
+        }, as_json=True)
+    else:
+        click.echo(f"Context file: {ctx.source_file}")
+        click.echo(f"Primary:      {ctx.primary or '(not set)'}")
+        click.echo(f"Paths:        {', '.join(ctx.paths) if ctx.paths else '(none)'}")
+        click.echo(f"Default tags: {', '.join(ctx.default_tags) if ctx.default_tags else '(none)'}")
+        if ctx.project:
+            click.echo(f"Project:      {ctx.project}")
+
+
+# Make 'show' the default command when 'context' is called without subcommand
+@context.command("status", hidden=True)
+@click.pass_context
+def context_status(ctx):
+    """Alias for 'show' - used when 'context' is called without subcommand."""
+    ctx.invoke(context_show)
+
+
+@context.command("init")
+@click.option("--project", "-p", help="Project name (auto-detected from directory if not provided)")
+@click.option("--directory", "-d", help="KB directory (defaults to projects/<project>)")
+@click.option("--force", "-f", is_flag=True, help="Overwrite existing .kbcontext file")
+def context_init(project: Optional[str], directory: Optional[str], force: bool):
+    """Create a new .kbcontext file in the current directory.
+
+    \b
+    Examples:
+      vl-kb context init
+      vl-kb context init --project myapp
+      vl-kb context init --project myapp --directory projects/myapp/docs
+    """
+    from .context import CONTEXT_FILENAME, create_default_context
+
+    context_path = Path.cwd() / CONTEXT_FILENAME
+
+    if context_path.exists() and not force:
+        click.echo(f"Error: {CONTEXT_FILENAME} already exists. Use --force to overwrite.", err=True)
+        sys.exit(1)
+
+    # Auto-detect project name from directory
+    if not project:
+        project = Path.cwd().name
+
+    content = create_default_context(project, directory)
+    context_path.write_text(content, encoding="utf-8")
+
+    click.echo(f"Created {CONTEXT_FILENAME}")
+    click.echo(f"  Primary directory: {directory or f'projects/{project}'}")
+    click.echo(f"  Default tags: {project}")
+    click.echo("\nEdit the file to customize paths and tags.")
+
+
+@context.command("validate")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def context_validate(as_json: bool):
+    """Validate the current .kbcontext file against the knowledge base.
+
+    Checks that:
+    - primary directory exists (or can be created)
+    - paths reference valid locations (warning only)
+
+    \b
+    Examples:
+      vl-kb context validate
+      vl-kb context validate --json
+    """
+    from .config import get_kb_root
+    from .context import get_kb_context, validate_context
+
+    ctx = get_kb_context()
+
+    if ctx is None:
+        if as_json:
+            output({"valid": False, "error": "No .kbcontext file found"}, as_json=True)
+        else:
+            click.echo("Error: No .kbcontext file found.", err=True)
+        sys.exit(1)
+
+    kb_root = get_kb_root()
+    warnings = validate_context(ctx, kb_root)
+
+    if as_json:
+        output({
+            "valid": True,
+            "source_file": str(ctx.source_file),
+            "warnings": warnings,
+        }, as_json=True)
+    else:
+        click.echo(f"Validating: {ctx.source_file}")
+
+        if warnings:
+            click.echo("\nWarnings:")
+            for warning in warnings:
+                click.echo(f"  ⚠ {warning}")
+        else:
+            click.echo("✓ All paths are valid")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Delete Command
 # ─────────────────────────────────────────────────────────────────────────────
 
