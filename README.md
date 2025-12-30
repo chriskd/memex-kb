@@ -30,7 +30,7 @@ mx --version
 ```bash
 # Initialize a knowledge base
 mkdir -p kb
-export KB_ROOT=$(pwd)/kb
+export MEMEX_KB_ROOT=$(pwd)/kb
 
 # Create your first entry
 mx add --title="My First Note" --tags="example" --content="Hello, world!"
@@ -143,10 +143,10 @@ Use `[[path/to/entry|Display Text]]` for custom link text.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `KB_ROOT` | Knowledge base directory | `./kb` |
-| `INDEX_ROOT` | Search index directory | `./.indices` |
-| `KB_PRELOAD` | Preload embedding model | `false` |
-| `KB_LOG_LEVEL` | Log level (DEBUG, INFO, WARNING, ERROR) | `INFO` |
+| `MEMEX_KB_ROOT` | Knowledge base directory | `./kb` |
+| `MEMEX_INDEX_ROOT` | Search index directory | `./.indices` |
+| `MEMEX_PRELOAD` | Preload embedding model | `false` |
+| `MEMEX_LOG_LEVEL` | Log level (DEBUG, INFO, WARNING, ERROR) | `INFO` |
 
 ## Development
 

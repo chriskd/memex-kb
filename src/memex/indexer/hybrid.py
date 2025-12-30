@@ -381,6 +381,6 @@ class HybridSearcher:
     def preload(self) -> None:
         """Preload the embedding model to avoid first-query latency.
 
-        Call this at startup when KB_PRELOAD=1 is set.
+        Call this at startup when MEMEX_PRELOAD=1 is set.
         """
         self._chroma.preload()

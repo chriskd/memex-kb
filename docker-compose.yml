@@ -21,8 +21,8 @@ services:
       # Persistent storage for indices and view tracking
       - kb-data:/data
     environment:
-      - KB_ROOT=/project/kb
-      - INDEX_ROOT=/data/indices
+      - MEMEX_KB_ROOT=/project/kb
+      - MEMEX_INDEX_ROOT=/data/indices
       - HOST=0.0.0.0
       - PORT=8080
     healthcheck:

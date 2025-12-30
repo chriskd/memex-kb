@@ -91,7 +91,7 @@ def extract_project_name(remote_url: str | None, cwd: Path) -> str:
 def get_kb_root() -> Path | None:
     """Get the KB root directory."""
     # Check environment variable first
-    if kb_root := os.environ.get("KB_ROOT"):
+    if kb_root := os.environ.get("MEMEX_KB_ROOT"):
         path = Path(kb_root)
         if path.exists():
             return path

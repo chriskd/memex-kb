@@ -30,7 +30,7 @@ def kb_root(tmp_path, monkeypatch) -> Path:
     root.mkdir()
     for category in ("development", "architecture", "devops"):
         (root / category).mkdir()
-    monkeypatch.setenv("KB_ROOT", str(root))
+    monkeypatch.setenv("MEMEX_KB_ROOT", str(root))
     return root
 
 
@@ -39,7 +39,7 @@ def index_root(tmp_path, monkeypatch) -> Path:
     """Create a temporary index root."""
     root = tmp_path / ".indices"
     root.mkdir()
-    monkeypatch.setenv("INDEX_ROOT", str(root))
+    monkeypatch.setenv("MEMEX_INDEX_ROOT", str(root))
     return root
 
 
