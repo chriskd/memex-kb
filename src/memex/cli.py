@@ -223,25 +223,106 @@ def _detect_mcp_mode() -> bool:
     return False
 
 
+def _detect_current_project() -> Optional[str]:
+    """Detect current project from git remote, directory, or beads.
+
+    Returns:
+        Project name or None if unavailable.
+    """
+    import subprocess
+
+    cwd = Path.cwd()
+
+    # Try git remote first
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            import re
+            remote_url = result.stdout.strip()
+            # Handle SSH format: git@github.com:user/repo.git
+            ssh_match = re.search(r":([^/]+/[^/]+?)(?:\.git)?$", remote_url)
+            if ssh_match:
+                return ssh_match.group(1).split("/")[-1]
+            # Handle HTTPS format
+            https_match = re.search(r"/([^/]+?)(?:\.git)?$", remote_url)
+            if https_match:
+                return https_match.group(1)
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+
+    # Fallback to directory name
+    return cwd.name
+
+
+def _get_recent_project_entries(project: str, days: int = 7, limit: int = 5) -> list:
+    """Get recent KB entries for a project.
+
+    Args:
+        project: Project name to filter by.
+        days: Look back period.
+        limit: Max entries to return.
+
+    Returns:
+        List of recent entry dicts.
+    """
+    from .core import whats_new as core_whats_new
+
+    try:
+        return run_async(core_whats_new(days=days, limit=limit, project=project))
+    except Exception:
+        return []
+
+
+def _format_recent_entries(entries: list, project: str) -> str:
+    """Format recent entries for display."""
+    if not entries:
+        return ""
+
+    lines = [f"\n## Recent KB Updates for {project}\n"]
+
+    for entry in entries:
+        activity = "NEW" if entry.get("activity_type") == "created" else "UPD"
+        date_str = str(entry.get("activity_date", ""))[:10]
+        title = entry.get("title", "Untitled")
+        path = entry.get("path", "")
+
+        lines.append(f"{activity}  {path}")
+        lines.append(f"     {title} ({date_str})")
+
+    return "\n".join(lines)
+
+
 @cli.command()
 @click.option("--full", is_flag=True, help="Force full CLI output (ignore MCP detection)")
 @click.option("--mcp", is_flag=True, help="Force MCP mode (minimal output)")
+@click.option("--project", "-p", help="Include recent entries for project (auto-detected if not specified)")
+@click.option("--days", "-d", default=7, help="Days to look back for project entries")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def prime(full: bool, mcp: bool, as_json: bool):
+def prime(full: bool, mcp: bool, project: Optional[str], days: int, as_json: bool):
     """Output agent workflow context for session start.
 
     Automatically detects MCP vs CLI mode and adapts output:
     - CLI mode: Full command reference (~1-2k tokens)
     - MCP mode: Brief workflow reminders (~50 tokens)
 
+    When --project is specified (or auto-detected), includes recent KB
+    changes for that project to help with session context recovery.
+
     Designed for Claude Code hooks (SessionStart, PreCompact) to prevent
     agents from forgetting KB workflow after context compaction.
 
     \b
     Examples:
-      mx prime              # Auto-detect mode
-      mx prime --full       # Force full output
-      mx prime --mcp        # Force minimal output
+      mx prime                    # Auto-detect mode
+      mx prime --full             # Force full output
+      mx prime --mcp              # Force minimal output
+      mx prime --project=myapp    # Include myapp recent entries
+      mx prime -p myapp -d 14     # Last 14 days of myapp changes
     """
     # Determine output mode
     if full:
@@ -253,10 +334,27 @@ def prime(full: bool, mcp: bool, as_json: bool):
 
     content = PRIME_OUTPUT if use_full else PRIME_MCP_OUTPUT
 
+    # Auto-detect project if not specified
+    detected_project = project or _detect_current_project()
+    recent_entries = []
+    recent_content = ""
+
+    if detected_project:
+        recent_entries = _get_recent_project_entries(detected_project, days=days)
+        if recent_entries:
+            recent_content = _format_recent_entries(recent_entries, detected_project)
+
     if as_json:
-        output({"mode": "full" if use_full else "mcp", "content": content}, as_json=True)
+        output({
+            "mode": "full" if use_full else "mcp",
+            "content": content,
+            "project": detected_project,
+            "recent_entries": recent_entries,
+        }, as_json=True)
     else:
         click.echo(content)
+        if recent_content:
+            click.echo(recent_content)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
