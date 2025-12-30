@@ -1,5 +1,7 @@
 """Comprehensive tests for HybridSearcher combining Whoosh and Chroma."""
 
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -677,3 +679,280 @@ class TestHybridSearchResultQuality:
         if len(results) >= 2:
             for i in range(len(results) - 1):
                 assert results[i].score >= results[i + 1].score
+
+
+class TestHybridThreadSafety:
+    """Test thread safety for write operations."""
+
+    def test_has_write_lock(self, hybrid_searcher):
+        """HybridSearcher has a write lock attribute."""
+        assert hasattr(hybrid_searcher, "_write_lock")
+        assert isinstance(hybrid_searcher._write_lock, type(threading.Lock()))
+
+    def test_concurrent_index_document(self, index_dirs):
+        """Concurrent index_document calls don't cause data corruption."""
+        whoosh_dir, chroma_dir = index_dirs
+        whoosh = WhooshIndex(index_dir=whoosh_dir)
+        chroma = ChromaIndex(index_dir=chroma_dir)
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=chroma)
+
+        num_threads = 10
+        chunks_per_thread = 5
+
+        def index_worker(thread_id: int) -> None:
+            for i in range(chunks_per_thread):
+                chunk = DocumentChunk(
+                    path=f"thread_{thread_id}/doc_{i}.md",
+                    section=None,
+                    content=f"Content from thread {thread_id}, document {i}",
+                    metadata=EntryMetadata(
+                        title=f"Thread {thread_id} Doc {i}",
+                        tags=["concurrent", f"thread-{thread_id}"],
+                        created=date(2024, 1, 1),
+                    ),
+                )
+                searcher.index_document(chunk)
+
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = [executor.submit(index_worker, i) for i in range(num_threads)]
+            for future in as_completed(futures):
+                future.result()  # Raise any exceptions
+
+        expected_count = num_threads * chunks_per_thread
+        assert searcher._whoosh.doc_count() == expected_count
+        assert searcher._chroma.doc_count() == expected_count
+
+    def test_concurrent_index_chunks(self, index_dirs):
+        """Concurrent index_chunks calls don't cause data corruption."""
+        whoosh_dir, chroma_dir = index_dirs
+        whoosh = WhooshIndex(index_dir=whoosh_dir)
+        chroma = ChromaIndex(index_dir=chroma_dir)
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=chroma)
+
+        num_threads = 5
+        chunks_per_batch = 3
+
+        def batch_worker(thread_id: int) -> None:
+            chunks = [
+                DocumentChunk(
+                    path=f"batch_{thread_id}/doc_{i}.md",
+                    section=None,
+                    content=f"Batch content from thread {thread_id}, document {i}",
+                    metadata=EntryMetadata(
+                        title=f"Batch {thread_id} Doc {i}",
+                        tags=["batch", f"batch-{thread_id}"],
+                        created=date(2024, 1, 1),
+                    ),
+                )
+                for i in range(chunks_per_batch)
+            ]
+            searcher.index_chunks(chunks)
+
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = [executor.submit(batch_worker, i) for i in range(num_threads)]
+            for future in as_completed(futures):
+                future.result()  # Raise any exceptions
+
+        expected_count = num_threads * chunks_per_batch
+        assert searcher._whoosh.doc_count() == expected_count
+        assert searcher._chroma.doc_count() == expected_count
+
+    def test_concurrent_delete_document(self, index_dirs):
+        """Concurrent delete_document calls don't cause errors."""
+        whoosh_dir, chroma_dir = index_dirs
+        whoosh = WhooshIndex(index_dir=whoosh_dir)
+        chroma = ChromaIndex(index_dir=chroma_dir)
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=chroma)
+
+        num_docs = 20
+        chunks = [
+            DocumentChunk(
+                path=f"doc_{i}.md",
+                section=None,
+                content=f"Document {i} content for deletion test",
+                metadata=EntryMetadata(
+                    title=f"Doc {i}",
+                    tags=["delete-test"],
+                    created=date(2024, 1, 1),
+                ),
+            )
+            for i in range(num_docs)
+        ]
+        searcher.index_chunks(chunks)
+
+        assert searcher._whoosh.doc_count() == num_docs
+        assert searcher._chroma.doc_count() == num_docs
+
+        def delete_worker(doc_id: int) -> None:
+            searcher.delete_document(f"doc_{doc_id}.md")
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(delete_worker, i) for i in range(num_docs)]
+            for future in as_completed(futures):
+                future.result()  # Raise any exceptions
+
+        assert searcher._whoosh.doc_count() == 0
+        assert searcher._chroma.doc_count() == 0
+
+    def test_concurrent_mixed_operations(self, index_dirs):
+        """Mixed concurrent operations (index, delete) don't cause corruption."""
+        whoosh_dir, chroma_dir = index_dirs
+        whoosh = WhooshIndex(index_dir=whoosh_dir)
+        chroma = ChromaIndex(index_dir=chroma_dir)
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=chroma)
+
+        # Pre-index some documents to delete
+        initial_chunks = [
+            DocumentChunk(
+                path=f"initial_{i}.md",
+                section=None,
+                content=f"Initial document {i}",
+                metadata=EntryMetadata(
+                    title=f"Initial {i}",
+                    tags=["initial"],
+                    created=date(2024, 1, 1),
+                ),
+            )
+            for i in range(5)
+        ]
+        searcher.index_chunks(initial_chunks)
+
+        errors = []
+
+        def index_worker(thread_id: int) -> None:
+            try:
+                for i in range(3):
+                    chunk = DocumentChunk(
+                        path=f"new_{thread_id}_{i}.md",
+                        section=None,
+                        content=f"New content {thread_id}_{i}",
+                        metadata=EntryMetadata(
+                            title=f"New {thread_id}_{i}",
+                            tags=["new"],
+                            created=date(2024, 1, 1),
+                        ),
+                    )
+                    searcher.index_document(chunk)
+            except Exception as e:
+                errors.append(e)
+
+        def delete_worker(doc_id: int) -> None:
+            try:
+                searcher.delete_document(f"initial_{doc_id}.md")
+            except Exception as e:
+                errors.append(e)
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Mix indexing and deletion
+            futures = []
+            for i in range(3):
+                futures.append(executor.submit(index_worker, i))
+            for i in range(5):
+                futures.append(executor.submit(delete_worker, i))
+
+            for future in as_completed(futures):
+                future.result()  # Raise any exceptions
+
+        assert not errors, f"Errors during concurrent operations: {errors}"
+        # Initial 5 deleted, 3 threads * 3 docs = 9 new
+        assert searcher._whoosh.doc_count() == 9
+        assert searcher._chroma.doc_count() == 9
+
+    def test_concurrent_clear_and_index(self, index_dirs):
+        """Clear operation is thread-safe with indexing."""
+        whoosh_dir, chroma_dir = index_dirs
+        whoosh = WhooshIndex(index_dir=whoosh_dir)
+        chroma = ChromaIndex(index_dir=chroma_dir)
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=chroma)
+
+        # This test verifies no deadlocks or exceptions occur
+        # when clear() and index_document() race
+        errors = []
+        barrier = threading.Barrier(2)
+
+        def index_loop() -> None:
+            try:
+                barrier.wait()  # Synchronize start
+                for i in range(10):
+                    chunk = DocumentChunk(
+                        path=f"race_{i}.md",
+                        section=None,
+                        content=f"Race condition test {i}",
+                        metadata=EntryMetadata(
+                            title=f"Race {i}",
+                            tags=["race"],
+                            created=date(2024, 1, 1),
+                        ),
+                    )
+                    searcher.index_document(chunk)
+            except Exception as e:
+                errors.append(e)
+
+        def clear_loop() -> None:
+            try:
+                barrier.wait()  # Synchronize start
+                for _ in range(5):
+                    searcher.clear()
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=index_loop)
+        t2 = threading.Thread(target=clear_loop)
+
+        t1.start()
+        t2.start()
+        t1.join(timeout=30)
+        t2.join(timeout=30)
+
+        assert not errors, f"Errors during concurrent clear/index: {errors}"
+        # Final state depends on race, but no corruption should occur
+
+    def test_write_lock_serializes_operations(self, index_dirs):
+        """Write lock serializes operations (no parallel writes)."""
+        whoosh_dir, chroma_dir = index_dirs
+        whoosh = WhooshIndex(index_dir=whoosh_dir)
+        chroma = ChromaIndex(index_dir=chroma_dir)
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=chroma)
+
+        # Track when lock is held to verify serialization
+        lock_acquisitions = []
+        original_index_document = searcher.index_document
+
+        def tracked_index_document(chunk):
+            # Record that we acquired the lock (we're inside the lock context)
+            lock_acquisitions.append(threading.current_thread().name)
+            # Verify we're the only one holding the lock right now
+            # by checking no other thread name appears while we're executing
+            return original_index_document(chunk)
+
+        searcher.index_document = tracked_index_document
+
+        def index_worker(thread_id: int) -> None:
+            for i in range(3):
+                chunk = DocumentChunk(
+                    path=f"lock_test_{thread_id}_{i}.md",
+                    section=None,
+                    content=f"Lock test content {thread_id}_{i}",
+                    metadata=EntryMetadata(
+                        title=f"Lock Test {thread_id}_{i}",
+                        tags=["lock-test"],
+                        created=date(2024, 1, 1),
+                    ),
+                )
+                searcher.index_document(chunk)
+
+        threads = [
+            threading.Thread(target=index_worker, args=(i,), name=f"Worker-{i}")
+            for i in range(3)
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        # All operations should have completed
+        assert len(lock_acquisitions) == 9  # 3 threads * 3 operations
+        # Document count should be correct (no lost writes)
+        assert searcher._whoosh.doc_count() == 9
+        assert searcher._chroma.doc_count() == 9

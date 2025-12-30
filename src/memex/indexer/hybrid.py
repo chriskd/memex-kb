@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -64,6 +65,7 @@ class HybridSearcher:
         self._last_indexed: datetime | None = None
         self._index_dir = index_dir or get_index_root()
         self._manifest = IndexManifest(self._index_dir)
+        self._write_lock = threading.Lock()
 
     def search(
         self,
@@ -300,32 +302,41 @@ class HybridSearcher:
 
         Args:
             chunk: The document chunk to index.
+
+        Thread-safe: Uses write lock to prevent concurrent modifications.
         """
-        self._whoosh.index_document(chunk)
-        self._chroma.index_document(chunk)
-        self._last_indexed = datetime.now(UTC)
+        with self._write_lock:
+            self._whoosh.index_document(chunk)
+            self._chroma.index_document(chunk)
+            self._last_indexed = datetime.now(UTC)
 
     def index_chunks(self, chunks: list[DocumentChunk]) -> None:
         """Index multiple document chunks to both indices.
 
         Args:
             chunks: List of document chunks to index.
+
+        Thread-safe: Uses write lock to prevent concurrent modifications.
         """
         if not chunks:
             return
 
-        self._whoosh.index_documents(chunks)
-        self._chroma.index_documents(chunks)
-        self._last_indexed = datetime.now(UTC)
+        with self._write_lock:
+            self._whoosh.index_documents(chunks)
+            self._chroma.index_documents(chunks)
+            self._last_indexed = datetime.now(UTC)
 
     def delete_document(self, path: str) -> None:
         """Delete a document from both indices.
 
         Args:
             path: The document path to delete.
+
+        Thread-safe: Uses write lock to prevent concurrent modifications.
         """
-        self._whoosh.delete_document(path)
-        self._chroma.delete_document(path)
+        with self._write_lock:
+            self._whoosh.delete_document(path)
+            self._chroma.delete_document(path)
 
     def reindex(
         self,
@@ -529,11 +540,15 @@ class HybridSearcher:
         )
 
     def clear(self) -> None:
-        """Clear both indices and the manifest."""
-        self._whoosh.clear()
-        self._chroma.clear()
-        self._manifest.clear()
-        self._last_indexed = None
+        """Clear both indices and the manifest.
+
+        Thread-safe: Uses write lock to prevent concurrent modifications.
+        """
+        with self._write_lock:
+            self._whoosh.clear()
+            self._chroma.clear()
+            self._manifest.clear()
+            self._last_indexed = None
 
     def status(self) -> IndexStatus:
         """Get status of the search indices.

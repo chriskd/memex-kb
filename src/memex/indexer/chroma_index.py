@@ -1,5 +1,6 @@
 """ChromaDB-based semantic search index with embeddings."""
 
+import hashlib
 import logging
 from datetime import date
 from pathlib import Path
@@ -79,6 +80,36 @@ class ChromaIndex:
         embeddings = model.encode(texts, convert_to_numpy=True)
         return embeddings.tolist()
 
+    @staticmethod
+    def _content_hash(text: str) -> str:
+        """Compute a content hash for cache invalidation.
+
+        Args:
+            text: The text content to hash.
+
+        Returns:
+            A 16-character hex hash of the content.
+        """
+        return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+    def _get_existing_hash(self, chunk_id: str) -> str | None:
+        """Get the content hash for an existing document if present.
+
+        Args:
+            chunk_id: The document chunk ID (path#section).
+
+        Returns:
+            The content hash if the document exists and has one, else None.
+        """
+        collection = self._get_collection()
+        try:
+            existing = collection.get(ids=[chunk_id], include=["metadatas"])
+            if existing["metadatas"] and existing["metadatas"][0]:
+                return existing["metadatas"][0].get("content_hash")
+        except Exception:
+            pass
+        return None
+
     def index_document(self, chunk: DocumentChunk) -> None:
         """Index a document chunk.
 
@@ -90,10 +121,19 @@ class ChromaIndex:
         # Create unique chunk ID
         chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
 
-        # Generate embedding
+        # Compute content hash for cache check
+        content_hash = self._content_hash(chunk.content)
+
+        # Check if existing document has same hash - skip embedding if unchanged
+        existing_hash = self._get_existing_hash(chunk_id)
+        if existing_hash == content_hash:
+            log.debug("Skipping embedding for %s - content unchanged", chunk_id)
+            return
+
+        # Generate embedding (content changed or new document)
         embedding = self._embed([chunk.content])[0]
 
-        # Prepare metadata
+        # Prepare metadata with content hash
         metadata = {
             "path": chunk.path,
             "title": chunk.metadata.title,
@@ -103,6 +143,7 @@ class ChromaIndex:
             "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
             "token_count": chunk.token_count or 0,
             "source_project": chunk.metadata.source_project or "",
+            "content_hash": content_hash,
         }
 
         # Upsert to handle updates
@@ -131,13 +172,48 @@ class ChromaIndex:
             chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
             seen_ids[chunk_id] = i  # Later occurrences overwrite earlier
 
-        # Build lists using deduplicated indices
+        # Compute content hashes and check which chunks need embedding
+        chunk_hashes: dict[str, str] = {}
+        for chunk_id, idx in seen_ids.items():
+            chunk = chunks[idx]
+            chunk_hashes[chunk_id] = self._content_hash(chunk.content)
+
+        # Fetch existing hashes in batch to determine which need re-embedding
+        existing_hashes: dict[str, str] = {}
+        try:
+            all_ids = list(seen_ids.keys())
+            existing = collection.get(ids=all_ids, include=["metadatas"])
+            if existing["ids"] and existing["metadatas"]:
+                for i, eid in enumerate(existing["ids"]):
+                    meta = existing["metadatas"][i] if i < len(existing["metadatas"]) else None
+                    if meta and meta.get("content_hash"):
+                        existing_hashes[eid] = meta["content_hash"]
+        except Exception:
+            pass
+
+        # Filter to only chunks that need embedding (new or changed)
+        ids_to_embed = []
+        for chunk_id in seen_ids:
+            new_hash = chunk_hashes[chunk_id]
+            old_hash = existing_hashes.get(chunk_id)
+            if old_hash != new_hash:
+                ids_to_embed.append(chunk_id)
+            else:
+                log.debug("Skipping embedding for %s - content unchanged", chunk_id)
+
+        if not ids_to_embed:
+            log.debug("All %d chunks unchanged, skipping batch embedding", len(seen_ids))
+            return
+
+        # Build lists for chunks that need embedding
         ids = []
         documents = []
         metadatas = []
 
-        for chunk_id, idx in seen_ids.items():
+        for chunk_id in ids_to_embed:
+            idx = seen_ids[chunk_id]
             chunk = chunks[idx]
+            content_hash = chunk_hashes[chunk_id]
             ids.append(chunk_id)
             documents.append(chunk.content)
             metadatas.append(
@@ -150,8 +226,16 @@ class ChromaIndex:
                     "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
                     "token_count": chunk.token_count or 0,
                     "source_project": chunk.metadata.source_project or "",
+                    "content_hash": content_hash,
                 }
             )
+
+        log.debug(
+            "Embedding %d of %d chunks (skipped %d unchanged)",
+            len(ids),
+            len(seen_ids),
+            len(seen_ids) - len(ids),
+        )
 
         # Generate embeddings in batch
         embeddings = self._embed(documents)

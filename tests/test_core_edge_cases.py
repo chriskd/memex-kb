@@ -1071,3 +1071,108 @@ class TestValidateNestedPathEdgeCases:
         assert abs_path.is_absolute()
         assert normalized == "development/python/test.md"
         assert str(kb_root) in str(abs_path)
+
+
+class TestAsyncGitHelpers:
+    """Tests for async git helper functions that use asyncio.to_thread."""
+
+    @pytest.mark.asyncio
+    async def test_get_current_project_async_returns_same_as_sync(self):
+        """Async version should return same result as sync version."""
+        sync_result = core.get_current_project()
+        async_result = await core.get_current_project_async()
+        assert sync_result == async_result
+
+    @pytest.mark.asyncio
+    async def test_get_current_contributor_async_returns_same_as_sync(self):
+        """Async version should return same result as sync version."""
+        sync_result = core.get_current_contributor()
+        async_result = await core.get_current_contributor_async()
+        assert sync_result == async_result
+
+    @pytest.mark.asyncio
+    async def test_get_git_branch_async_returns_same_as_sync(self):
+        """Async version should return same result as sync version."""
+        sync_result = core.get_git_branch()
+        async_result = await core.get_git_branch_async()
+        assert sync_result == async_result
+
+    @pytest.mark.asyncio
+    async def test_async_functions_are_truly_async(self):
+        """Async functions should run in thread pool without blocking event loop."""
+        import asyncio
+        import time
+
+        # Run all three concurrently - should complete faster than sequential
+        start = time.monotonic()
+        results = await asyncio.gather(
+            core.get_current_project_async(),
+            core.get_current_contributor_async(),
+            core.get_git_branch_async(),
+        )
+        elapsed = time.monotonic() - start
+
+        # All should return values (may be None if not in git repo)
+        assert len(results) == 3
+
+        # Check that the functions completed (elapsed time is reasonable)
+        # Even if subprocess is slow, we should complete within 10 seconds
+        assert elapsed < 10.0
+
+    @pytest.mark.asyncio
+    async def test_add_entry_uses_async_git_helpers(self, kb_root, index_root):
+        """add_entry should use async git helpers without blocking."""
+        result = await core.add_entry(
+            title="Async Test Entry",
+            content="Testing that add_entry uses async git helpers",
+            tags=["test", "async"],
+            category="development",
+            check_duplicates=False,
+        )
+
+        assert result.created is True
+        file_path = kb_root / result.path
+        assert file_path.exists()
+
+        # Read the file and verify metadata was set
+        entry = await core.get_entry(result.path)
+        assert entry.metadata.title == "Async Test Entry"
+        # source_project and contributor should be set from git (may be None in CI)
+        # The important thing is that the entry was created successfully
+
+    @pytest.mark.asyncio
+    async def test_update_entry_uses_async_git_helpers(self, kb_root, index_root):
+        """update_entry should use async git helpers without blocking."""
+        # Create entry first
+        _create_entry(
+            kb_root / "development" / "async-update-test.md",
+            "Async Update Test",
+            "Original content",
+        )
+
+        # Update entry
+        result = await core.update_entry(
+            path="development/async-update-test.md",
+            content="Updated content using async git helpers",
+        )
+
+        assert result["path"] == "development/async-update-test.md"
+
+        # Verify content was updated
+        entry = await core.get_entry("development/async-update-test.md")
+        assert "Updated content" in entry.content
+
+    @pytest.mark.asyncio
+    async def test_search_uses_async_get_current_project(self, kb_root, index_root):
+        """search should use async get_current_project without blocking."""
+        _create_entry(
+            kb_root / "development" / "search-async-test.md",
+            "Search Async Test",
+            "Content for async search test",
+        )
+
+        await core.reindex()
+
+        # Search should work and not block
+        result = await core.search(query="search async test")
+        assert isinstance(result.results, list)

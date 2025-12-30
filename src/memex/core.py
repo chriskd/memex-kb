@@ -9,6 +9,7 @@ Design principles:
 - Lazy initialization of expensive resources (searcher, embeddings)
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -179,6 +180,44 @@ def get_git_branch() -> str | None:
     except (subprocess.TimeoutExpired, OSError) as e:
         log.debug("Could not get git branch: %s", e)
     return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Async wrappers for git subprocess calls
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def get_current_project_async() -> str | None:
+    """Async version of get_current_project.
+
+    Runs the blocking subprocess call in a thread pool to avoid blocking the event loop.
+
+    Returns:
+        Project name (e.g., "memex-ansible") or None if unavailable.
+    """
+    return await asyncio.to_thread(get_current_project)
+
+
+async def get_current_contributor_async() -> str | None:
+    """Async version of get_current_contributor.
+
+    Runs the blocking subprocess call in a thread pool to avoid blocking the event loop.
+
+    Returns:
+        Contributor string like "Name <email>" or "Name", or None if unavailable.
+    """
+    return await asyncio.to_thread(get_current_contributor)
+
+
+async def get_git_branch_async() -> str | None:
+    """Async version of get_git_branch.
+
+    Runs the blocking subprocess call in a thread pool to avoid blocking the event loop.
+
+    Returns:
+        Branch name (e.g., "main", "feat/search") or None if not in a git repo.
+    """
+    return await asyncio.to_thread(get_git_branch)
 
 
 def get_actor_identity() -> str | None:
@@ -766,8 +805,8 @@ async def search(
         SearchResponse with results and optional warnings.
     """
     searcher = get_searcher()
-    # Auto-detect project context for boosting entries from current project
-    project_context = get_current_project()
+    # Auto-detect project context for boosting entries from current project (async to avoid blocking)
+    project_context = await get_current_project_async()
     # Auto-discover KB context if not provided
     if kb_context is None:
         kb_context = get_kb_context()
@@ -919,14 +958,21 @@ async def add_entry(
             link_section += f"- [[{link}]]\n"
         final_content += link_section
 
+    # Gather git info concurrently (avoids blocking event loop)
+    source_project, contributor, git_branch = await asyncio.gather(
+        get_current_project_async(),
+        get_current_contributor_async(),
+        get_git_branch_async(),
+    )
+
     # Build metadata and frontmatter using utilities
     metadata = create_new_metadata(
         title=title,
         tags=tags,
-        source_project=get_current_project(),
-        contributor=get_current_contributor(),
+        source_project=source_project,
+        contributor=contributor,
         model=get_llm_model(),
-        git_branch=get_git_branch(),
+        git_branch=git_branch,
         actor=get_actor_identity(),
     )
     frontmatter = build_frontmatter(metadata)
@@ -1031,13 +1077,20 @@ async def update_entry(
     if not new_tags:
         raise ValueError("At least one tag is required")
 
+    # Gather git info concurrently (avoids blocking event loop)
+    contributor, edit_source, git_branch = await asyncio.gather(
+        get_current_contributor_async(),
+        get_current_project_async(),
+        get_git_branch_async(),
+    )
+
     updated_metadata = update_metadata_for_edit(
         metadata,
         new_tags=new_tags,
-        new_contributor=get_current_contributor(),
-        edit_source=get_current_project(),
+        new_contributor=contributor,
+        edit_source=edit_source,
         model=get_llm_model(),
-        git_branch=get_git_branch(),
+        git_branch=git_branch,
         actor=get_actor_identity(),
     )
     frontmatter = build_frontmatter(updated_metadata)
@@ -1976,9 +2029,10 @@ async def hubs(limit: int = 10) -> list[dict]:
     if not kb_root.exists():
         return []
 
-    # Build connection counts
+    # Build connection counts and titles in single pass
     all_backlinks = get_backlink_index()
     connection_counts: dict[str, dict] = {}
+    titles: dict[str, str] = {}
 
     # Count incoming links from backlinks index
     for path_key, sources in all_backlinks.items():
@@ -1986,7 +2040,7 @@ async def hubs(limit: int = 10) -> list[dict]:
             connection_counts[path_key] = {"incoming": 0, "outgoing": 0}
         connection_counts[path_key]["incoming"] = len(sources)
 
-    # Count outgoing links from each entry
+    # Count outgoing links and collect titles from each entry (single parse)
     for md_file in kb_root.rglob("*.md"):
         if md_file.name.startswith("_"):
             continue
@@ -1995,8 +2049,9 @@ async def hubs(limit: int = 10) -> list[dict]:
         path_key = rel_path[:-3] if rel_path.endswith(".md") else rel_path
 
         try:
-            _, content, _ = parse_entry(md_file)
+            metadata, content, _ = parse_entry(md_file)
             links = extract_links(content)
+            titles[path_key] = metadata.title
         except ParseError:
             continue
 
@@ -2011,15 +2066,8 @@ async def hubs(limit: int = 10) -> list[dict]:
         if total == 0:
             continue
 
-        # Get title
-        file_path = kb_root / f"{path_key}.md"
-        title = path_key
-        if file_path.exists():
-            try:
-                metadata, _, _ = parse_entry(file_path)
-                title = metadata.title
-            except ParseError as e:
-                log.debug("Could not parse title from %s: %s", file_path, e)
+        # Use cached title or fall back to path_key
+        title = titles.get(path_key, path_key)
 
         results.append({
             "path": f"{path_key}.md",
