@@ -1,20 +1,15 @@
 """Hybrid search combining Whoosh BM25 and ChromaDB semantic search."""
 
-from __future__ import annotations
-
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from ..config import DEFAULT_SEARCH_LIMIT, RRF_K, get_kb_root
 from ..models import DocumentChunk, IndexStatus, SearchResult
 from .chroma_index import ChromaIndex
 from .whoosh_index import WhooshIndex
-
-if TYPE_CHECKING:
-    from ..context import KBContext
 
 SearchMode = Literal["hybrid", "keyword", "semantic"]
 
@@ -43,7 +38,6 @@ class HybridSearcher:
         limit: int = DEFAULT_SEARCH_LIMIT,
         mode: SearchMode = "hybrid",
         project_context: str | None = None,
-        kb_context: KBContext | None = None,
     ) -> list[SearchResult]:
         """Search the knowledge base.
 
@@ -52,7 +46,6 @@ class HybridSearcher:
             limit: Maximum number of results.
             mode: Search mode - "hybrid", "keyword", or "semantic".
             project_context: Current project name for context boosting.
-            kb_context: Project context for path-based boosting.
 
         Returns:
             List of search results, deduplicated by document path.
@@ -62,22 +55,18 @@ class HybridSearcher:
 
         if mode == "keyword":
             results = self._whoosh.search(query, limit=fetch_limit)
-            results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
+            results = self._apply_ranking_adjustments(query, results, project_context)
         elif mode == "semantic":
             results = self._chroma.search(query, limit=fetch_limit)
-            results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
+            results = self._apply_ranking_adjustments(query, results, project_context)
         else:
-            results = self._hybrid_search(query, limit=fetch_limit, project_context=project_context, kb_context=kb_context)
+            results = self._hybrid_search(query, limit=fetch_limit, project_context=project_context)
 
         # Deduplicate by path, keeping highest-scoring chunk per document
         return self._deduplicate_by_path(results, limit)
 
     def _hybrid_search(
-        self,
-        query: str,
-        limit: int,
-        project_context: str | None = None,
-        kb_context: KBContext | None = None,
+        self, query: str, limit: int, project_context: str | None = None
     ) -> list[SearchResult]:
         """Perform hybrid search using Reciprocal Rank Fusion.
 
@@ -85,7 +74,6 @@ class HybridSearcher:
             query: Search query string.
             limit: Maximum number of results.
             project_context: Current project name for context boosting.
-            kb_context: Project context for path-based boosting.
 
         Returns:
             List of merged search results.
@@ -99,12 +87,12 @@ class HybridSearcher:
         if not whoosh_results and not chroma_results:
             return []
         if not whoosh_results:
-            return self._apply_ranking_adjustments(query, chroma_results[:limit], project_context, kb_context)
+            return self._apply_ranking_adjustments(query, chroma_results[:limit], project_context)
         if not chroma_results:
-            return self._apply_ranking_adjustments(query, whoosh_results[:limit], project_context, kb_context)
+            return self._apply_ranking_adjustments(query, whoosh_results[:limit], project_context)
 
         # Apply RRF
-        return self._rrf_merge(query, whoosh_results, chroma_results, limit, project_context, kb_context)
+        return self._rrf_merge(query, whoosh_results, chroma_results, limit, project_context)
 
     def _rrf_merge(
         self,
@@ -113,7 +101,6 @@ class HybridSearcher:
         chroma_results: list[SearchResult],
         limit: int,
         project_context: str | None = None,
-        kb_context: KBContext | None = None,
     ) -> list[SearchResult]:
         """Merge results using Reciprocal Rank Fusion.
 
@@ -124,7 +111,6 @@ class HybridSearcher:
             chroma_results: Results from semantic search.
             limit: Maximum number of results to return.
             project_context: Current project name for context boosting.
-            kb_context: Project context for path-based boosting.
 
         Returns:
             Merged and re-ranked results.
@@ -174,28 +160,17 @@ class HybridSearcher:
                 )
             )
 
-        return self._apply_ranking_adjustments(query, final_results, project_context, kb_context)
+        return self._apply_ranking_adjustments(query, final_results, project_context)
 
     def _apply_ranking_adjustments(
-        self,
-        query: str,
-        results: list[SearchResult],
-        project_context: str | None = None,
-        kb_context: KBContext | None = None,
+        self, query: str, results: list[SearchResult], project_context: str | None = None
     ) -> list[SearchResult]:
-        """Boost results with matching tags and project/path context.
+        """Boost results with matching tags and project context, then renormalize scores."""
 
-        Applies two types of boosts:
-        1. Tag boost: +0.05 per matching tag in query (always stacks)
-        2. Context boost: MAX of project (+0.15) or KB path (+0.12) boost
-           - Project boost: entry was created from current project
-           - Path boost: entry matches .kbcontext paths
-           These don't stack to avoid overboosting correlated signals.
-        """
         if not results:
             return results
 
-        # Tag boost: +0.05 per matching tag (always applies, stacks with context)
+        # Tag boost: +0.05 per matching tag
         tokens = {tok for tok in re.split(r"\W+", query.lower()) if tok}
         if tokens:
             for result in results:
@@ -204,28 +179,11 @@ class HybridSearcher:
                 if overlap:
                     result.score += 0.05 * len(overlap)
 
-        # Context boost: apply MAX of project_context or kb_context path boost
-        # These are correlated signals so we don't stack them
-        for result in results:
-            project_boost = 0.0
-            path_boost = 0.0
-
-            # Check project context boost (+0.15)
-            if project_context and result.source_project == project_context:
-                project_boost = 0.15
-
-            # Check KB context path boost (+0.12)
-            if kb_context:
-                from ..context import matches_glob
-
-                boost_paths = kb_context.get_all_boost_paths()
-                for pattern in boost_paths:
-                    if matches_glob(result.path, pattern):
-                        path_boost = 0.12
-                        break
-
-            # Apply the higher of the two (don't stack)
-            result.score += max(project_boost, path_boost)
+        # Project context boost: +0.15 for entries from current project
+        if project_context:
+            for result in results:
+                if result.source_project and result.source_project == project_context:
+                    result.score += 0.15
 
         # Renormalize scores to 0-1
         max_score = max((res.score for res in results), default=1.0)
