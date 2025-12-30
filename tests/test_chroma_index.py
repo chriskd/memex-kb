@@ -756,3 +756,240 @@ class TestChromaErrorHandling:
         )
         chroma_index.index_document(chunk)
         assert chroma_index.doc_count() == 1
+
+
+class TestChromaEmbeddingCache:
+    """Test embedding cache functionality to avoid regenerating embeddings for unchanged content."""
+
+    def test_content_hash_is_deterministic(self, chroma_index):
+        """Same content produces same hash."""
+        text = "Some test content for hashing"
+        hash1 = chroma_index._content_hash(text)
+        hash2 = chroma_index._content_hash(text)
+        assert hash1 == hash2
+        assert len(hash1) == 16  # 16-char hex hash
+
+    def test_content_hash_differs_for_different_content(self, chroma_index):
+        """Different content produces different hashes."""
+        hash1 = chroma_index._content_hash("Content A")
+        hash2 = chroma_index._content_hash("Content B")
+        assert hash1 != hash2
+
+    def test_unchanged_content_skips_embedding(self, chroma_index):
+        """Re-indexing unchanged content skips embedding generation."""
+        chunk = DocumentChunk(
+            path="cache/test.md",
+            section="intro",
+            content="Original content that won't change",
+            metadata=EntryMetadata(
+                title="Cache Test",
+                tags=["test"],
+                created=date(2024, 1, 1),
+            ),
+        )
+        # First index - should generate embedding
+        chroma_index.index_document(chunk)
+        assert chroma_index.doc_count() == 1
+
+        # Track embed calls
+        embed_call_count = 0
+        original_embed = chroma_index._embed
+
+        def counting_embed(texts):
+            nonlocal embed_call_count
+            embed_call_count += 1
+            return original_embed(texts)
+
+        chroma_index._embed = counting_embed
+
+        # Re-index same content - should skip embedding
+        chroma_index.index_document(chunk)
+        assert embed_call_count == 0  # No new embeddings generated
+        assert chroma_index.doc_count() == 1
+
+    def test_changed_content_regenerates_embedding(self, chroma_index):
+        """Changed content triggers new embedding generation."""
+        chunk1 = DocumentChunk(
+            path="cache/update.md",
+            section="intro",
+            content="Original content version one",
+            metadata=EntryMetadata(
+                title="Cache Update Test",
+                tags=["test"],
+                created=date(2024, 1, 1),
+            ),
+        )
+        chroma_index.index_document(chunk1)
+
+        # Track embed calls
+        embed_call_count = 0
+        original_embed = chroma_index._embed
+
+        def counting_embed(texts):
+            nonlocal embed_call_count
+            embed_call_count += 1
+            return original_embed(texts)
+
+        chroma_index._embed = counting_embed
+
+        # Update content - should regenerate embedding
+        chunk2 = DocumentChunk(
+            path="cache/update.md",
+            section="intro",
+            content="Updated content version two",
+            metadata=EntryMetadata(
+                title="Cache Update Test",
+                tags=["test"],
+                created=date(2024, 1, 1),
+            ),
+        )
+        chroma_index.index_document(chunk2)
+        assert embed_call_count == 1  # New embedding generated
+        assert chroma_index.doc_count() == 1
+
+        # Verify new content is searchable
+        results = chroma_index.search("version two")
+        assert len(results) == 1
+
+    def test_batch_index_skips_unchanged_content(self, chroma_index):
+        """Batch indexing skips embedding for unchanged documents."""
+        chunks = [
+            DocumentChunk(
+                path="batch/doc1.md",
+                section=None,
+                content="First document content",
+                metadata=EntryMetadata(
+                    title="Doc 1",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="batch/doc2.md",
+                section=None,
+                content="Second document content",
+                metadata=EntryMetadata(
+                    title="Doc 2",
+                    tags=["test"],
+                    created=date(2024, 1, 2),
+                ),
+            ),
+        ]
+        # First index
+        chroma_index.index_documents(chunks)
+        assert chroma_index.doc_count() == 2
+
+        # Track embed calls
+        embed_call_count = 0
+        original_embed = chroma_index._embed
+
+        def counting_embed(texts):
+            nonlocal embed_call_count
+            embed_call_count += 1
+            return original_embed(texts)
+
+        chroma_index._embed = counting_embed
+
+        # Re-index same content - should skip all embeddings
+        chroma_index.index_documents(chunks)
+        assert embed_call_count == 0
+
+    def test_batch_index_only_embeds_changed_content(self, chroma_index):
+        """Batch indexing only generates embeddings for changed documents."""
+        chunks = [
+            DocumentChunk(
+                path="partial/doc1.md",
+                section=None,
+                content="First document unchanged",
+                metadata=EntryMetadata(
+                    title="Doc 1",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="partial/doc2.md",
+                section=None,
+                content="Second document will change",
+                metadata=EntryMetadata(
+                    title="Doc 2",
+                    tags=["test"],
+                    created=date(2024, 1, 2),
+                ),
+            ),
+        ]
+        chroma_index.index_documents(chunks)
+
+        # Track embed calls and what was embedded
+        embedded_texts = []
+        original_embed = chroma_index._embed
+
+        def tracking_embed(texts):
+            embedded_texts.extend(texts)
+            return original_embed(texts)
+
+        chroma_index._embed = tracking_embed
+
+        # Update only second document
+        updated_chunks = [
+            chunks[0],  # Unchanged
+            DocumentChunk(
+                path="partial/doc2.md",
+                section=None,
+                content="Second document has been updated",
+                metadata=EntryMetadata(
+                    title="Doc 2",
+                    tags=["test"],
+                    created=date(2024, 1, 2),
+                ),
+            ),
+        ]
+        chroma_index.index_documents(updated_chunks)
+
+        # Should only embed the changed document
+        assert len(embedded_texts) == 1
+        assert "updated" in embedded_texts[0]
+
+    def test_content_hash_stored_in_metadata(self, chroma_index):
+        """Content hash is stored in document metadata."""
+        chunk = DocumentChunk(
+            path="hash/meta.md",
+            section=None,
+            content="Content for hash storage test",
+            metadata=EntryMetadata(
+                title="Hash Meta Test",
+                tags=["test"],
+                created=date(2024, 1, 1),
+            ),
+        )
+        chroma_index.index_document(chunk)
+
+        # Verify hash is stored
+        collection = chroma_index._get_collection()
+        result = collection.get(ids=["hash/meta.md#main"], include=["metadatas"])
+        assert result["metadatas"]
+        assert result["metadatas"][0].get("content_hash")
+        assert len(result["metadatas"][0]["content_hash"]) == 16
+
+    def test_get_existing_hash_returns_none_for_missing(self, chroma_index):
+        """_get_existing_hash returns None for non-existent documents."""
+        result = chroma_index._get_existing_hash("nonexistent/path.md#main")
+        assert result is None
+
+    def test_get_existing_hash_returns_hash_for_existing(self, chroma_index):
+        """_get_existing_hash returns the stored hash for existing documents."""
+        chunk = DocumentChunk(
+            path="existing/doc.md",
+            section="intro",
+            content="Test content for hash retrieval",
+            metadata=EntryMetadata(
+                title="Existing Doc",
+                tags=["test"],
+                created=date(2024, 1, 1),
+            ),
+        )
+        chroma_index.index_document(chunk)
+
+        expected_hash = chroma_index._content_hash(chunk.content)
+        actual_hash = chroma_index._get_existing_hash("existing/doc.md#intro")
+        assert actual_hash == expected_hash

@@ -1,6 +1,6 @@
 """Tests for markdown-it-py based renderer."""
 
-from memex.parser.md_renderer import MarkdownResult, render_markdown
+from memex.parser.md_renderer import MarkdownResult, extract_links_only, render_markdown
 
 
 class TestWikilinks:
@@ -181,3 +181,75 @@ class TestReturnType:
         assert isinstance(result, MarkdownResult)
         assert isinstance(result.html, str)
         assert isinstance(result.links, list)
+
+
+class TestExtractLinksOnly:
+    """Test optimized extract_links_only() function."""
+
+    def test_simple_link(self):
+        """Extract simple wikilink."""
+        links = extract_links_only("See [[foo/bar]] for details.")
+        assert links == ["foo/bar"]
+
+    def test_aliased_link(self):
+        """Extract aliased wikilink target."""
+        links = extract_links_only("Check [[path/to/doc|the documentation]].")
+        assert links == ["path/to/doc"]
+
+    def test_multiple_links(self):
+        """Extract multiple links with deduplication."""
+        links = extract_links_only("See [[foo]] and [[bar]] and [[foo]] again.")
+        assert links == ["foo", "bar"]
+
+    def test_normalizes_md_extension(self):
+        """Should normalize .md extension."""
+        links = extract_links_only("See [[doc.md]].")
+        assert links == ["doc"]
+
+    def test_normalizes_paths(self):
+        """Should normalize path separators."""
+        links = extract_links_only("See [[/path/to/doc/]].")
+        assert links == ["path/to/doc"]
+
+    def test_empty_content(self):
+        """Empty string returns empty list."""
+        links = extract_links_only("")
+        assert links == []
+
+    def test_no_wikilinks(self):
+        """Content without wikilinks returns empty list."""
+        links = extract_links_only("Just plain text.")
+        assert links == []
+
+    def test_malformed_wikilink(self):
+        """Incomplete wikilink is not extracted."""
+        links = extract_links_only("See [[incomplete")
+        assert links == []
+
+    def test_wikilink_in_code_not_parsed(self):
+        """Wikilinks in code blocks should NOT be extracted."""
+        content = """
+```
+This [[is not a link]]
+```
+"""
+        links = extract_links_only(content)
+        assert links == []
+
+    def test_matches_render_markdown(self):
+        """extract_links_only() should return same results as render_markdown().links."""
+        test_cases = [
+            "See [[foo/bar]] for details.",
+            "Check [[path/to/doc|the documentation]].",
+            "See [[foo]] and [[bar]] and [[foo]] again.",
+            "See [[doc.md]].",
+            "See [[/path/to/doc/]].",
+            "",
+            "Just plain text.",
+            "See [[incomplete",
+            "# Heading\n\nSee [[link1]] and [[link2]].",
+        ]
+        for content in test_cases:
+            assert extract_links_only(content) == render_markdown(content).links, (
+                f"Mismatch for: {content!r}"
+            )

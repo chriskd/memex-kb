@@ -204,8 +204,7 @@ class FileWatcher:
                     chunk.model_copy(update={"path": relative_path}) for chunk in chunks
                 ]
 
-                # Update index
-                self._searcher.delete_document(relative_path)
+                # Update index (both Whoosh and Chroma support upsert semantics)
                 self._searcher.index_chunks(normalized_chunks)
                 logger.debug(f"Re-indexed: {relative_path}")
                 refresh_backlinks = True

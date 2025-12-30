@@ -170,8 +170,8 @@ def render_markdown(content: str) -> MarkdownResult:
 def extract_links_only(content: str) -> list[str]:
     """Extract wikilinks from markdown content (no HTML rendering).
 
-    For cases where only links are needed, this is equivalent to
-    render_markdown(content).links but more explicit.
+    This is optimized to only parse tokens and extract links,
+    avoiding the overhead of full HTML rendering.
 
     Args:
         content: Markdown content.
@@ -179,4 +179,6 @@ def extract_links_only(content: str) -> list[str]:
     Returns:
         List of normalized wikilink targets.
     """
-    return render_markdown(content).links
+    md = _get_parser()
+    tokens = md.parse(content)
+    return _extract_wikilinks(tokens)
