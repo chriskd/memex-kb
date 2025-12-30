@@ -16,7 +16,7 @@ log_feature() { printf '[voidlabs-devtools:%s] %s\n' "$1" "$2"; }
 # Defaults (all features enabled)
 VOIDLABS_BEADS="${VOIDLABS_BEADS:-true}"
 VOIDLABS_VLMAIL="${VOIDLABS_VLMAIL:-true}"
-VOIDLABS_VLKB="${VOIDLABS_VLKB:-true}"
+VOIDLABS_MEMEX="${VOIDLABS_MEMEX:-true}"
 VOIDLABS_FACTORY="${VOIDLABS_FACTORY:-true}"
 VOIDLABS_CHEZMOI="${VOIDLABS_CHEZMOI:-true}"
 VOIDLABS_WORKTRUNK="${VOIDLABS_WORKTRUNK:-true}"
@@ -204,61 +204,62 @@ export BEADS_MAIL_DELEGATE=\"vl-mail\"
     log_feature "vl-mail" "bd mail delegate configured"
 }
 
-# --- vl-kb Knowledge Base CLI ---
-setup_vlkb() {
-    local VLKB_REPO="/srv/fast/code/memex"
+# --- Memex Knowledge Base CLI (mx) ---
+setup_memex() {
+    local MEMEX_REPO="/srv/fast/code/memex"
 
     # Check if memex repo is available
-    if [[ ! -d "$VLKB_REPO" ]]; then
-        log_feature "vl-kb" "memex repo not found at $VLKB_REPO, skipping"
+    if [[ ! -d "$MEMEX_REPO" ]]; then
+        log_feature "memex" "memex repo not found at $MEMEX_REPO, skipping"
         return 0
     fi
 
     # Check if uv is available
     if ! command -v uv &>/dev/null; then
-        log_feature "vl-kb" "uv not found, skipping"
+        log_feature "memex" "uv not found, skipping"
         return 0
     fi
 
     # Ensure ~/.local/bin is in PATH (where uv tool installs binaries)
     export PATH="$HOME/.local/bin:$PATH"
 
-    # Install/update vl-kb if not present or if source changed
+    # Install/update memex if not present or if source changed
     # Use a marker file to track installation timestamp
-    local MARKER="$HOME/.local/share/vl-kb-installed"
+    local MARKER="$HOME/.local/share/memex-installed"
     local NEEDS_INSTALL=false
 
-    if ! command -v vl-kb &>/dev/null; then
+    if ! command -v mx &>/dev/null; then
         NEEDS_INSTALL=true
     elif [[ ! -f "$MARKER" ]]; then
         NEEDS_INSTALL=true
-    elif [[ "$VLKB_REPO/src/memex/cli.py" -nt "$MARKER" ]] || \
-         [[ "$VLKB_REPO/src/memex/core.py" -nt "$MARKER" ]] || \
-         [[ "$VLKB_REPO/pyproject.toml" -nt "$MARKER" ]]; then
+    elif [[ "$MEMEX_REPO/src/memex/cli.py" -nt "$MARKER" ]] || \
+         [[ "$MEMEX_REPO/src/memex/core.py" -nt "$MARKER" ]] || \
+         [[ "$MEMEX_REPO/pyproject.toml" -nt "$MARKER" ]]; then
         NEEDS_INSTALL=true
     fi
 
     if [[ "$NEEDS_INSTALL" == "true" ]]; then
-        log_feature "vl-kb" "Installing vl-kb from $VLKB_REPO..."
+        log_feature "memex" "Installing memex (mx) from $MEMEX_REPO..."
         # Use uv tool install for isolated environment with CLI in PATH
-        # Note: chromadb/sentence-transformers require build tools (gcc, rust)
+        # --python 3.11: Pin to Python 3.11 (onnxruntime lacks wheels for newer versions like 3.14)
+        # --refresh: Force fresh package metadata
         local install_output
-        if install_output=$(uv tool install --force -e "$VLKB_REPO" 2>&1); then
+        if install_output=$(uv tool install --force --refresh --python 3.11 -e "$MEMEX_REPO" 2>&1); then
             mkdir -p "$(dirname "$MARKER")"
             touch "$MARKER"
-            log_feature "vl-kb" "Installed vl-kb CLI"
+            log_feature "memex" "Installed memex CLI (mx)"
         else
-            log_feature "vl-kb" "Failed to install vl-kb:"
+            log_feature "memex" "Failed to install memex:"
             echo "$install_output" | head -20
             return 0
         fi
     else
-        log_feature "vl-kb" "vl-kb already up to date"
+        log_feature "memex" "memex (mx) already up to date"
     fi
 
     # Verify installation
-    if command -v vl-kb &>/dev/null; then
-        log_feature "vl-kb" "vl-kb ready ($(vl-kb --version 2>/dev/null || echo 'version unknown'))"
+    if command -v mx &>/dev/null; then
+        log_feature "memex" "mx ready ($(mx --version 2>/dev/null || echo 'version unknown'))"
     fi
 }
 
@@ -475,7 +476,7 @@ main() {
     # Optional features (controlled by config)
     [[ "$VOIDLABS_BEADS" == "true" ]] && setup_beads
     [[ "$VOIDLABS_VLMAIL" == "true" ]] && setup_vlmail
-    [[ "$VOIDLABS_VLKB" == "true" ]] && setup_vlkb
+    [[ "$VOIDLABS_MEMEX" == "true" ]] && setup_memex
     [[ "$VOIDLABS_FACTORY" == "true" ]] && setup_factory
     [[ "$VOIDLABS_CHEZMOI" == "true" ]] && setup_chezmoi
     [[ "$VOIDLABS_WORKTRUNK" == "true" ]] && setup_worktrunk
