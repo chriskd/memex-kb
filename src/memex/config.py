@@ -8,22 +8,40 @@ import os
 from pathlib import Path
 
 
+class ConfigurationError(Exception):
+    """Raised when required configuration is missing."""
+
+    pass
+
+
 def get_kb_root() -> Path:
-    """Get the knowledge base root directory."""
+    """Get the knowledge base root directory.
+
+    Raises:
+        ConfigurationError: If MEMEX_KB_ROOT is not set.
+    """
     root = os.environ.get("MEMEX_KB_ROOT")
-    if root:
-        return Path(root)
-    # Default to kb/ relative to package
-    return Path(__file__).parent.parent.parent / "kb"
+    if not root:
+        raise ConfigurationError(
+            "MEMEX_KB_ROOT environment variable is not set. "
+            "Set it to the path of your knowledge base directory."
+        )
+    return Path(root)
 
 
 def get_index_root() -> Path:
-    """Get the search index root directory."""
+    """Get the search index root directory.
+
+    Raises:
+        ConfigurationError: If MEMEX_INDEX_ROOT is not set.
+    """
     root = os.environ.get("MEMEX_INDEX_ROOT")
-    if root:
-        return Path(root)
-    # Default to .indices/ relative to package
-    return Path(__file__).parent.parent.parent / ".indices"
+    if not root:
+        raise ConfigurationError(
+            "MEMEX_INDEX_ROOT environment variable is not set. "
+            "Set it to the path where search indices should be stored."
+        )
+    return Path(root)
 
 
 # =============================================================================
