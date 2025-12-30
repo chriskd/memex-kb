@@ -2,7 +2,31 @@
 name = "memex"
 version = "0.1.0"
 description = "Personal knowledge base with semantic search"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
+authors = [
+    { name = "Void Labs" },
+]
+keywords = [
+    "knowledge-base",
+    "semantic-search",
+    "mcp",
+    "embeddings",
+    "personal-wiki",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Documentation",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
 dependencies = [
     "fastmcp>=2.14.1",
     "pydantic>=2.12.0",
@@ -22,6 +46,12 @@ dependencies = [
 memex = "memex.server:main"
 memex-web = "memex.webapp.api:main"
 mx = "memex.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/voidlabs/memex"
+Documentation = "https://github.com/voidlabs/memex#readme"
+Repository = "https://github.com/voidlabs/memex"
+Issues = "https://github.com/voidlabs/memex/issues"
 
 [build-system]
 requires = ["hatchling"]
