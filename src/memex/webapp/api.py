@@ -138,10 +138,13 @@ class BeadsIssue(BaseModel):
     priority_label: str
     issue_type: str
     created_at: str | None = None
+    created_by: str | None = None
     updated_at: str | None = None
     closed_at: str | None = None
     close_reason: str | None = None
     dependency_count: int = 0
+    dependent_count: int = 0
+    dependents: list[dict] | None = None  # Child issues for epics
 
 
 class KanbanColumn(BaseModel):
@@ -616,10 +619,13 @@ def _normalize_issue(raw: dict) -> BeadsIssue:
         priority_label=PRIORITY_LABELS.get(priority, "medium"),
         issue_type=raw.get("issue_type", "task"),
         created_at=raw.get("created_at"),
+        created_by=raw.get("created_by"),
         updated_at=raw.get("updated_at"),
         closed_at=raw.get("closed_at"),
         close_reason=raw.get("close_reason"),
         dependency_count=raw.get("dependency_count", 0),
+        dependent_count=raw.get("dependent_count", 0),
+        dependents=raw.get("dependents"),  # Child issues for epics
     )
 
 
@@ -642,11 +648,16 @@ async def get_beads_config():
 
 
 @app.get("/api/beads/kanban", response_model=BeadsKanbanResponse)
-async def get_beads_kanban():
-    """Get kanban board for KB's beads project."""
-    project = _get_default_beads_project()
-    if not project:
-        raise HTTPException(status_code=404, detail="No beads project found")
+async def get_beads_kanban(project_path: str | None = Query(None, description="Optional beads project path")):
+    """Get kanban board for a beads project."""
+    if project_path:
+        project = find_beads_db(project_path)
+        if not project:
+            raise HTTPException(status_code=404, detail=f"No beads project found at: {project_path}")
+    else:
+        project = _get_default_beads_project()
+        if not project:
+            raise HTTPException(status_code=404, detail="No beads project found")
 
     raw_issues = list_issues(project.db_path)
     issues = [_normalize_issue(i) for i in raw_issues]
@@ -679,11 +690,16 @@ async def get_beads_kanban():
 
 
 @app.get("/api/beads/issues/{issue_id}", response_model=BeadsIssueDetailResponse)
-async def get_beads_issue(issue_id: str):
+async def get_beads_issue(issue_id: str, project_path: str | None = Query(None, description="Optional beads project path")):
     """Get detailed issue info with comments."""
-    project = _get_default_beads_project()
-    if not project:
-        raise HTTPException(status_code=404, detail="No beads project found")
+    if project_path:
+        project = find_beads_db(project_path)
+        if not project:
+            raise HTTPException(status_code=404, detail=f"No beads project found at: {project_path}")
+    else:
+        project = _get_default_beads_project()
+        if not project:
+            raise HTTPException(status_code=404, detail="No beads project found")
 
     raw = show_issue(project.db_path, issue_id)
     if not raw:

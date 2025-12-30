@@ -1444,6 +1444,34 @@
             margin-top: 4px;
         }
 
+        /* Child issues in modal */
+        .modal-children {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .modal-child-issue {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-surface);
+            border-radius: 6px;
+            border: 1px solid var(--border-void);
+        }
+
+        .modal-child-id {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .modal-child-title {
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
         /* Clickable beads issues in sidebar */
         .beads-issue-item {
             cursor: pointer;
@@ -1680,6 +1708,7 @@
             kanban: null,
             beadsAvailable: null,
             linkedBeadsIssues: [],
+            currentBeadsProject: null,  // beads_project from current entry
         };
 
         // API helpers
@@ -1724,16 +1753,18 @@
                 return this.get('/beads/config');
             },
 
-            async getBeadsKanban() {
-                return this.get('/beads/kanban');
+            async getBeadsKanban(projectPath = null) {
+                const params = projectPath ? `?project_path=${encodeURIComponent(projectPath)}` : '';
+                return this.get(`/beads/kanban${params}`);
             },
 
             async getEntryBeads(path) {
                 return this.get(`/entries/${encodeURIComponent(path)}/beads`);
             },
 
-            async getIssueDetail(issueId) {
-                return this.get(`/beads/issues/${encodeURIComponent(issueId)}`);
+            async getIssueDetail(issueId, projectPath = null) {
+                const params = projectPath ? `?project_path=${encodeURIComponent(projectPath)}` : '';
+                return this.get(`/beads/issues/${encodeURIComponent(issueId)}${params}`);
             },
         };
 
@@ -2163,14 +2194,16 @@
             issuesList.innerHTML = '<li class="link-item">Checking...</li>';
             state.linkedBeadsIssues = [];
 
-            if (!state.beadsAvailable) {
-                issuesList.innerHTML = '<li class="link-item" style="color: var(--text-muted);">Issues not available</li>';
-                return;
-            }
-
+            // Always try to fetch entry beads - entries can have their own beads_project
+            // even when KB root doesn't have beads
             try {
                 issuesList.innerHTML = '<li class="link-item">Loading...</li>';
                 const beadsData = await api.getEntryBeads(entry.path);
+
+                // Track current entry's beads project for kanban view
+                state.currentBeadsProject = beadsData.beads_project;
+                // Reset kanban when project changes
+                state.kanban = null;
 
                 const allIssues = [
                     ...beadsData.linked_issues,
@@ -2251,14 +2284,17 @@
         async function loadKanban() {
             const container = $('#kanban-container');
 
-            if (!state.beadsAvailable) {
+            // Use current entry's beads_project, or fall back to KB root's beads
+            const projectPath = state.currentBeadsProject;
+
+            if (!state.beadsAvailable && !projectPath) {
                 container.innerHTML = `
                     <div class="kanban-unavailable">
                         <div class="kanban-unavailable-icon">&#128203;</div>
                         <h2 class="kanban-unavailable-title">Issues Not Available</h2>
                         <p class="kanban-unavailable-message">
-                            No issue tracker found for this knowledge base.
-                            Initialize with <code>bd init</code> to enable.
+                            No issue tracker found. Select an entry with a linked beads project,
+                            or initialize KB with <code>bd init</code>.
                         </p>
                     </div>
                 `;
@@ -2268,7 +2304,7 @@
             container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
             try {
-                const data = await api.getBeadsKanban();
+                const data = await api.getBeadsKanban(projectPath);
                 state.kanban = data;
                 renderKanban(data);
             } catch (e) {
@@ -2367,7 +2403,7 @@
             overlay.classList.add('active');
 
             try {
-                const data = await api.getIssueDetail(issueId);
+                const data = await api.getIssueDetail(issueId, state.currentBeadsProject);
                 const issue = data.issue;
                 const comments = data.comments || [];
 
@@ -2430,8 +2466,14 @@
                         ` : ''}
                         ${closeReasonHtml}
                         <div class="modal-section">
-                            <div class="modal-section-label">Timestamps</div>
+                            <div class="modal-section-label">Details</div>
                             <div class="modal-timestamps">
+                                ${issue.created_by ? `
+                                    <div class="modal-timestamp">
+                                        Created by
+                                        <div class="modal-timestamp-value">${escapeHtml(issue.created_by)}</div>
+                                    </div>
+                                ` : ''}
                                 <div class="modal-timestamp">
                                     Created
                                     <div class="modal-timestamp-value">${formatDate(issue.created_at) || 'Unknown'}</div>
@@ -2448,6 +2490,20 @@
                                 ` : ''}
                             </div>
                         </div>
+                        ${issue.dependents && issue.dependents.length > 0 ? `
+                            <div class="modal-section">
+                                <div class="modal-section-label">Child Issues (${issue.dependents.length})</div>
+                                <div class="modal-children">
+                                    ${issue.dependents.map(child => `
+                                        <div class="modal-child-issue">
+                                            <span class="beads-status-dot status-${child.status}"></span>
+                                            <span class="modal-child-id">${escapeHtml(child.id)}</span>
+                                            <span class="modal-child-title">${escapeHtml(child.title)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
                         ${issue.dependency_count > 0 ? `
                             <div class="modal-section">
                                 <div class="modal-section-label">Dependencies</div>
