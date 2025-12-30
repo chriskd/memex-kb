@@ -2,7 +2,6 @@
 
 from ..models import DocumentChunk, EntryMetadata
 from .links import (
-    extract_external_urls,
     extract_links,
     resolve_backlinks,
     update_links_batch,
@@ -18,7 +17,6 @@ __all__ = [
     "EntryMetadata",
     "DocumentChunk",
     "extract_links",
-    "extract_external_urls",
     "resolve_backlinks",
     "update_links_in_files",
     "update_links_batch",

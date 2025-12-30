@@ -207,14 +207,11 @@ async def tags_tool() -> list[dict]:
 
 @mcp.tool(
     name="health",
-    description=(
-        "Audit KB for orphans, broken links, stale content. "
-        "Use check_external_links=True to also verify external URLs (slow)."
-    ),
+    description="Audit KB for orphans, broken links, stale content.",
 )
-async def health_tool(stale_days: int = 90, check_external_links: bool = False) -> dict:
+async def health_tool(stale_days: int = 90) -> dict:
     """Audit KB health."""
-    return await core.health(stale_days=stale_days, check_external_links=check_external_links)
+    return await core.health(stale_days=stale_days)
 
 
 @mcp.tool(
