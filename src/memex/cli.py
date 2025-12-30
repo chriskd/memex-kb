@@ -109,6 +109,14 @@ PRIME_OUTPUT = """# Memex Knowledge Base
 
 **⚡ Use `mx` CLI instead of MCP tools** - CLI uses ~0 tokens vs MCP schema overhead.
 
+## Session Protocol
+
+**Before searching codebase**: Check if memex has project patterns first
+  `mx search "deployment"` or `mx whats-new --project=<project>`
+
+**After discovering patterns**: Consider adding to KB for future agents
+  `mx add --title="..." --tags="..." --content="..."`
+
 ## CLI Quick Reference
 
 ```bash
@@ -168,17 +176,51 @@ Content with [[bidirectional links]] to other entries.
 Use `[[path/to/entry.md|Display Text]]` for links.
 """
 
-PRIME_MCP_OUTPUT = """# KB Quick Reference
-Search: `mx search "query"` | Read: `mx get path.md` | Add: `mx add --title="..." --tags="..."`
+PRIME_MCP_OUTPUT = """# Memex KB Active
+
+**Session Start**: Search KB before implementing: `mx search "query"`
+**Session End**: Consider adding discoveries: `mx add --title="..." --tags="..."`
+
+Quick: search | get | add | tree | whats-new | health
 """
 
 
 def _detect_mcp_mode() -> bool:
-    """Detect if running in MCP context (minimal output preferred)."""
-    import os
-    # If MCP server is active, we're likely in a context where minimal output is better
-    # Check for common MCP environment indicators
-    return os.environ.get("MCP_SERVER_ACTIVE") == "1"
+    """Detect if MCP server is configured for memex.
+
+    Checks multiple locations for memex MCP server configuration:
+    1. ~/.claude/settings.json - Global Claude settings
+    2. .mcp.json - Project-level MCP configuration
+    3. .claude-plugin/plugin.json - Plugin MCP configuration
+
+    Returns True if memex MCP is configured anywhere, indicating
+    the agent has access to MCP tools and minimal priming is preferred.
+    """
+    # Check ~/.claude/settings.json
+    settings_path = Path.home() / ".claude" / "settings.json"
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text())
+            mcp_servers = data.get("mcpServers", {})
+            if any("memex" in key.lower() for key in mcp_servers):
+                return True
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Check .mcp.json in current directory and parents
+    cwd = Path.cwd()
+    for parent in [cwd] + list(cwd.parents)[:3]:  # Check up to 3 levels up
+        mcp_json = parent / ".mcp.json"
+        if mcp_json.exists():
+            try:
+                data = json.loads(mcp_json.read_text())
+                mcp_servers = data.get("mcpServers", {})
+                if any("memex" in key.lower() for key in mcp_servers):
+                    return True
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    return False
 
 
 @cli.command()

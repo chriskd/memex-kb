@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """SessionStart hook that injects relevant KB context for projects.
 
+NOTE: This script is kept as reference. The active session hook now uses
+`mx prime` command instead (configured in .claude-plugin/plugin.json).
+This script demonstrates project-aware context injection that could be
+integrated into `mx prime --project` in the future.
+
 This script is invoked when a Claude Code session starts. It searches the
 knowledge base for entries relevant to the current project and outputs
 context as markdown.
