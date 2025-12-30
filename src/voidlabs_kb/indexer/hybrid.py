@@ -183,17 +183,19 @@ class HybridSearcher:
         project_context: str | None = None,
         kb_context: KBContext | None = None,
     ) -> list[SearchResult]:
-        """Boost results with matching tags, project context, and KB context paths.
+        """Boost results with matching tags and project/path context.
 
-        Applies three types of boosts:
-        1. Tag boost: +0.05 per matching tag in query
-        2. Project context boost: +0.15 for entries from current project
-        3. KB context path boost: +0.12 for entries matching .kbcontext paths
+        Applies two types of boosts:
+        1. Tag boost: +0.05 per matching tag in query (always stacks)
+        2. Context boost: MAX of project (+0.15) or KB path (+0.12) boost
+           - Project boost: entry was created from current project
+           - Path boost: entry matches .kbcontext paths
+           These don't stack to avoid overboosting correlated signals.
         """
         if not results:
             return results
 
-        # Tag boost: +0.05 per matching tag
+        # Tag boost: +0.05 per matching tag (always applies, stacks with context)
         tokens = {tok for tok in re.split(r"\W+", query.lower()) if tok}
         if tokens:
             for result in results:
@@ -202,23 +204,28 @@ class HybridSearcher:
                 if overlap:
                     result.score += 0.05 * len(overlap)
 
-        # Project context boost: +0.15 for entries from current project
-        if project_context:
-            for result in results:
-                if result.source_project and result.source_project == project_context:
-                    result.score += 0.15
+        # Context boost: apply MAX of project_context or kb_context path boost
+        # These are correlated signals so we don't stack them
+        for result in results:
+            project_boost = 0.0
+            path_boost = 0.0
 
-        # KB context path boost: +0.12 for entries matching .kbcontext paths
-        if kb_context:
-            from ..context import matches_glob
+            # Check project context boost (+0.15)
+            if project_context and result.source_project == project_context:
+                project_boost = 0.15
 
-            boost_paths = kb_context.get_all_boost_paths()
-            if boost_paths:
-                for result in results:
-                    for pattern in boost_paths:
-                        if matches_glob(result.path, pattern):
-                            result.score += 0.12
-                            break  # Only apply once per result
+            # Check KB context path boost (+0.12)
+            if kb_context:
+                from ..context import matches_glob
+
+                boost_paths = kb_context.get_all_boost_paths()
+                for pattern in boost_paths:
+                    if matches_glob(result.path, pattern):
+                        path_boost = 0.12
+                        break
+
+            # Apply the higher of the two (don't stack)
+            result.score += max(project_boost, path_boost)
 
         # Renormalize scores to 0-1
         max_score = max((res.score for res in results), default=1.0)
