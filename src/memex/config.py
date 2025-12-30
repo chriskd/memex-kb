@@ -10,7 +10,7 @@ from pathlib import Path
 
 def get_kb_root() -> Path:
     """Get the knowledge base root directory."""
-    root = os.environ.get("KB_ROOT")
+    root = os.environ.get("MEMEX_KB_ROOT")
     if root:
         return Path(root)
     # Default to kb/ relative to package
@@ -19,7 +19,7 @@ def get_kb_root() -> Path:
 
 def get_index_root() -> Path:
     """Get the search index root directory."""
-    root = os.environ.get("INDEX_ROOT")
+    root = os.environ.get("MEMEX_INDEX_ROOT")
     if root:
         return Path(root)
     # Default to .indices/ relative to package

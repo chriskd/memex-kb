@@ -78,9 +78,9 @@ RUN mkdir -p /data/indices /data/views && chown -R appuser:appuser /data
 USER appuser
 
 # Environment
-ENV KB_ROOT=/kb
-ENV INDEX_ROOT=/data/indices
-ENV VIEWS_ROOT=/data/views
+ENV MEMEX_KB_ROOT=/kb
+ENV MEMEX_INDEX_ROOT=/data/indices
+ENV MEMEX_VIEWS_ROOT=/data/views
 ENV HOST=0.0.0.0
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1

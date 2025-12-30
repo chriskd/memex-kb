@@ -12,7 +12,7 @@ Usage in other modules:
     log.error("Error that prevented operation")
     log.exception("Error with full traceback")
 
-The log level can be configured via the KB_LOG_LEVEL environment variable:
+The log level can be configured via the MEMEX_LOG_LEVEL environment variable:
     - DEBUG: Detailed debugging information
     - INFO: General operational messages (default)
     - WARNING: Unexpected situations that were handled
@@ -38,7 +38,7 @@ def configure_logging() -> None:
         return
 
     # Determine log level from environment
-    level_name = os.environ.get("KB_LOG_LEVEL", "INFO").upper()
+    level_name = os.environ.get("MEMEX_LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
     # Create console handler with formatting

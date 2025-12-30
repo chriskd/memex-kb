@@ -238,7 +238,7 @@ def main():
     log = logging.getLogger(__name__)
 
     # Check for preload request via environment variable
-    if os.environ.get("KB_PRELOAD", "").lower() in ("1", "true", "yes"):
+    if os.environ.get("MEMEX_PRELOAD", "").lower() in ("1", "true", "yes"):
         log.info("Preloading embedding model...")
         searcher = core.get_searcher()
         searcher.preload()
