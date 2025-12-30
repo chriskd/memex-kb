@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from .md_renderer import extract_links_only
-from .title_index import build_title_index, resolve_link_target
+from .title_index import TitleIndex, build_title_index, resolve_link_target
 
 def extract_links(content: str) -> list[str]:
     """Extract bidirectional links from markdown content.
@@ -54,7 +54,10 @@ def _normalize_link(link: str) -> str:
     return link
 
 
-def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
+def resolve_backlinks(
+    kb_root: Path,
+    title_index: dict[str, str] | TitleIndex | None = None,
+) -> dict[str, list[str]]:
     """Build a backlink index for all markdown files.
 
     Scans all .md files in the KB and builds an index mapping
@@ -65,6 +68,9 @@ def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
 
     Args:
         kb_root: Root directory of the knowledge base.
+        title_index: Optional pre-built title index. If None, builds one
+            internally with O(1) filename lookups. Can be a dict (legacy)
+            or TitleIndex (with filename index for O(1) lookups).
 
     Returns:
         Dict mapping entry paths (relative to kb_root, without .md) to
@@ -73,12 +79,14 @@ def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
     if not kb_root.exists() or not kb_root.is_dir():
         return {}
 
-    # Build title index for resolving title-style links
-    title_index = build_title_index(kb_root)
+    # Use provided title index or build one with filename index for O(1) lookups
+    if title_index is None:
+        title_index = build_title_index(kb_root, include_filename_index=True)
 
     # Collect all markdown files and their links
-    # Maps: normalized_path -> list of files that contain [[normalized_path]]
-    backlinks: dict[str, list[str]] = {}
+    # Maps: normalized_path -> set of files that contain [[normalized_path]]
+    # Use sets for O(1) deduplication instead of O(n) list membership checks
+    backlinks: dict[str, set[str]] = {}
 
     # First pass: collect all links from each file
     # forward_links: source_path -> list of raw link targets
@@ -112,11 +120,11 @@ def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
                 resolved = _resolve_relative_link(source, target)
 
             if resolved not in backlinks:
-                backlinks[resolved] = []
-            if source not in backlinks[resolved]:
-                backlinks[resolved].append(source)
+                backlinks[resolved] = set()
+            backlinks[resolved].add(source)  # O(1) set add
 
-    return backlinks
+    # Convert sets to lists for API compatibility
+    return {k: list(v) for k, v in backlinks.items()}
 
 
 def _resolve_relative_link(source: str, target: str) -> str:

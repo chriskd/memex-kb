@@ -332,7 +332,9 @@ class HybridSearcher:
         # Import parser here to avoid circular imports
         from ..parser import parse_entry
 
-        chunks: list[DocumentChunk] = []
+        BATCH_SIZE = 100
+        batch: list[DocumentChunk] = []
+        total_indexed = 0
 
         for md_file in md_files:
             try:
@@ -345,16 +347,23 @@ class HybridSearcher:
                 normalized_chunks = [
                     chunk.model_copy(update={"path": relative_path}) for chunk in file_chunks
                 ]
-                chunks.extend(normalized_chunks)
+                batch.extend(normalized_chunks)
+
+                # Index when batch is full
+                if len(batch) >= BATCH_SIZE:
+                    self.index_chunks(batch)
+                    total_indexed += len(batch)
+                    batch = []
             except Exception as e:
                 log.warning("Skipping %s during reindex: %s", md_file, e)
                 continue
 
-        # Index all chunks
-        if chunks:
-            self.index_chunks(chunks)
+        # Index remaining chunks
+        if batch:
+            self.index_chunks(batch)
+            total_indexed += len(batch)
 
-        return len(chunks)
+        return total_indexed
 
     def clear(self) -> None:
         """Clear both indices."""

@@ -375,56 +375,54 @@ async def get_entry(path: str):
     )
 
 
+def _build_tree(path: Path, rel_path: str = "") -> list[TreeNode]:
+    """Build tree recursively (blocking I/O)."""
+    nodes = []
+    try:
+        items = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
+    except PermissionError:
+        return nodes
+
+    for item in items:
+        if item.name.startswith(".") or item.name.startswith("_"):
+            continue
+
+        item_rel = f"{rel_path}/{item.name}" if rel_path else item.name
+
+        if item.is_dir():
+            children = _build_tree(item, item_rel)
+            nodes.append(TreeNode(
+                name=item.name,
+                type="directory",
+                path=item_rel,
+                children=children,
+            ))
+        elif item.suffix == ".md":
+            title = None
+            try:
+                metadata, _, _ = parse_entry(item)
+                title = metadata.title
+            except ParseError as e:
+                log.debug("Could not parse %s for tree: %s", item, e)
+            nodes.append(TreeNode(
+                name=item.name,
+                type="file",
+                path=item_rel,
+                title=title,
+            ))
+
+    return nodes
+
+
 @app.get("/api/tree")
 async def get_tree():
     """Get the KB directory tree."""
     kb_root = get_kb_root()
-
-    def build_tree(path: Path, rel_path: str = "") -> list[TreeNode]:
-        nodes = []
-        try:
-            items = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
-        except PermissionError:
-            return nodes
-
-        for item in items:
-            if item.name.startswith(".") or item.name.startswith("_"):
-                continue
-
-            item_rel = f"{rel_path}/{item.name}" if rel_path else item.name
-
-            if item.is_dir():
-                children = build_tree(item, item_rel)
-                nodes.append(TreeNode(
-                    name=item.name,
-                    type="directory",
-                    path=item_rel,
-                    children=children,
-                ))
-            elif item.suffix == ".md":
-                title = None
-                try:
-                    metadata, _, _ = parse_entry(item)
-                    title = metadata.title
-                except ParseError as e:
-                    log.debug("Could not parse %s for tree: %s", item, e)
-                nodes.append(TreeNode(
-                    name=item.name,
-                    type="file",
-                    path=item_rel,
-                    title=title,
-                ))
-
-        return nodes
-
-    return build_tree(kb_root)
+    return await asyncio.to_thread(_build_tree, kb_root)
 
 
-@app.get("/api/graph", response_model=GraphData)
-async def get_graph():
-    """Get the full knowledge graph."""
-    kb_root = get_kb_root()
-
+def _build_graph(kb_root: Path) -> GraphData:
+    """Build the full knowledge graph (blocking I/O)."""
     nodes: list[GraphNode] = []
     edges: list[GraphEdge] = []
     seen_nodes: set[str] = set()
@@ -489,11 +487,15 @@ async def get_graph():
     return GraphData(nodes=nodes, edges=edges)
 
 
-@app.get("/api/stats", response_model=StatsResponse)
-async def get_stats():
-    """Get KB statistics."""
+@app.get("/api/graph", response_model=GraphData)
+async def get_graph():
+    """Get the full knowledge graph."""
     kb_root = get_kb_root()
+    return await asyncio.to_thread(_build_graph, kb_root)
 
+
+def _compute_stats(kb_root: Path) -> StatsResponse:
+    """Compute KB statistics (blocking I/O)."""
     total_entries = 0
     all_tags: set[str] = set()
     total_links = 0
@@ -542,10 +544,15 @@ async def get_stats():
     )
 
 
-@app.get("/api/tags")
-async def get_tags():
-    """Get all tags with counts."""
+@app.get("/api/stats", response_model=StatsResponse)
+async def get_stats():
+    """Get KB statistics."""
     kb_root = get_kb_root()
+    return await asyncio.to_thread(_compute_stats, kb_root)
+
+
+def _collect_tags(kb_root: Path) -> list[dict]:
+    """Collect all tags with counts (blocking I/O)."""
     tag_counts: dict[str, int] = {}
 
     for md_file in kb_root.rglob("*.md"):
@@ -565,10 +572,15 @@ async def get_tags():
     ]
 
 
-@app.get("/api/recent")
-async def get_recent(limit: int = 10):
-    """Get recently updated entries."""
+@app.get("/api/tags")
+async def get_tags():
+    """Get all tags with counts."""
     kb_root = get_kb_root()
+    return await asyncio.to_thread(_collect_tags, kb_root)
+
+
+def _get_recent_entries(kb_root: Path, limit: int) -> list[dict]:
+    """Get recently updated entries (blocking I/O)."""
     entries: list[dict] = []
 
     for md_file in kb_root.rglob("*.md"):
@@ -595,6 +607,13 @@ async def get_recent(limit: int = 10):
     )
 
     return entries[:limit]
+
+
+@app.get("/api/recent")
+async def get_recent(limit: int = 10):
+    """Get recently updated entries."""
+    kb_root = get_kb_root()
+    return await asyncio.to_thread(_get_recent_entries, kb_root, limit)
 
 
 # Beads integration helpers

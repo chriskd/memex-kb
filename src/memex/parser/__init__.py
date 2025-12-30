@@ -9,7 +9,7 @@ from .links import (
 )
 from .markdown import ParseError, parse_entry
 from .md_renderer import MarkdownResult, render_markdown
-from .title_index import build_title_index, resolve_link_target
+from .title_index import TitleIndex, build_title_index, resolve_link_target
 
 __all__ = [
     "parse_entry",
@@ -22,6 +22,7 @@ __all__ = [
     "update_links_batch",
     "build_title_index",
     "resolve_link_target",
+    "TitleIndex",
     "render_markdown",
     "MarkdownResult",
 ]
