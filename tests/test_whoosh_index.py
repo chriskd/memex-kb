@@ -434,6 +434,111 @@ class TestWhooshDeleteDocument:
         assert whoosh_index.doc_count() == 0
 
 
+class TestWhooshDeleteDocuments:
+    """Test batch document deletion operations."""
+
+    def test_delete_multiple_documents(self, whoosh_index, sample_chunks):
+        """Can delete multiple documents by path in a single operation."""
+        whoosh_index.index_documents(sample_chunks)
+        assert whoosh_index.doc_count() == 3
+
+        whoosh_index.delete_documents(["docs/python.md", "docs/testing.md"])
+        assert whoosh_index.doc_count() == 1
+
+        # Only databases doc should remain
+        results = whoosh_index.search("databases SQL")
+        assert len(results) == 1
+        assert results[0].path == "docs/databases.md"
+
+    def test_delete_documents_empty_list(self, whoosh_index, sample_chunks):
+        """Deleting empty list doesn't cause errors or changes."""
+        whoosh_index.index_documents(sample_chunks)
+        assert whoosh_index.doc_count() == 3
+
+        whoosh_index.delete_documents([])
+        assert whoosh_index.doc_count() == 3
+
+    def test_delete_documents_with_nonexistent_paths(self, whoosh_index, sample_chunks):
+        """Deleting mix of existent and non-existent paths works correctly."""
+        whoosh_index.index_documents(sample_chunks)
+        assert whoosh_index.doc_count() == 3
+
+        whoosh_index.delete_documents(["docs/python.md", "nonexistent/path.md"])
+        assert whoosh_index.doc_count() == 2
+
+    def test_delete_documents_all_nonexistent(self, whoosh_index, sample_chunks):
+        """Deleting only non-existent paths doesn't cause errors."""
+        whoosh_index.index_documents(sample_chunks)
+        assert whoosh_index.doc_count() == 3
+
+        whoosh_index.delete_documents(["fake/path1.md", "fake/path2.md"])
+        assert whoosh_index.doc_count() == 3
+
+    def test_delete_documents_removes_all_chunks_per_path(self, whoosh_index):
+        """Batch delete removes all chunks for each document path."""
+        chunks = [
+            DocumentChunk(
+                path="multi/doc1.md",
+                section="intro",
+                content="Doc1 introduction section",
+                metadata=EntryMetadata(
+                    title="Doc1",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="multi/doc1.md",
+                section="body",
+                content="Doc1 body section",
+                metadata=EntryMetadata(
+                    title="Doc1",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="multi/doc2.md",
+                section="intro",
+                content="Doc2 introduction section",
+                metadata=EntryMetadata(
+                    title="Doc2",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="multi/doc2.md",
+                section="body",
+                content="Doc2 body section",
+                metadata=EntryMetadata(
+                    title="Doc2",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+        ]
+        whoosh_index.index_documents(chunks)
+        # Each unique path#section combo is one doc
+        assert whoosh_index.doc_count() == 4
+
+        whoosh_index.delete_documents(["multi/doc1.md"])
+        assert whoosh_index.doc_count() == 2
+
+        # Only doc2 chunks should remain
+        results = whoosh_index.search("Doc2")
+        assert len(results) == 2
+
+    def test_delete_documents_single_transaction(self, whoosh_index, sample_chunks):
+        """Batch delete uses single transaction (all or nothing)."""
+        whoosh_index.index_documents(sample_chunks)
+
+        # Delete all documents at once
+        paths = [chunk.path for chunk in sample_chunks]
+        whoosh_index.delete_documents(paths)
+        assert whoosh_index.doc_count() == 0
+
+
 class TestWhooshClear:
     """Test index clearing operations."""
 

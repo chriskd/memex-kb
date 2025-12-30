@@ -58,6 +58,9 @@ from .parser import ParseError, extract_links, parse_entry, update_links_batch
 _searcher: HybridSearcher | None = None
 _searcher_ready = False
 
+# Cache for get_valid_categories() - invalidates on directory mtime change
+_categories_cache: dict[str, tuple[float, list[str]]] = {}  # kb_root -> (mtime, categories)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper functions
@@ -268,16 +271,40 @@ def slugify(title: str) -> str:
     return slug.strip("-")
 
 
-def get_valid_categories() -> list[str]:
-    """Get list of valid category directories."""
-    kb_root = get_kb_root()
+def get_valid_categories(kb_root: Path | None = None) -> list[str]:
+    """Get list of valid category directories.
+
+    Uses mtime-based caching to avoid repeated directory scans.
+    Cache invalidates when kb_root directory's mtime changes (i.e., when
+    directories are added or removed).
+    """
+    global _categories_cache
+
+    if kb_root is None:
+        kb_root = get_kb_root()
     if not kb_root.exists():
         return []
-    return [
+
+    # Use resolved path as cache key for consistency
+    cache_key = str(kb_root.resolve())
+    current_mtime = kb_root.stat().st_mtime
+
+    # Check cache validity
+    if cache_key in _categories_cache:
+        cached_mtime, cached_categories = _categories_cache[cache_key]
+        if cached_mtime == current_mtime:
+            return cached_categories
+
+    # Cache miss or stale - scan directory
+    categories = [
         d.name
         for d in kb_root.iterdir()
         if d.is_dir() and not d.name.startswith("_") and not d.name.startswith(".")
     ]
+
+    # Update cache
+    _categories_cache[cache_key] = (current_mtime, categories)
+    return categories
 
 
 def relative_kb_path(kb_root: Path, file_path: Path) -> str:
@@ -315,17 +342,19 @@ def apply_section_updates(content: str, updates: dict[str, str]) -> str:
     return updated
 
 
-def get_backlink_index() -> dict[str, list[str]]:
+def get_backlink_index(kb_root: Path | None = None) -> dict[str, list[str]]:
     """Return cached backlink index, refreshing if files changed."""
-    kb_root = get_kb_root()
+    if kb_root is None:
+        kb_root = get_kb_root()
     return ensure_backlink_cache(kb_root)
 
 
-def validate_nested_path(path: str) -> tuple[Path, str]:
+def validate_nested_path(path: str, kb_root: Path | None = None) -> tuple[Path, str]:
     """Validate a nested path within the KB.
 
     Args:
         path: Relative path like "development/python/file.md" or "development/python/"
+        kb_root: Optional KB root path. If None, calls get_kb_root().
 
     Returns:
         Tuple of (absolute_path, normalized_relative_path)
@@ -333,7 +362,8 @@ def validate_nested_path(path: str) -> tuple[Path, str]:
     Raises:
         ValueError: If path is invalid or outside KB.
     """
-    kb_root = get_kb_root()
+    if kb_root is None:
+        kb_root = get_kb_root()
 
     # Security: prevent path traversal
     normalized = Path(path).as_posix()
@@ -356,9 +386,10 @@ def validate_nested_path(path: str) -> tuple[Path, str]:
     return abs_path, normalized
 
 
-def directory_exists(directory: str) -> bool:
+def directory_exists(directory: str, kb_root: Path | None = None) -> bool:
     """Check if a directory path exists within the KB."""
-    kb_root = get_kb_root()
+    if kb_root is None:
+        kb_root = get_kb_root()
     dir_path = kb_root / directory
     return dir_path.exists() and dir_path.is_dir()
 
@@ -378,13 +409,14 @@ def get_parent_category(path: str) -> str:
     return parts[0]
 
 
-def hydrate_content(results: list[SearchResult]) -> list[SearchResult]:
+def hydrate_content(results: list[SearchResult], kb_root: Path | None = None) -> list[SearchResult]:
     """Add full document content to search results.
 
     Reads content from disk using parse_entry() for each result.
 
     Args:
         results: Search results to hydrate.
+        kb_root: Optional KB root path. If None, calls get_kb_root().
 
     Returns:
         New list of SearchResult with content populated.
@@ -392,7 +424,8 @@ def hydrate_content(results: list[SearchResult]) -> list[SearchResult]:
     if not results:
         return results
 
-    kb_root = get_kb_root()
+    if kb_root is None:
+        kb_root = get_kb_root()
     hydrated = []
 
     for result in results:
@@ -501,16 +534,20 @@ def compute_link_suggestions(
     return suggestions
 
 
-def get_tag_taxonomy() -> dict[str, int]:
+def get_tag_taxonomy(kb_root: Path | None = None) -> dict[str, int]:
     """Get all tags currently used in the KB with their usage counts.
 
     Uses cached per-file tag data with mtime-based invalidation.
     Only re-parses files that have changed since last cache update.
 
+    Args:
+        kb_root: Optional KB root path. If None, calls get_kb_root().
+
     Returns:
         Dict mapping tag name to usage count.
     """
-    kb_root = get_kb_root()
+    if kb_root is None:
+        kb_root = get_kb_root()
     if not kb_root.exists():
         return {}
 
@@ -690,6 +727,7 @@ def _get_search_suggestions(
     results: list[SearchResult],
     searcher: HybridSearcher,
     max_suggestions: int = 3,
+    kb_root: Path | None = None,
 ) -> list[SearchSuggestion]:
     """Generate search suggestions when results are sparse or empty.
 
@@ -703,6 +741,7 @@ def _get_search_suggestions(
         results: Current search results (may be sparse/empty).
         searcher: The hybrid searcher for semantic lookups.
         max_suggestions: Maximum suggestions to return.
+        kb_root: Optional KB root path. If None, calls get_kb_root().
 
     Returns:
         List of SearchSuggestion objects.
@@ -713,7 +752,8 @@ def _get_search_suggestions(
 
     # Extract keywords from query
     query_terms = {term.lower() for term in re.split(r"\W+", query) if len(term) >= 2}
-    kb_root = get_kb_root()
+    if kb_root is None:
+        kb_root = get_kb_root()
 
     # Collect all available tags from the KB
     all_tags: set[str] = set()
@@ -882,7 +922,7 @@ async def add_entry(
     # Determine target directory: prefer 'directory' over 'category' over context.primary
     if directory:
         # Validate the directory is within KB, auto-create if needed
-        abs_dir, normalized_dir = validate_nested_path(directory)
+        abs_dir, normalized_dir = validate_nested_path(directory, kb_root)
         if abs_dir.exists() and not abs_dir.is_dir():
             raise ValueError(f"Path exists but is not a directory: {directory}")
         # Auto-create directory if it doesn't exist
@@ -896,7 +936,7 @@ async def add_entry(
         rel_dir = category
     elif kb_context and kb_context.primary:
         # Use context primary directory
-        abs_dir, normalized_dir = validate_nested_path(kb_context.primary)
+        abs_dir, normalized_dir = validate_nested_path(kb_context.primary, kb_root)
         if abs_dir.exists() and not abs_dir.is_dir():
             raise ValueError(f"Context primary path exists but is not a directory: {kb_context.primary}")
         # Auto-create directory if it doesn't exist
@@ -904,7 +944,7 @@ async def add_entry(
         target_dir = abs_dir
         rel_dir = normalized_dir
     else:
-        valid_categories = get_valid_categories()
+        valid_categories = get_valid_categories(kb_root)
         context_hint = (
             " (no .kbcontext file found with 'primary' field)"
             if kb_context is None
@@ -1171,7 +1211,7 @@ async def get_entry(path: str) -> KBEntry:
     links = extract_links(content)
 
     # Get backlinks
-    all_backlinks = get_backlink_index()
+    all_backlinks = get_backlink_index(kb_root)
     # Normalize path for lookup (remove .md extension)
     path_key = path[:-3] if path.endswith(".md") else path
     entry_backlinks = all_backlinks.get(path_key, [])
@@ -1221,7 +1261,7 @@ async def list_entries(
 
     # Determine search path: prefer 'directory' over 'category'
     if directory:
-        abs_path, _ = validate_nested_path(directory)
+        abs_path, _ = validate_nested_path(directory, kb_root)
         if not abs_path.exists() or not abs_path.is_dir():
             raise ValueError(f"Directory not found: {directory}")
         search_path = abs_path
@@ -1511,7 +1551,7 @@ async def tree(
     kb_root = get_kb_root()
 
     if path:
-        abs_path, _ = validate_nested_path(path)
+        abs_path, _ = validate_nested_path(path, kb_root)
         if not abs_path.is_dir():
             raise ValueError(f"Path is not a directory: {path}")
         start_path = abs_path
@@ -1590,8 +1630,10 @@ async def mkdir(path: str) -> str:
     Raises:
         ValueError: If path is invalid or directory already exists.
     """
+    kb_root = get_kb_root()
+
     # Validate path format
-    abs_path, normalized = validate_nested_path(path)
+    abs_path, normalized = validate_nested_path(path, kb_root)
 
     # Check if already exists
     if abs_path.exists():
@@ -1624,12 +1666,12 @@ async def move(
     kb_root = get_kb_root()
 
     # Validate source path
-    source_abs, source_normalized = validate_nested_path(source)
+    source_abs, source_normalized = validate_nested_path(source, kb_root)
     if not source_abs.exists():
         raise ValueError(f"Source not found: {source}")
 
     # Validate destination path
-    dest_abs, dest_normalized = validate_nested_path(destination)
+    dest_abs, dest_normalized = validate_nested_path(destination, kb_root)
 
     # Check destination doesn't already exist
     if dest_abs.exists():
@@ -1645,7 +1687,7 @@ async def move(
 
     # Ensure destination is within a valid category
     dest_category = get_parent_category(dest_normalized)
-    valid_categories = get_valid_categories()
+    valid_categories = get_valid_categories(kb_root)
     if dest_category not in valid_categories:
         raise ValueError(
             f"Destination must be within a valid category. Valid categories: {', '.join(valid_categories)}"
@@ -1733,8 +1775,10 @@ async def rmdir(path: str, force: bool = False) -> str:
     Raises:
         ValueError: If directory contains entries, not empty (without force), or doesn't exist.
     """
+    kb_root = get_kb_root()
+
     # Validate path
-    abs_path, normalized = validate_nested_path(path)
+    abs_path, normalized = validate_nested_path(path, kb_root)
 
     if not abs_path.exists():
         raise ValueError(f"Directory not found: {path}")
@@ -1781,7 +1825,7 @@ async def delete_entry(path: str, force: bool = False) -> dict:
     kb_root = get_kb_root()
 
     # Validate path
-    abs_path, normalized = validate_nested_path(path)
+    abs_path, normalized = validate_nested_path(path, kb_root)
 
     if not abs_path.exists():
         raise ValueError(f"Entry not found: {path}")
@@ -1794,7 +1838,7 @@ async def delete_entry(path: str, force: bool = False) -> dict:
 
     # Check for backlinks
     path_key = normalized[:-3] if normalized.endswith(".md") else normalized
-    all_backlinks = get_backlink_index()
+    all_backlinks = get_backlink_index(kb_root)
     entry_backlinks = all_backlinks.get(path_key, [])
 
     if entry_backlinks and not force:
@@ -1905,7 +1949,7 @@ async def health(
     cutoff_date = date.today() - timedelta(days=stale_days)
 
     # Get backlink index
-    all_backlinks = get_backlink_index()
+    all_backlinks = get_backlink_index(kb_root)
 
     # Check for orphans (entries with no incoming backlinks)
     if check_orphans:
@@ -2030,7 +2074,7 @@ async def hubs(limit: int = 10) -> list[dict]:
         return []
 
     # Build connection counts and titles in single pass
-    all_backlinks = get_backlink_index()
+    all_backlinks = get_backlink_index(kb_root)
     connection_counts: dict[str, dict] = {}
     titles: dict[str, str] = {}
 
@@ -2097,7 +2141,7 @@ async def dead_ends(limit: int = 10) -> list[dict]:
     if not kb_root.exists():
         return []
 
-    all_backlinks = get_backlink_index()
+    all_backlinks = get_backlink_index(kb_root)
     results = []
 
     for md_file in kb_root.rglob("*.md"):

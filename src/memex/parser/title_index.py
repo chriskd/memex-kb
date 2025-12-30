@@ -12,6 +12,8 @@ from typing import NamedTuple
 
 import frontmatter
 
+from .md_renderer import normalize_link
+
 log = logging.getLogger(__name__)
 
 
@@ -138,14 +140,7 @@ def resolve_link_target(
     Returns:
         Resolved path (without .md) or None if not resolvable.
     """
-    normalized = target.strip()
-
-    # Remove .md extension if present
-    if normalized.endswith(".md"):
-        normalized = normalized[:-3]
-
-    # Normalize path separators
-    normalized = normalized.replace("\\", "/").strip("/")
+    normalized = normalize_link(target)
 
     # If it contains a path separator, it's likely a path reference
     if "/" in normalized:

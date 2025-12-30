@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from .md_renderer import extract_links_only
+from .md_renderer import extract_links_only, normalize_link
 from .title_index import TitleIndex, build_title_index, resolve_link_target
 
 def extract_links(content: str) -> list[str]:
@@ -26,32 +26,8 @@ def extract_links(content: str) -> list[str]:
 LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
 
 
-def _normalize_link(link: str) -> str:
-    """Normalize a link target.
-
-    - Strips whitespace
-    - Removes .md extension
-    - Normalizes path separators
-
-    Args:
-        link: Raw link target.
-
-    Returns:
-        Normalized link target.
-    """
-    link = link.strip()
-
-    # Remove .md extension if present
-    if link.endswith(".md"):
-        link = link[:-3]
-
-    # Normalize path separators (use forward slashes)
-    link = link.replace("\\", "/")
-
-    # Remove leading/trailing slashes
-    link = link.strip("/")
-
-    return link
+# Backward compatibility alias - the canonical implementation is in md_renderer.py
+_normalize_link = normalize_link
 
 
 def resolve_backlinks(

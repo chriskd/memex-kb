@@ -363,6 +363,29 @@ class ChromaIndex:
         if results["ids"]:
             collection.delete(ids=results["ids"])
 
+    def delete_documents(self, paths: list[str]) -> None:
+        """Delete all chunks for multiple document paths in a single batch operation.
+
+        More efficient than calling delete_document() in a loop as it uses
+        a single batch query/delete operation.
+
+        Args:
+            paths: List of document paths to delete.
+        """
+        if not paths:
+            return
+
+        collection = self._get_collection()
+
+        # Query for all chunks matching any of the given paths using $in operator
+        results = collection.get(
+            where={"path": {"$in": paths}},
+            include=[],
+        )
+
+        if results["ids"]:
+            collection.delete(ids=results["ids"])
+
     def preload(self) -> None:
         """Preload the embedding model and collection to avoid first-query latency.
 

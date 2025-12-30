@@ -338,6 +338,24 @@ class HybridSearcher:
             self._whoosh.delete_document(path)
             self._chroma.delete_document(path)
 
+    def delete_documents(self, paths: list[str]) -> None:
+        """Delete multiple documents from both indices in a single batch operation.
+
+        More efficient than calling delete_document() in a loop as each
+        underlying index performs a single batch operation.
+
+        Args:
+            paths: List of document paths to delete.
+
+        Thread-safe: Uses write lock to prevent concurrent modifications.
+        """
+        if not paths:
+            return
+
+        with self._write_lock:
+            self._whoosh.delete_documents(paths)
+            self._chroma.delete_documents(paths)
+
     def reindex(
         self,
         kb_root: Path | None = None,

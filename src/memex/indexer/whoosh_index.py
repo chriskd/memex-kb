@@ -209,3 +209,21 @@ class WhooshIndex:
         writer = ix.writer()
         writer.delete_by_term("path", path)
         writer.commit()
+
+    def delete_documents(self, paths: list[str]) -> None:
+        """Delete all chunks for multiple document paths in a single transaction.
+
+        More efficient than calling delete_document() in a loop as it uses
+        a single writer context for all deletions.
+
+        Args:
+            paths: List of document paths to delete.
+        """
+        if not paths:
+            return
+
+        ix = self._ensure_index()
+        writer = ix.writer()
+        for path in paths:
+            writer.delete_by_term("path", path)
+        writer.commit()

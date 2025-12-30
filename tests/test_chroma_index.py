@@ -485,6 +485,124 @@ class TestChromaDeleteDocument:
         assert "ai/neural_nets.md" not in paths
 
 
+class TestChromaDeleteDocuments:
+    """Test batch document deletion operations."""
+
+    def test_delete_multiple_documents(self, chroma_index, sample_chunks):
+        """Can delete multiple documents by path in a single operation."""
+        chroma_index.index_documents(sample_chunks)
+        assert chroma_index.doc_count() == 3
+
+        chroma_index.delete_documents(["ai/neural_nets.md", "ai/transformers.md"])
+        assert chroma_index.doc_count() == 1
+
+        # Only databases doc should remain
+        results = chroma_index.search("SQL databases")
+        assert len(results) == 1
+        assert results[0].path == "dev/databases.md"
+
+    def test_delete_documents_empty_list(self, chroma_index, sample_chunks):
+        """Deleting empty list doesn't cause errors or changes."""
+        chroma_index.index_documents(sample_chunks)
+        assert chroma_index.doc_count() == 3
+
+        chroma_index.delete_documents([])
+        assert chroma_index.doc_count() == 3
+
+    def test_delete_documents_with_nonexistent_paths(self, chroma_index, sample_chunks):
+        """Deleting mix of existent and non-existent paths works correctly."""
+        chroma_index.index_documents(sample_chunks)
+        assert chroma_index.doc_count() == 3
+
+        chroma_index.delete_documents(["ai/neural_nets.md", "nonexistent/path.md"])
+        assert chroma_index.doc_count() == 2
+
+    def test_delete_documents_all_nonexistent(self, chroma_index, sample_chunks):
+        """Deleting only non-existent paths doesn't cause errors."""
+        chroma_index.index_documents(sample_chunks)
+        assert chroma_index.doc_count() == 3
+
+        chroma_index.delete_documents(["fake/path1.md", "fake/path2.md"])
+        assert chroma_index.doc_count() == 3
+
+    def test_delete_documents_removes_all_chunks_per_path(self, chroma_index):
+        """Batch delete removes all chunks for each document path."""
+        chunks = [
+            DocumentChunk(
+                path="multi/doc1.md",
+                section="intro",
+                content="Doc1 introduction about neural networks",
+                metadata=EntryMetadata(
+                    title="Doc1",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="multi/doc1.md",
+                section="body",
+                content="Doc1 body about machine learning",
+                metadata=EntryMetadata(
+                    title="Doc1",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="multi/doc2.md",
+                section="intro",
+                content="Doc2 introduction about databases",
+                metadata=EntryMetadata(
+                    title="Doc2",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+            DocumentChunk(
+                path="multi/doc2.md",
+                section="body",
+                content="Doc2 body about SQL queries",
+                metadata=EntryMetadata(
+                    title="Doc2",
+                    tags=["test"],
+                    created=date(2024, 1, 1),
+                ),
+            ),
+        ]
+        chroma_index.index_documents(chunks)
+        assert chroma_index.doc_count() == 4
+
+        chroma_index.delete_documents(["multi/doc1.md"])
+        assert chroma_index.doc_count() == 2
+
+        # Only doc2 chunks should remain
+        results = chroma_index.search("databases SQL")
+        paths = [r.path for r in results]
+        assert all(p == "multi/doc2.md" for p in paths)
+
+    def test_delete_documents_single_batch_operation(self, chroma_index, sample_chunks):
+        """Batch delete uses single query/delete operation."""
+        chroma_index.index_documents(sample_chunks)
+
+        # Delete all documents at once
+        paths = [chunk.path for chunk in sample_chunks]
+        chroma_index.delete_documents(paths)
+        assert chroma_index.doc_count() == 0
+
+    def test_search_after_batch_delete(self, chroma_index, sample_chunks):
+        """Deleted documents don't appear in search results after batch delete."""
+        chroma_index.index_documents(sample_chunks)
+
+        # Delete two documents
+        chroma_index.delete_documents(["ai/neural_nets.md", "ai/transformers.md"])
+
+        # Search for content that was in deleted documents
+        results = chroma_index.search("neural networks transformers NLP")
+        paths = [r.path for r in results]
+        assert "ai/neural_nets.md" not in paths
+        assert "ai/transformers.md" not in paths
+
+
 class TestChromaClear:
     """Test index clearing operations."""
 

@@ -93,7 +93,7 @@ def _extract_wikilinks(tokens: list) -> list[str]:
         for token in token_list:
             if token.type == "wikilink":
                 target = token.meta.get("target", "")
-                normalized = _normalize_link(target)
+                normalized = normalize_link(target)
                 if normalized and normalized not in seen:
                     seen.add(normalized)
                     links.append(normalized)
@@ -105,12 +105,21 @@ def _extract_wikilinks(tokens: list) -> list[str]:
     return links
 
 
-def _normalize_link(link: str) -> str:
+def normalize_link(link: str) -> str:
     """Normalize a link target.
+
+    This is the canonical link normalization function used throughout the parser.
 
     - Strips whitespace
     - Removes .md extension
-    - Normalizes path separators
+    - Normalizes path separators (backslash to forward slash)
+    - Removes leading/trailing slashes
+
+    Args:
+        link: Raw link target.
+
+    Returns:
+        Normalized link target.
     """
     link = link.strip()
 
