@@ -6,6 +6,37 @@ from pathlib import Path
 from .md_renderer import extract_links_only
 from .title_index import build_title_index, resolve_link_target
 
+# Pattern for extracting external URLs from markdown
+# Matches http:// and https:// URLs
+URL_PATTERN = re.compile(
+    r'https?://[^\s\)>\]\'"]+',
+    re.IGNORECASE
+)
+
+
+def extract_external_urls(content: str) -> list[str]:
+    """Extract external URLs (http/https) from markdown content.
+
+    Args:
+        content: Markdown content to extract URLs from.
+
+    Returns:
+        List of unique external URLs found.
+    """
+    # Find all URLs
+    urls = URL_PATTERN.findall(content)
+
+    # Clean up URLs (remove trailing punctuation)
+    cleaned = []
+    for url in urls:
+        # Remove trailing punctuation that's likely not part of the URL
+        while url and url[-1] in '.,;:!?)\'"':
+            url = url[:-1]
+        if url and url not in cleaned:
+            cleaned.append(url)
+
+    return cleaned
+
 
 def extract_links(content: str) -> list[str]:
     """Extract bidirectional links from markdown content.

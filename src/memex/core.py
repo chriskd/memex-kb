@@ -45,7 +45,7 @@ from .models import (
     SearchResult,
     SearchSuggestion,
 )
-from .parser import ParseError, extract_links, parse_entry, update_links_batch
+from .parser import ParseError, extract_external_urls, extract_links, parse_entry, update_links_batch
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1828,12 +1828,102 @@ async def tags(
     return results
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# External URL Checking
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Default timeout for external URL checks (seconds)
+EXTERNAL_URL_TIMEOUT = 10
+
+
+async def check_external_url(
+    url: str, timeout: float = EXTERNAL_URL_TIMEOUT
+) -> tuple[str, bool, str]:
+    """Check if an external URL is accessible.
+
+    Uses HTTP HEAD request to minimize bandwidth while verifying accessibility.
+
+    Args:
+        url: The URL to check.
+        timeout: Request timeout in seconds.
+
+    Returns:
+        Tuple of (url, is_accessible, error_message).
+        If accessible, error_message is empty string.
+    """
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+            # Set a reasonable user agent to avoid being blocked
+            headers={"User-Agent": "memex-kb-health-check/1.0"},
+        ) as client:
+            # Try HEAD first (faster, less bandwidth)
+            try:
+                response = await client.head(url)
+                if response.status_code < 400:
+                    return (url, True, "")
+                # Some servers don't support HEAD, try GET
+                if response.status_code == 405:  # Method Not Allowed
+                    response = await client.get(url)
+                    if response.status_code < 400:
+                        return (url, True, "")
+            except httpx.HTTPStatusError:
+                # Try GET as fallback
+                response = await client.get(url)
+                if response.status_code < 400:
+                    return (url, True, "")
+
+            return (url, False, f"HTTP {response.status_code}")
+
+    except httpx.TimeoutException:
+        return (url, False, "timeout")
+    except httpx.ConnectError:
+        return (url, False, "connection refused")
+    except httpx.TooManyRedirects:
+        return (url, False, "too many redirects")
+    except Exception as e:
+        # Catch SSL errors, DNS failures, etc.
+        error_type = type(e).__name__
+        return (url, False, error_type)
+
+
+async def check_external_urls_batch(
+    urls: list[str],
+    timeout: float = EXTERNAL_URL_TIMEOUT,
+    max_concurrent: int = 10,
+) -> list[tuple[str, bool, str]]:
+    """Check multiple external URLs concurrently.
+
+    Args:
+        urls: List of URLs to check.
+        timeout: Request timeout per URL.
+        max_concurrent: Maximum concurrent requests.
+
+    Returns:
+        List of (url, is_accessible, error_message) tuples.
+    """
+    import asyncio
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+
+    async def check_with_semaphore(url: str) -> tuple[str, bool, str]:
+        async with semaphore:
+            return await check_external_url(url, timeout)
+
+    tasks = [check_with_semaphore(url) for url in urls]
+    return await asyncio.gather(*tasks)
+
+
 async def health(
     stale_days: int = 90,
     check_orphans: bool = True,
     check_broken_links: bool = True,
     check_stale: bool = True,
     check_empty_dirs: bool = True,
+    check_external_links: bool = False,
 ) -> dict:
     """Audit KB health.
 
@@ -1843,6 +1933,7 @@ async def health(
         check_broken_links: Check for [[links]] pointing to non-existent entries.
         check_stale: Check for entries not updated recently.
         check_empty_dirs: Check for directories with no entries.
+        check_external_links: Check external URLs for accessibility (slow, default False).
 
     Returns:
         Dict with lists of issues found in each category.
@@ -1853,6 +1944,7 @@ async def health(
         return {
             "orphans": [],
             "broken_links": [],
+            "broken_external_links": [],
             "stale": [],
             "empty_dirs": [],
             "summary": {"total_issues": 0},
@@ -1861,6 +1953,7 @@ async def health(
     results: dict = {
         "orphans": [],
         "broken_links": [],
+        "broken_external_links": [],
         "stale": [],
         "empty_dirs": [],
     }
@@ -1868,6 +1961,9 @@ async def health(
     # Collect all entries and their metadata
     all_entries: dict[str, dict] = {}  # path -> {title, tags, created, updated, links}
     cutoff_date = date.today() - timedelta(days=stale_days)
+
+    # For external link checking: maps URL -> list of source files
+    external_url_sources: dict[str, list[str]] = {}
 
     for md_file in kb_root.rglob("*.md"):
         if md_file.name.startswith("_"):
@@ -1881,6 +1977,14 @@ async def health(
             links = extract_links(content)
         except ParseError:
             continue
+
+        # Collect external URLs if checking is enabled
+        if check_external_links:
+            external_urls = extract_external_urls(content)
+            for url in external_urls:
+                if url not in external_url_sources:
+                    external_url_sources[url] = []
+                external_url_sources[url].append(rel_path)
 
         all_entries[path_key] = {
             "path": rel_path,
@@ -1928,6 +2032,23 @@ async def health(
                         "broken_link": link,
                     })
 
+    # Check external URLs for accessibility
+    if check_external_links and external_url_sources:
+        unique_urls = list(external_url_sources.keys())
+        log.info(f"Checking {len(unique_urls)} unique external URLs...")
+
+        url_check_results = await check_external_urls_batch(unique_urls)
+
+        for url, is_accessible, error in url_check_results:
+            if not is_accessible:
+                # Report each source file that references this broken URL
+                for source_path in external_url_sources[url]:
+                    results["broken_external_links"].append({
+                        "source": source_path,
+                        "broken_url": url,
+                        "error": error,
+                    })
+
     # Check for stale entries
     if check_stale:
         for path_key, entry in all_entries.items():
@@ -1968,22 +2089,28 @@ async def health(
     # Deduct points for issues, weighted by severity
     score = 100.0
     if total_entries > 0:
-        # Broken links are serious (5 points each, max 30 deduction)
+        # Broken internal links are serious (5 points each, max 30 deduction)
         broken_penalty = min(30, len(results["broken_links"]) * 5)
+        # Broken external links are moderate (3 points each, max 20 deduction)
+        external_penalty = min(20, len(results["broken_external_links"]) * 3)
         # Orphans are moderate (2 points each, max 25 deduction)
         orphan_penalty = min(25, len(results["orphans"]) * 2)
-        # Stale content is minor (1 point each, max 20 deduction)
-        stale_penalty = min(20, len(results["stale"]) * 1)
+        # Stale content is minor (1 point each, max 15 deduction)
+        stale_penalty = min(15, len(results["stale"]) * 1)
         # Empty dirs are trivial (1 point each, max 10 deduction)
         empty_penalty = min(10, len(results["empty_dirs"]) * 1)
 
-        score = max(0, 100 - broken_penalty - orphan_penalty - stale_penalty - empty_penalty)
+        total_penalty = (
+            broken_penalty + external_penalty + orphan_penalty + stale_penalty + empty_penalty
+        )
+        score = max(0, 100 - total_penalty)
 
     results["summary"] = {
         "health_score": round(score),
         "total_issues": total_issues,
         "orphans_count": len(results["orphans"]),
         "broken_links_count": len(results["broken_links"]),
+        "broken_external_links_count": len(results["broken_external_links"]),
         "stale_count": len(results["stale"]),
         "empty_dirs_count": len(results["empty_dirs"]),
         "total_entries": total_entries,
