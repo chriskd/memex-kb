@@ -10,8 +10,15 @@ import pytest
 
 from memex.backlinks_cache import (
     CACHE_FILENAME,
+    CacheMetadata,
     _cache_path,
+    _collect_cache_metadata,
+    _count_md_files,
+    _get_dir_mtime,
+    _is_cache_valid,
     _kb_tree_mtime,
+    _load_cache_full,
+    _save_cache_full,
     ensure_backlink_cache,
     load_cache,
     rebuild_backlink_cache,
@@ -688,3 +695,283 @@ class TestCachePersistence:
         # Cache should now be valid
         loaded_backlinks, _ = load_cache()
         assert loaded_backlinks == backlinks
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Optimized validation tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestOptimizedHelpers:
+    """Tests for optimized cache validation helper functions."""
+
+    def test_get_dir_mtime_existing_dir(self, kb_root: Path):
+        """Test directory mtime for existing directory."""
+        mtime = _get_dir_mtime(kb_root)
+        assert mtime > 0
+        assert mtime == pytest.approx(kb_root.stat().st_mtime, rel=0.01)
+
+    def test_get_dir_mtime_nonexistent_dir(self, tmp_path: Path):
+        """Test directory mtime for nonexistent directory."""
+        nonexistent = tmp_path / "does-not-exist"
+        mtime = _get_dir_mtime(nonexistent)
+        assert mtime == 0.0
+
+    def test_count_md_files_empty_kb(self, kb_root: Path):
+        """Test file count for empty KB."""
+        count = _count_md_files(kb_root)
+        assert count == 0
+
+    def test_count_md_files_with_files(self, sample_kb: Path):
+        """Test file count with sample KB (3 files)."""
+        count = _count_md_files(sample_kb)
+        assert count == 3  # entry-a.md, entry-b.md, entry-c.md
+
+    def test_count_md_files_nested(self, nested_kb: Path):
+        """Test file count includes nested directories."""
+        count = _count_md_files(nested_kb)
+        assert count == 3  # index.md, projects/alpha.md, docs/guide.md
+
+    def test_count_md_files_nonexistent(self, tmp_path: Path):
+        """Test file count for nonexistent KB."""
+        nonexistent = tmp_path / "does-not-exist"
+        count = _count_md_files(nonexistent)
+        assert count == 0
+
+    def test_collect_cache_metadata(self, sample_kb: Path):
+        """Test collecting cache metadata."""
+        metadata = _collect_cache_metadata(sample_kb)
+
+        assert isinstance(metadata, CacheMetadata)
+        assert metadata.kb_mtime > 0
+        assert metadata.file_count == 3
+        assert metadata.dir_mtime > 0
+
+    def test_collect_cache_metadata_empty_kb(self, kb_root: Path):
+        """Test collecting metadata for empty KB."""
+        metadata = _collect_cache_metadata(kb_root)
+
+        assert metadata.kb_mtime == 0.0
+        assert metadata.file_count == 0
+        assert metadata.dir_mtime > 0  # Directory exists
+
+    def test_collect_cache_metadata_nonexistent(self, tmp_path: Path):
+        """Test collecting metadata for nonexistent KB."""
+        nonexistent = tmp_path / "does-not-exist"
+        metadata = _collect_cache_metadata(nonexistent)
+
+        assert metadata.kb_mtime == 0.0
+        assert metadata.file_count == 0
+        assert metadata.dir_mtime == 0.0
+
+
+class TestCacheMetadataStorage:
+    """Tests for new metadata storage format."""
+
+    def test_save_and_load_full_cache(self, sample_kb: Path, index_root: Path):
+        """Test saving and loading cache with full metadata."""
+        # Create metadata
+        metadata = CacheMetadata(
+            kb_mtime=12345.678,
+            file_count=42,
+            dir_mtime=12300.0,
+        )
+        backlinks = {"target": ["source1", "source2"]}
+
+        # Save
+        _save_cache_full(backlinks, metadata)
+
+        # Load and verify
+        loaded_backlinks, loaded_metadata = _load_cache_full()
+
+        assert loaded_backlinks == backlinks
+        assert loaded_metadata is not None
+        assert loaded_metadata.kb_mtime == pytest.approx(metadata.kb_mtime, rel=0.001)
+        assert loaded_metadata.file_count == metadata.file_count
+        assert loaded_metadata.dir_mtime == pytest.approx(metadata.dir_mtime, rel=0.001)
+
+    def test_load_legacy_cache_returns_none_metadata(self, index_root: Path):
+        """Test loading legacy cache (without new metadata fields) returns None."""
+        # Write legacy format cache
+        cache_file = _cache_path(index_root)
+        legacy_data = {
+            "kb_mtime": 12345.0,
+            "backlinks": {"target": ["source"]},
+        }
+        cache_file.write_text(json.dumps(legacy_data))
+
+        # Load
+        backlinks, metadata = _load_cache_full()
+
+        assert backlinks == {"target": ["source"]}
+        assert metadata is None  # Should be None for legacy cache
+
+    def test_load_nonexistent_cache(self, index_root: Path):
+        """Test loading nonexistent cache returns empty dict and None."""
+        # Don't create any cache file
+        backlinks, metadata = _load_cache_full()
+
+        assert backlinks == {}
+        assert metadata is None
+
+
+class TestOptimizedValidation:
+    """Tests for optimized cache validation logic."""
+
+    def test_is_cache_valid_unchanged(self, sample_kb: Path, index_root: Path):
+        """Test validation returns True for unchanged KB."""
+        # Build cache
+        rebuild_backlink_cache(sample_kb)
+
+        # Load metadata
+        _, metadata = _load_cache_full()
+        assert metadata is not None
+
+        # Should be valid
+        assert _is_cache_valid(sample_kb, metadata) is True
+
+    def test_is_cache_valid_file_added(self, sample_kb: Path, index_root: Path):
+        """Test validation returns False when file added."""
+        # Build cache
+        rebuild_backlink_cache(sample_kb)
+
+        # Load metadata
+        _, metadata = _load_cache_full()
+        assert metadata is not None
+
+        # Add new file
+        (sample_kb / "new-file.md").write_text("# New File")
+
+        # Should be invalid (file count changed)
+        assert _is_cache_valid(sample_kb, metadata) is False
+
+    def test_is_cache_valid_file_removed(self, sample_kb: Path, index_root: Path):
+        """Test validation returns False when file removed."""
+        # Build cache
+        rebuild_backlink_cache(sample_kb)
+
+        # Load metadata
+        _, metadata = _load_cache_full()
+        assert metadata is not None
+
+        # Remove a file
+        (sample_kb / "entry-c.md").unlink()
+
+        # Should be invalid (file count changed)
+        assert _is_cache_valid(sample_kb, metadata) is False
+
+    def test_is_cache_valid_nonexistent_kb(self, tmp_path: Path):
+        """Test validation for nonexistent KB with cached data."""
+        nonexistent = tmp_path / "does-not-exist"
+
+        # Create metadata for a KB that had files
+        metadata = CacheMetadata(kb_mtime=1000.0, file_count=5, dir_mtime=999.0)
+
+        # Should be invalid (KB doesn't exist but cache claims files)
+        assert _is_cache_valid(nonexistent, metadata) is False
+
+    def test_is_cache_valid_empty_kb_with_empty_cache(self, kb_root: Path):
+        """Test validation for empty KB with matching cache."""
+        # Create metadata for empty KB
+        metadata = CacheMetadata(kb_mtime=0.0, file_count=0, dir_mtime=kb_root.stat().st_mtime)
+
+        # Should be valid (both KB and cache are empty)
+        assert _is_cache_valid(kb_root, metadata) is True
+
+
+class TestOptimizedEnsureCache:
+    """Tests for optimized ensure_backlink_cache behavior."""
+
+    def test_legacy_cache_triggers_rebuild(self, sample_kb: Path, index_root: Path):
+        """Test that legacy cache (without metadata) triggers rebuild."""
+        # Write legacy format cache
+        cache_file = _cache_path(index_root)
+        legacy_data = {
+            "kb_mtime": 12345.0,
+            "backlinks": {"entry-b": ["entry-a"]},
+        }
+        cache_file.write_text(json.dumps(legacy_data))
+        original_mtime = cache_file.stat().st_mtime
+
+        # Sleep to ensure different mtime
+        time.sleep(0.01)
+
+        # Call ensure_backlink_cache
+        backlinks = ensure_backlink_cache(sample_kb)
+
+        # Should have rebuilt (new format with metadata)
+        new_mtime = cache_file.stat().st_mtime
+        assert new_mtime > original_mtime
+
+        # Should have correct backlinks
+        assert "entry-b" in backlinks
+        assert "entry-c" in backlinks
+
+        # Cache should now have metadata
+        _, metadata = _load_cache_full()
+        assert metadata is not None
+        assert metadata.file_count == 3
+
+    def test_unchanged_kb_uses_cache(self, sample_kb: Path, index_root: Path):
+        """Test that unchanged KB uses cached data without rebuild."""
+        # Build initial cache
+        rebuild_backlink_cache(sample_kb)
+        cache_file = _cache_path(index_root)
+        original_mtime = cache_file.stat().st_mtime
+
+        # Sleep briefly
+        time.sleep(0.01)
+
+        # Call ensure_backlink_cache multiple times
+        for _ in range(5):
+            ensure_backlink_cache(sample_kb)
+
+        # Cache file should not have been modified
+        new_mtime = cache_file.stat().st_mtime
+        assert new_mtime == original_mtime
+
+    def test_file_count_change_triggers_rebuild(self, sample_kb: Path, index_root: Path):
+        """Test that file count change triggers cache rebuild."""
+        # Build initial cache
+        rebuild_backlink_cache(sample_kb)
+
+        # Verify initial file count
+        _, metadata = _load_cache_full()
+        assert metadata is not None
+        assert metadata.file_count == 3
+
+        # Add new file
+        (sample_kb / "entry-d.md").write_text("# Entry D\n\nLinks to [[entry-a]]")
+
+        # Call ensure_backlink_cache
+        backlinks = ensure_backlink_cache(sample_kb)
+
+        # Should have rebuilt with new backlink
+        assert "entry-a" in backlinks
+        assert "entry-d" in backlinks["entry-a"]
+
+        # File count should be updated
+        _, new_metadata = _load_cache_full()
+        assert new_metadata is not None
+        assert new_metadata.file_count == 4
+
+    def test_cache_stores_correct_format(self, sample_kb: Path, index_root: Path):
+        """Test that rebuilt cache stores correct JSON format."""
+        # Build cache
+        rebuild_backlink_cache(sample_kb)
+
+        # Read raw cache file
+        cache_file = _cache_path(index_root)
+        data = json.loads(cache_file.read_text())
+
+        # Verify all expected fields exist
+        assert "kb_mtime" in data
+        assert "file_count" in data
+        assert "dir_mtime" in data
+        assert "backlinks" in data
+
+        # Verify types
+        assert isinstance(data["kb_mtime"], float)
+        assert isinstance(data["file_count"], int)
+        assert isinstance(data["dir_mtime"], float)
+        assert isinstance(data["backlinks"], dict)

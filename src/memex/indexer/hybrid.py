@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -16,9 +17,11 @@ from ..config import (
     RRF_K,
     TAG_MATCH_BOOST,
     get_kb_root,
+    get_index_root,
 )
 from ..models import DocumentChunk, IndexStatus, SearchResult
 from .chroma_index import ChromaIndex
+from .manifest import IndexManifest
 from .whoosh_index import WhooshIndex
 
 log = logging.getLogger(__name__)
@@ -29,6 +32,17 @@ if TYPE_CHECKING:
 SearchMode = Literal["hybrid", "keyword", "semantic"]
 
 
+@dataclass
+class ReindexStats:
+    """Statistics from an incremental reindex operation."""
+
+    total_chunks: int  # Total chunks now indexed
+    added: int  # Files added (new)
+    updated: int  # Files updated (modified)
+    deleted: int  # Files deleted
+    unchanged: int  # Files unchanged (skipped)
+
+
 class HybridSearcher:
     """Hybrid search combining keyword (Whoosh) and semantic (Chroma) indices."""
 
@@ -36,16 +50,20 @@ class HybridSearcher:
         self,
         whoosh_index: WhooshIndex | None = None,
         chroma_index: ChromaIndex | None = None,
+        index_dir: Path | None = None,
     ):
         """Initialize the hybrid searcher.
 
         Args:
             whoosh_index: Whoosh index instance. Created if not provided.
             chroma_index: Chroma index instance. Created if not provided.
+            index_dir: Directory for index storage. Used for manifest.
         """
         self._whoosh = whoosh_index or WhooshIndex()
         self._chroma = chroma_index or ChromaIndex()
         self._last_indexed: datetime | None = None
+        self._index_dir = index_dir or get_index_root()
+        self._manifest = IndexManifest(self._index_dir)
 
     def search(
         self,
@@ -309,18 +327,44 @@ class HybridSearcher:
         self._whoosh.delete_document(path)
         self._chroma.delete_document(path)
 
-    def reindex(self, kb_root: Path | None = None) -> int:
-        """Clear and rebuild indices from all markdown files.
+    def reindex(
+        self,
+        kb_root: Path | None = None,
+        *,
+        force: bool = False,
+    ) -> int | ReindexStats:
+        """Rebuild indices from markdown files.
+
+        By default, performs incremental indexing - only reindexing files
+        that have been added, modified, or deleted since the last index.
+        Use force=True for a full rebuild.
 
         Args:
             kb_root: Knowledge base root directory. Uses config default if None.
+            force: If True, clear and rebuild everything. If False (default),
+                   perform incremental update based on file mtimes.
+
+        Returns:
+            If force=True: Number of chunks indexed (int, for backward compatibility).
+            If force=False: ReindexStats with detailed counts.
+        """
+        kb_root = kb_root or get_kb_root()
+
+        if force:
+            return self._full_reindex(kb_root)
+        else:
+            return self._incremental_reindex(kb_root)
+
+    def _full_reindex(self, kb_root: Path) -> int:
+        """Perform a full reindex, clearing all existing data.
+
+        Args:
+            kb_root: Knowledge base root directory.
 
         Returns:
             Number of chunks indexed.
         """
-        kb_root = kb_root or get_kb_root()
-
-        # Clear existing indices
+        # Clear existing indices and manifest
         self.clear()
 
         # Find all markdown files
@@ -349,6 +393,10 @@ class HybridSearcher:
                 ]
                 batch.extend(normalized_chunks)
 
+                # Update manifest with current file state
+                stat = md_file.stat()
+                self._manifest.update_file(relative_path, stat.st_mtime, stat.st_size)
+
                 # Index when batch is full
                 if len(batch) >= BATCH_SIZE:
                     self.index_chunks(batch)
@@ -363,12 +411,128 @@ class HybridSearcher:
             self.index_chunks(batch)
             total_indexed += len(batch)
 
+        # Save manifest
+        self._manifest.save()
+
         return total_indexed
 
+    def _incremental_reindex(self, kb_root: Path) -> ReindexStats:
+        """Perform incremental reindex, only updating changed files.
+
+        Args:
+            kb_root: Knowledge base root directory.
+
+        Returns:
+            ReindexStats with counts of added, updated, deleted, unchanged files.
+        """
+        # Import parser here to avoid circular imports
+        from ..parser import parse_entry
+
+        # Get current files on disk
+        md_files = list(kb_root.rglob("*.md"))
+        current_paths = {str(f.relative_to(kb_root)) for f in md_files}
+
+        # Get previously indexed files from manifest
+        indexed_paths = self._manifest.get_all_paths()
+
+        # Find deleted files
+        deleted_paths = indexed_paths - current_paths
+
+        # Track stats
+        added_count = 0
+        updated_count = 0
+        unchanged_count = 0
+        total_chunks = 0
+
+        BATCH_SIZE = 100
+        batch: list[DocumentChunk] = []
+
+        # Process current files
+        for md_file in md_files:
+            relative_path = str(md_file.relative_to(kb_root))
+
+            try:
+                stat = md_file.stat()
+                current_mtime = stat.st_mtime
+                current_size = stat.st_size
+
+                # Check if file has changed
+                if not self._manifest.is_file_changed(relative_path, current_mtime, current_size):
+                    unchanged_count += 1
+                    continue
+
+                # File is new or modified - parse and index
+                is_new = relative_path not in indexed_paths
+
+                # Delete old chunks first (for updates)
+                if not is_new:
+                    self.delete_document(relative_path)
+
+                # Parse the file
+                _, _, file_chunks = parse_entry(md_file)
+                if not file_chunks:
+                    # File exists but has no chunks - still track it
+                    self._manifest.update_file(relative_path, current_mtime, current_size)
+                    if is_new:
+                        added_count += 1
+                    else:
+                        updated_count += 1
+                    continue
+
+                # Normalize paths in chunks
+                normalized_chunks = [
+                    chunk.model_copy(update={"path": relative_path}) for chunk in file_chunks
+                ]
+                batch.extend(normalized_chunks)
+
+                # Update manifest
+                self._manifest.update_file(relative_path, current_mtime, current_size)
+
+                if is_new:
+                    added_count += 1
+                else:
+                    updated_count += 1
+
+                # Index when batch is full
+                if len(batch) >= BATCH_SIZE:
+                    self.index_chunks(batch)
+                    total_chunks += len(batch)
+                    batch = []
+
+            except Exception as e:
+                log.warning("Skipping %s during incremental reindex: %s", md_file, e)
+                continue
+
+        # Index remaining batch
+        if batch:
+            self.index_chunks(batch)
+            total_chunks += len(batch)
+
+        # Delete removed files from index
+        for deleted_path in deleted_paths:
+            self.delete_document(deleted_path)
+            self._manifest.remove_file(deleted_path)
+
+        # Save manifest
+        self._manifest.save()
+
+        # Update timestamp if we did any work
+        if added_count > 0 or updated_count > 0 or deleted_paths:
+            self._last_indexed = datetime.now(UTC)
+
+        return ReindexStats(
+            total_chunks=total_chunks,
+            added=added_count,
+            updated=updated_count,
+            deleted=len(deleted_paths),
+            unchanged=unchanged_count,
+        )
+
     def clear(self) -> None:
-        """Clear both indices."""
+        """Clear both indices and the manifest."""
         self._whoosh.clear()
         self._chroma.clear()
+        self._manifest.clear()
         self._last_indexed = None
 
     def status(self) -> IndexStatus:

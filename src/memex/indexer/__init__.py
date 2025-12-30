@@ -3,11 +3,20 @@
 import re
 
 from .chroma_index import ChromaIndex
-from .hybrid import HybridSearcher
+from .hybrid import HybridSearcher, ReindexStats
+from .manifest import IndexManifest
 from .watcher import FileWatcher
 from .whoosh_index import WhooshIndex
 
-__all__ = ["HybridSearcher", "WhooshIndex", "ChromaIndex", "FileWatcher", "strip_markdown_for_snippet"]
+__all__ = [
+    "HybridSearcher",
+    "WhooshIndex",
+    "ChromaIndex",
+    "FileWatcher",
+    "IndexManifest",
+    "ReindexStats",
+    "strip_markdown_for_snippet",
+]
 
 
 def strip_markdown_for_snippet(text: str, max_length: int = 200) -> str:

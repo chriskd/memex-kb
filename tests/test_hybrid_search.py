@@ -561,8 +561,8 @@ created: 2024-01-01
 Test content for reindexing.
 """)
 
-        # Reindex
-        count = hybrid_searcher.reindex(kb_root)
+        # Force reindex (returns int for backward compatibility)
+        count = hybrid_searcher.reindex(kb_root, force=True)
         assert count >= 1
         assert hybrid_searcher._whoosh.doc_count() >= 1
         assert hybrid_searcher._chroma.doc_count() >= 1
@@ -572,7 +572,8 @@ Test content for reindexing.
         kb_root = tmp_path / "empty_kb"
         kb_root.mkdir()
 
-        count = hybrid_searcher.reindex(kb_root)
+        # Force reindex returns int
+        count = hybrid_searcher.reindex(kb_root, force=True)
         assert count == 0
 
     def test_reindex_updates_timestamp(self, hybrid_searcher, tmp_path):

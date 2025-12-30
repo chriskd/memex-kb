@@ -21,6 +21,8 @@ from typing import Literal
 log = logging.getLogger(__name__)
 
 from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
+from .health_cache import get_entry_metadata
+from .tags_cache import ensure_tags_cache, get_tag_entries, rebuild_tags_cache
 from .config import (
     DUPLICATE_DETECTION_LIMIT,
     DUPLICATE_DETECTION_MIN_SCORE,
@@ -463,6 +465,9 @@ def compute_link_suggestions(
 def get_tag_taxonomy() -> dict[str, int]:
     """Get all tags currently used in the KB with their usage counts.
 
+    Uses cached per-file tag data with mtime-based invalidation.
+    Only re-parses files that have changed since last cache update.
+
     Returns:
         Dict mapping tag name to usage count.
     """
@@ -470,19 +475,7 @@ def get_tag_taxonomy() -> dict[str, int]:
     if not kb_root.exists():
         return {}
 
-    tag_counts: dict[str, int] = {}
-
-    for md_file in kb_root.rglob("*.md"):
-        if md_file.name.startswith("_"):
-            continue
-        try:
-            metadata, _, _ = parse_entry(md_file)
-            for tag in metadata.tags:
-                tag_counts[tag] = tag_counts.get(tag, 0) + 1
-        except ParseError:
-            continue
-
-    return tag_counts
+    return ensure_tags_cache(kb_root)
 
 
 def compute_tag_suggestions(
@@ -1428,6 +1421,7 @@ async def reindex() -> IndexStatus:
 
     searcher.reindex(kb_root)
     rebuild_backlink_cache(kb_root)
+    rebuild_tags_cache(kb_root)
 
     # Clean up views for deleted entries
     try:
@@ -1786,6 +1780,8 @@ async def tags(
 ) -> list[dict]:
     """List all tags with usage counts.
 
+    Uses cached per-file tag data with mtime-based invalidation.
+
     Args:
         min_count: Only include tags used at least this many times (default 1).
         include_entries: If True, include list of entry paths for each tag.
@@ -1798,28 +1794,12 @@ async def tags(
     if not kb_root.exists():
         return []
 
-    # Collect all tags
-    tag_entries: dict[str, list[str]] = {}
-
-    for md_file in kb_root.rglob("*.md"):
-        if md_file.name.startswith("_"):
-            continue
-
-        rel_path = str(md_file.relative_to(kb_root))
-
-        try:
-            metadata, _, _ = parse_entry(md_file)
-        except ParseError:
-            continue
-
-        for tag in metadata.tags:
-            if tag not in tag_entries:
-                tag_entries[tag] = []
-            tag_entries[tag].append(rel_path)
+    # Use cached tag entries
+    tag_entries_map = get_tag_entries(kb_root)
 
     # Build results
     results = []
-    for tag, entries in sorted(tag_entries.items(), key=lambda x: -len(x[1])):
+    for tag, entries in sorted(tag_entries_map.items(), key=lambda x: -len(x[1])):
         if len(entries) >= min_count:
             result: dict = {"tag": tag, "count": len(entries)}
             if include_entries:
@@ -1866,31 +1846,10 @@ async def health(
         "empty_dirs": [],
     }
 
-    # Collect all entries and their metadata
-    all_entries: dict[str, dict] = {}  # path -> {title, tags, created, updated, links}
+    # Use cached metadata instead of parsing every file
+    # This is O(n) on changed files only, not O(n) full parses
+    all_entries = get_entry_metadata(kb_root)
     cutoff_date = date.today() - timedelta(days=stale_days)
-
-    for md_file in kb_root.rglob("*.md"):
-        if md_file.name.startswith("_"):
-            continue
-
-        rel_path = str(md_file.relative_to(kb_root))
-        path_key = rel_path[:-3] if rel_path.endswith(".md") else rel_path
-
-        try:
-            metadata, content, _ = parse_entry(md_file)
-            links = extract_links(content)
-        except ParseError:
-            continue
-
-        all_entries[path_key] = {
-            "path": rel_path,
-            "title": metadata.title,
-            "tags": metadata.tags,
-            "created": metadata.created,
-            "updated": metadata.updated,
-            "links": links,
-        }
 
     # Get backlink index
     all_backlinks = get_backlink_index()
@@ -1943,22 +1902,31 @@ async def health(
                 })
 
     # Check for empty directories
+    # Optimization: use paths already collected instead of re-scanning
     if check_empty_dirs:
+        # Build set of directories that contain entries (from cached paths)
+        dirs_with_entries: set[str] = set()
+        for path_key in all_entries.keys():
+            # Add all parent directories of each entry
+            parts = path_key.split("/")
+            for i in range(1, len(parts)):
+                dirs_with_entries.add("/".join(parts[:i]))
+
+        # Scan directories once (not recursively per-dir)
         for dir_path in kb_root.rglob("*"):
             if not dir_path.is_dir():
                 continue
             if dir_path.name.startswith(".") or dir_path.name.startswith("_"):
                 continue
 
-            # Check if directory has any .md files
-            has_entries = any(
-                f.suffix == ".md" and not f.name.startswith("_")
-                for f in dir_path.rglob("*")
-                if f.is_file()
+            rel_dir = str(dir_path.relative_to(kb_root))
+
+            # Check if this dir or any subdirs have entries
+            has_entries = rel_dir in dirs_with_entries or any(
+                d.startswith(f"{rel_dir}/") for d in dirs_with_entries
             )
 
             if not has_entries:
-                rel_dir = str(dir_path.relative_to(kb_root))
                 results["empty_dirs"].append(rel_dir)
 
     # Add summary with health score
