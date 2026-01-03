@@ -142,3 +142,13 @@ class AddEntryPreview(BaseModel):
     content: str  # Final content (including related links if provided)
     potential_duplicates: list[PotentialDuplicate] = Field(default_factory=list)
     warning: str | None = None  # Warning message if duplicates detected
+
+
+class SearchHistoryEntry(BaseModel):
+    """A recorded search query."""
+
+    query: str  # The search query string
+    timestamp: datetime  # When the search was executed
+    result_count: int = 0  # Number of results returned
+    mode: str = "hybrid"  # Search mode used (hybrid, keyword, semantic)
+    tags: list[str] = Field(default_factory=list)  # Tag filters applied

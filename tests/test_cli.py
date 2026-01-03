@@ -694,6 +694,87 @@ class TestQuickAddCommand:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Info Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestInfoCommand:
+    """Tests for 'mx info' and 'mx config' commands."""
+
+    @patch("memex.core.get_valid_categories")
+    @patch("memex.config.get_index_root")
+    @patch("memex.config.get_kb_root")
+    def test_info_basic(self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path):
+        """Test basic info output."""
+        kb_root = tmp_path / "kb"
+        index_root = tmp_path / "indices"
+        kb_root.mkdir()
+        index_root.mkdir()
+        (kb_root / "entry.md").write_text("# Entry")
+        (kb_root / "docs").mkdir()
+        (kb_root / "docs" / "second.md").write_text("# Second")
+
+        mock_get_kb_root.return_value = kb_root
+        mock_get_index_root.return_value = index_root
+        mock_get_categories.return_value = ["docs", "notes"]
+
+        result = runner.invoke(cli, ["info"])
+
+        assert result.exit_code == 0
+        lines = [line for line in result.output.splitlines() if ":" in line]
+        values = {line.split(":", 1)[0].strip(): line.split(":", 1)[1].strip() for line in lines}
+        assert values["KB Root"] == str(kb_root)
+        assert values["Index Root"] == str(index_root)
+        assert values["Entries"] == "2"
+        assert values["Categories"] == "docs, notes"
+
+    @patch("memex.core.get_valid_categories")
+    @patch("memex.config.get_index_root")
+    @patch("memex.config.get_kb_root")
+    def test_info_json_output(self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path):
+        """Test info JSON output."""
+        kb_root = tmp_path / "kb"
+        index_root = tmp_path / "indices"
+        kb_root.mkdir()
+        index_root.mkdir()
+        (kb_root / "entry.md").write_text("# Entry")
+
+        mock_get_kb_root.return_value = kb_root
+        mock_get_index_root.return_value = index_root
+        mock_get_categories.return_value = ["docs"]
+
+        result = runner.invoke(cli, ["info", "--json"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["kb_root"] == str(kb_root)
+        assert payload["index_root"] == str(index_root)
+        assert payload["categories"] == ["docs"]
+        assert payload["entry_count"] == 1
+
+    @patch("memex.core.get_valid_categories")
+    @patch("memex.config.get_index_root")
+    @patch("memex.config.get_kb_root")
+    def test_config_alias(self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path):
+        """Test config alias delegates to info."""
+        kb_root = tmp_path / "kb"
+        index_root = tmp_path / "indices"
+        kb_root.mkdir()
+        index_root.mkdir()
+
+        mock_get_kb_root.return_value = kb_root
+        mock_get_index_root.return_value = index_root
+        mock_get_categories.return_value = []
+
+        result = runner.invoke(cli, ["config", "--json"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["kb_root"] == str(kb_root)
+        assert payload["index_root"] == str(index_root)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tree Command Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1505,6 +1586,139 @@ class TestPrimeCommand:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# History Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestHistoryCommand:
+    """Tests for 'mx history' command."""
+
+    @patch("memex.search_history.get_recent")
+    def test_history_empty(self, mock_get_recent, runner):
+        """Test history with no entries."""
+        mock_get_recent.return_value = []
+
+        result = runner.invoke(cli, ["history"])
+
+        assert result.exit_code == 0
+        assert "No search history" in result.output
+
+    @patch("memex.search_history.get_recent")
+    def test_history_shows_entries(self, mock_get_recent, runner):
+        """Test history displays entries correctly."""
+        from datetime import datetime
+        from memex.models import SearchHistoryEntry
+
+        mock_get_recent.return_value = [
+            SearchHistoryEntry(
+                query="deployment",
+                timestamp=datetime(2024, 1, 15, 10, 30),
+                result_count=5,
+                mode="hybrid",
+                tags=[],
+            ),
+            SearchHistoryEntry(
+                query="docker",
+                timestamp=datetime(2024, 1, 15, 10, 25),
+                result_count=3,
+                mode="semantic",
+                tags=["infrastructure"],
+            ),
+        ]
+
+        result = runner.invoke(cli, ["history"])
+
+        assert result.exit_code == 0
+        assert "deployment" in result.output
+        assert "docker" in result.output
+        assert "5 results" in result.output
+        assert "infrastructure" in result.output
+
+    @patch("memex.search_history.get_recent")
+    def test_history_json_output(self, mock_get_recent, runner):
+        """Test history with JSON output."""
+        from datetime import datetime
+        from memex.models import SearchHistoryEntry
+
+        mock_get_recent.return_value = [
+            SearchHistoryEntry(
+                query="test",
+                timestamp=datetime(2024, 1, 15, 10, 30),
+                result_count=2,
+                mode="hybrid",
+                tags=["tag1"],
+            ),
+        ]
+
+        result = runner.invoke(cli, ["history", "--json"])
+
+        assert result.exit_code == 0
+        output_data = json.loads(result.output)
+        assert len(output_data) == 1
+        assert output_data[0]["query"] == "test"
+        assert output_data[0]["position"] == 1
+
+    @patch("memex.search_history.clear_history")
+    def test_history_clear(self, mock_clear, runner):
+        """Test history clear."""
+        mock_clear.return_value = 5
+
+        result = runner.invoke(cli, ["history", "--clear"])
+
+        assert result.exit_code == 0
+        assert "Cleared 5 search history entries" in result.output
+        mock_clear.assert_called_once()
+
+    @patch("memex.search_history.record_search")
+    @patch("memex.search_history.get_by_index")
+    @patch("memex.cli.run_async")
+    def test_history_rerun(self, mock_run_async, mock_get_by_index, mock_record, runner):
+        """Test history rerun."""
+        from datetime import datetime
+        from memex.models import SearchHistoryEntry
+
+        mock_get_by_index.return_value = SearchHistoryEntry(
+            query="deployment",
+            timestamp=datetime(2024, 1, 15, 10, 30),
+            result_count=5,
+            mode="hybrid",
+            tags=[],
+        )
+
+        mock_result = MagicMock()
+        mock_result.results = [
+            MagicMock(path="test.md", title="Test", score=0.9, snippet="..."),
+        ]
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["history", "--rerun", "1"])
+
+        assert result.exit_code == 0
+        assert "Re-running: deployment" in result.output
+        mock_get_by_index.assert_called_once_with(1)
+
+    @patch("memex.search_history.get_by_index")
+    def test_history_rerun_invalid_index(self, mock_get_by_index, runner):
+        """Test history rerun with invalid index."""
+        mock_get_by_index.return_value = None
+
+        result = runner.invoke(cli, ["history", "--rerun", "999"])
+
+        assert result.exit_code == 1
+        assert "No search at position 999" in result.output
+
+    @patch("memex.search_history.get_recent")
+    def test_history_with_limit(self, mock_get_recent, runner):
+        """Test history with limit option."""
+        mock_get_recent.return_value = []
+
+        result = runner.invoke(cli, ["history", "-n", "5"])
+
+        assert result.exit_code == 0
+        mock_get_recent.assert_called_once_with(limit=5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Edge Cases and Error Handling
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1530,6 +1744,7 @@ class TestEdgeCasesAndErrors:
 
         assert result.exit_code == 0
         assert "mx: Token-efficient CLI" in result.output
+        assert "info" in result.output
 
     def test_command_help(self, runner):
         """Test individual command help."""

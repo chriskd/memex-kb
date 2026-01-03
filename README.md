@@ -58,6 +58,7 @@ mx get tooling/notes.md             # Full entry with content
 mx get tooling/notes.md --metadata  # Just metadata
 
 # Browse
+mx info                             # Show KB configuration
 mx tree                             # Directory structure
 mx list --tag=infrastructure        # Filter by tag
 mx whats-new --days=7               # Recent changes
