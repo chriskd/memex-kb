@@ -427,6 +427,16 @@ class TestAddCommand:
         assert result.exit_code == 1
         assert "Must provide --content, --file, or --stdin" in result.output
 
+    def test_add_help_includes_required_and_common_issues(self, runner):
+        """Help text highlights required flags and common issues."""
+        result = runner.invoke(cli, ["add", "--help"])
+
+        assert result.exit_code == 0
+        assert "Required:" in result.output
+        assert "--category" in result.output
+        assert "Common issues:" in result.output
+        assert "--force" in result.output
+
     @patch("memex.cli.run_async")
     def test_add_with_category(self, mock_run_async, runner, mock_add_result):
         """Test add command with category."""
@@ -502,15 +512,42 @@ class TestAddCommand:
         """Test add command error handling."""
         mock_run_async.side_effect = Exception("Failed to add entry")
 
-        result = runner.invoke(cli, [
-            "add",
-            "--title", "My Entry",
-            "--tags", "foo",
-            "--content", "Content",
-        ])
+        with patch("memex.core.add_entry", new=lambda *args, **kwargs: None):
+            result = runner.invoke(cli, [
+                "add",
+                "--title", "My Entry",
+                "--tags", "foo",
+                "--content", "Content",
+            ])
 
         assert result.exit_code == 1
         assert "Error" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_add_missing_category_guidance(self, mock_run_async, runner):
+        """Missing category errors include suggestions and examples."""
+        mock_run_async.side_effect = Exception(
+            "Either 'category' or 'directory' must be provided "
+            "(no .kbcontext file found with 'primary' field). "
+            "Existing categories: tooling, devops"
+        )
+
+        with patch("memex.core.add_entry", new=lambda *args, **kwargs: None), patch(
+            "memex.core.get_valid_categories",
+            return_value=["tooling", "devops"],
+        ):
+            result = runner.invoke(cli, [
+                "add",
+                "--title", "My Entry",
+                "--tags", "tooling,foo",
+                "--content", "Content",
+            ])
+
+        assert result.exit_code == 1
+        assert "Error: --category required." in result.output
+        assert "Suggested: --category=tooling" in result.output
+        assert "Available categories: tooling, devops" in result.output
+        assert "mx context init" in result.output
 
 
 # ─────────────────────────────────────────────────────────────────────────────

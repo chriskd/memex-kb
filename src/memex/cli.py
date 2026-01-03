@@ -91,6 +91,32 @@ def _normalize_error_message(message: str) -> str:
     return normalized
 
 
+def _format_missing_category_error(tags: list[str], message: str) -> str:
+    """Format a helpful error when category is required."""
+    from . import core
+
+    valid_categories = core.get_valid_categories()
+    tag_set = {tag.strip().lower() for tag in tags if tag.strip()}
+    suggestion = next(
+        (category for category in valid_categories if category.lower() in tag_set),
+        None,
+    )
+
+    lines = ["Error: --category required."]
+    if "no .kbcontext file found" in message.lower():
+        lines.append("No .kbcontext primary found. Run 'mx context init' or pass --category.")
+    if tags:
+        lines.append(f"Your tags: {', '.join(tags)}")
+    if suggestion:
+        lines.append(f"Suggested: --category={suggestion}")
+    if valid_categories:
+        lines.append(f"Available categories: {', '.join(valid_categories)}")
+    lines.append(
+        "Example: mx add --title=\"...\" --tags=\"...\" --category=... --content=\"...\""
+    )
+    return "\n".join(lines)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main CLI Group
 # ─────────────────────────────────────────────────────────────────────────────
@@ -469,7 +495,12 @@ def get(path: str, as_json: bool, metadata: bool):
 @cli.command()
 @click.option("--title", "-t", required=True, help="Entry title")
 @click.option("--tags", required=True, help="Tags (comma-separated)")
-@click.option("--category", "-c", default="", help="Category/directory")
+@click.option(
+    "--category",
+    "-c",
+    default="",
+    help="Category/directory (required unless .kbcontext sets a primary path)",
+)
 @click.option("--content", help="Content (or use --file/--stdin)")
 @click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
 @click.option("--stdin", is_flag=True, help="Read content from stdin")
@@ -492,6 +523,17 @@ def add(
       mx add --title="My Entry" --tags="foo,bar" --content="# Content here"
       mx add --title="My Entry" --tags="foo,bar" --file=content.md
       cat content.md | mx add --title="My Entry" --tags="foo,bar" --stdin
+
+    \b
+    Required:
+      --title TEXT
+      --tags TEXT
+      --category TEXT  (required unless .kbcontext sets a primary path)
+
+    \b
+    Common issues:
+      - Duplicate detected? Use --force to override
+      - Missing category? Run 'mx context init' or pass --category
     """
     from .core import add_entry
 
@@ -543,7 +585,11 @@ def add(
             force=force,
         ))
     except Exception as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
+        message = str(e)
+        if "Either 'category' or 'directory' must be provided" in message:
+            click.echo(_format_missing_category_error(tag_list, message), err=True)
+        else:
+            click.echo(f"Error: {_normalize_error_message(message)}", err=True)
         sys.exit(1)
 
     if as_json:
