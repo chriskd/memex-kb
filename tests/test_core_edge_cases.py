@@ -249,13 +249,26 @@ This entry contains various Unicode characters:
         assert (kb_root / "newcategory").is_dir()
 
     @pytest.mark.asyncio
+    async def test_add_entry_infers_category_from_tags(self, kb_root, index_root):
+        """Infer category from tags when none provided and no context primary."""
+        result = await core.add_entry(
+            title="Inferred Category Entry",
+            content="Testing inferred category",
+            tags=["development", "guide"],
+            check_duplicates=False,
+        )
+
+        assert result.created is True
+        assert result.path.startswith("development/")
+
+    @pytest.mark.asyncio
     async def test_add_entry_no_category_no_directory(self, kb_root, index_root):
         """Missing both category and directory should raise ValueError."""
         with pytest.raises(ValueError, match="Either 'category' or 'directory' must be provided"):
             await core.add_entry(
                 title="No Category Entry",
                 content="This should fail",
-                tags=["test"],
+                tags=["misc"],
             )
 
     @pytest.mark.asyncio

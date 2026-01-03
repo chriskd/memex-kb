@@ -930,6 +930,7 @@ async def add_entry(
         kb_root=kb_root,
         category=category,
         directory=directory,
+        tags=tags,
         kb_context=kb_context,
         create_dirs=True,
     )
@@ -1079,6 +1080,7 @@ async def preview_add_entry(
         kb_root=kb_root,
         category=category,
         directory=directory,
+        tags=tags,
         kb_context=kb_context,
         create_dirs=False,
     )
@@ -1381,10 +1383,14 @@ def _resolve_add_entry_directory(
     kb_root: Path,
     category: str,
     directory: str | None,
+    tags: list[str] | None,
     kb_context: KBContext | None,
     create_dirs: bool,
 ) -> tuple[Path, str]:
-    """Resolve and optionally create the target directory for new entries."""
+    """Resolve and optionally create the target directory for new entries.
+
+    Falls back to inferring category from tags when no category/directory/context is set.
+    """
     if directory:
         abs_dir, normalized_dir = validate_nested_path(directory, kb_root)
         if abs_dir.exists() and not abs_dir.is_dir():
@@ -1410,14 +1416,28 @@ def _resolve_add_entry_directory(
         return abs_dir, normalized_dir
 
     valid_categories = get_valid_categories(kb_root)
+    tag_matches: list[str] = []
+    if tags:
+        tag_set = {tag.strip().lower() for tag in tags if tag.strip()}
+        tag_matches = [cat for cat in valid_categories if cat.lower() in tag_set]
+        if len(tag_matches) == 1:
+            inferred = tag_matches[0]
+            target_dir = kb_root / inferred
+            if target_dir.exists() and not target_dir.is_dir():
+                raise ValueError(f"Path exists but is not a directory: {inferred}")
+            if create_dirs:
+                target_dir.mkdir(parents=True, exist_ok=True)
+            return target_dir, inferred
+
     context_hint = (
         " (no .kbcontext file found with 'primary' field)"
         if kb_context is None
         else ""
     )
+    matches_hint = f" Tags matched categories: {', '.join(tag_matches)}." if tag_matches else ""
     raise ValueError(
         f"Either 'category' or 'directory' must be provided{context_hint}. "
-        f"Existing categories: {', '.join(valid_categories)}"
+        f"Existing categories: {', '.join(valid_categories)}.{matches_hint}"
     )
 
 

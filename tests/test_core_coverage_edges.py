@@ -173,6 +173,50 @@ async def test_add_entry_context_primary_is_file(kb_root, index_root):
 
 
 @pytest.mark.asyncio
+async def test_add_entry_infers_category_from_tags(kb_root, index_root, monkeypatch):
+    (kb_root / "development").mkdir()
+
+    class StubSearcher:
+        def index_chunks(self, _chunks):
+            return None
+
+    monkeypatch.setattr(core, "get_searcher", lambda: StubSearcher())
+    monkeypatch.setattr(core, "compute_link_suggestions", lambda **_kwargs: [])
+    monkeypatch.setattr(core, "compute_tag_suggestions", lambda **_kwargs: [])
+
+    result = await core.add_entry(
+        title="Inferred Category",
+        content="Content",
+        tags=["development", "guide"],
+        check_duplicates=False,
+    )
+
+    assert result.created is True
+    assert result.path.startswith("development/")
+
+
+@pytest.mark.asyncio
+async def test_add_entry_missing_category_no_tag_match(kb_root, index_root, monkeypatch):
+    (kb_root / "development").mkdir()
+
+    class StubSearcher:
+        def index_chunks(self, _chunks):
+            return None
+
+    monkeypatch.setattr(core, "get_searcher", lambda: StubSearcher())
+    monkeypatch.setattr(core, "compute_link_suggestions", lambda **_kwargs: [])
+    monkeypatch.setattr(core, "compute_tag_suggestions", lambda **_kwargs: [])
+
+    with pytest.raises(ValueError, match="Either 'category' or 'directory' must be provided"):
+        await core.add_entry(
+            title="Missing Category",
+            content="Content",
+            tags=["misc"],
+            check_duplicates=False,
+        )
+
+
+@pytest.mark.asyncio
 async def test_add_entry_prepends_context_default_tags(kb_root, index_root, monkeypatch):
     (kb_root / "development").mkdir()
 

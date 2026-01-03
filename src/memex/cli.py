@@ -97,10 +97,8 @@ def _format_missing_category_error(tags: list[str], message: str) -> str:
 
     valid_categories = core.get_valid_categories()
     tag_set = {tag.strip().lower() for tag in tags if tag.strip()}
-    suggestion = next(
-        (category for category in valid_categories if category.lower() in tag_set),
-        None,
-    )
+    matches = [category for category in valid_categories if category.lower() in tag_set]
+    suggestion = matches[0] if len(matches) == 1 else None
 
     lines = ["Error: --category required."]
     if "no .kbcontext file found" in message.lower():
@@ -109,6 +107,8 @@ def _format_missing_category_error(tags: list[str], message: str) -> str:
         lines.append(f"Your tags: {', '.join(tags)}")
     if suggestion:
         lines.append(f"Suggested: --category={suggestion}")
+    elif matches:
+        lines.append(f"Tags matched categories: {', '.join(matches)}")
     if valid_categories:
         lines.append(f"Available categories: {', '.join(valid_categories)}")
     lines.append(
@@ -536,6 +536,7 @@ def add(
     \b
     Common issues:
       - Duplicate detected? Use --force to override
+      - Category omitted? If a tag matches an existing category, it will be inferred
       - Preview first? Use --dry-run to inspect the output
       - Missing category? Run 'mx context init' or pass --category
     """
