@@ -1249,3 +1249,37 @@ See [[nonexistent.md]] and [[Also Not Real]].
         # Should have the node but edges should only point to valid targets
         orphan = next((n for n in graph["nodes"] if "orphan" in n["path"]), None)
         assert orphan is not None
+
+
+# =============================================================================
+# Mermaid Integration Tests
+# =============================================================================
+
+
+class TestMermaidIntegration:
+    """Smoke tests for Mermaid diagram support in web viewer."""
+
+    def test_index_includes_mermaid_script(self, client_no_lifespan):
+        """Verify mermaid.js CDN is included in index.html."""
+        response = client_no_lifespan.get("/")
+        assert response.status_code == 200
+        assert "mermaid" in response.text
+        assert "cdn.jsdelivr.net/npm/mermaid" in response.text
+
+    def test_index_includes_mermaid_initialization(self, client_no_lifespan):
+        """Verify mermaid is initialized with dark theme."""
+        response = client_no_lifespan.get("/")
+        assert "mermaid.initialize" in response.text
+        assert "theme: 'dark'" in response.text or 'theme: "dark"' in response.text
+
+    def test_index_includes_mermaid_css(self, client_no_lifespan):
+        """Verify mermaid CSS classes are defined."""
+        response = client_no_lifespan.get("/")
+        assert ".mermaid" in response.text
+        assert ".mermaid-error" in response.text
+
+    def test_index_includes_mermaid_renderer(self, client_no_lifespan):
+        """Verify custom mermaid renderer for marked.js exists."""
+        response = client_no_lifespan.get("/")
+        assert "mermaidRenderer" in response.text
+        assert "processMermaidDiagrams" in response.text
