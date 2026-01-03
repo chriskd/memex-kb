@@ -8,6 +8,7 @@ Usage:
     mx search "query"              # Search entries
     mx get path/to/entry.md        # Read an entry
     mx add --title="..." --tags=.. # Create entry
+    mx info                        # Show KB config
     mx tree                        # Browse structure
     mx health                      # Audit KB health
 """
@@ -133,6 +134,7 @@ def cli():
     Quick start:
       mx search "deployment"     # Find entries
       mx get tooling/beads.md    # Read an entry
+      mx info                    # Show KB configuration
       mx tree                    # Browse structure
       mx health                  # Check KB health
     """
@@ -170,6 +172,7 @@ mx get tooling/beads.md             # Full entry
 mx get tooling/beads.md --metadata  # Just metadata
 
 # Browse
+mx info                             # Show KB configuration
 mx tree                             # Directory structure
 mx list --tag=infrastructure        # Filter by tag
 mx whats-new --days=7               # Recent changes
@@ -408,8 +411,9 @@ def prime(full: bool, mcp: bool, project: Optional[str], days: int, as_json: boo
 @click.option("--mode", type=click.Choice(["hybrid", "keyword", "semantic"]), default="hybrid")
 @click.option("--limit", "-n", default=10, help="Max results")
 @click.option("--content", "-c", is_flag=True, help="Include full content in results")
+@click.option("--no-history", is_flag=True, help="Don't record this search in history")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def search(query: str, tags: Optional[str], mode: str, limit: int, content: bool, as_json: bool):
+def search(query: str, tags: Optional[str], mode: str, limit: int, content: bool, no_history: bool, as_json: bool):
     """Search the knowledge base.
 
     \b
@@ -429,6 +433,16 @@ def search(query: str, tags: Optional[str], mode: str, limit: int, content: bool
         tags=tag_list,
         include_content=content,
     ))
+
+    # Record search in history (unless --no-history flag is set)
+    if not no_history:
+        from . import search_history
+        search_history.record_search(
+            query=query,
+            result_count=len(result.results),
+            mode=mode,
+            tags=tag_list,
+        )
 
     if as_json:
         output([{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet} for r in result.results], as_json=True)
@@ -1109,6 +1123,64 @@ def health(as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Info Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def info(as_json: bool):
+    """Show knowledge base configuration and stats.
+
+    \b
+    Examples:
+      mx info
+      mx info --json
+    """
+    from .config import ConfigurationError, get_index_root, get_kb_root
+    from .core import get_valid_categories
+
+    try:
+        kb_root = get_kb_root()
+        index_root = get_index_root()
+    except ConfigurationError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    categories = get_valid_categories(kb_root)
+    entry_count = sum(1 for _ in kb_root.rglob("*.md")) if kb_root.exists() else 0
+
+    payload = {
+        "kb_root": str(kb_root),
+        "index_root": str(index_root),
+        "categories": categories,
+        "entry_count": entry_count,
+    }
+
+    if as_json:
+        output(payload, as_json=True)
+        return
+
+    click.echo("Memex Info")
+    click.echo("=" * 40)
+    click.echo(f"KB Root:    {kb_root}")
+    click.echo(f"Index Root: {index_root}")
+    click.echo(f"Entries:    {entry_count}")
+    if categories:
+        click.echo(f"Categories: {', '.join(categories)}")
+    else:
+        click.echo("Categories: (none)")
+
+
+@cli.command("config")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def config_alias(as_json: bool):
+    """Alias for mx info."""
+    ctx = click.get_current_context()
+    ctx.invoke(info, as_json=as_json)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tags Command
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1207,6 +1279,112 @@ def suggest_links(path: str, limit: int, as_json: bool):
         for s in result:
             click.echo(f"  {s['path']} ({s['score']:.2f})")
             click.echo(f"    {s['reason']}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# History Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option("--limit", "-n", default=10, help="Max entries to show")
+@click.option("--rerun", "-r", type=int, help="Re-execute search at position N (1=most recent)")
+@click.option("--clear", is_flag=True, help="Clear all search history")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def history(limit: int, rerun: Optional[int], clear: bool, as_json: bool):
+    """Show recent search history and optionally re-run searches.
+
+    \b
+    Examples:
+      mx history                  # Show last 10 searches
+      mx history -n 20            # Show last 20 searches
+      mx history --rerun 1        # Re-run most recent search
+      mx history -r 3             # Re-run 3rd most recent search
+      mx history --clear          # Clear all history
+    """
+    from . import search_history
+
+    if clear:
+        count = search_history.clear_history()
+        click.echo(f"Cleared {count} search history entries.")
+        return
+
+    if rerun is not None:
+        entry = search_history.get_by_index(rerun)
+        if entry is None:
+            click.echo(f"Error: No search at position {rerun}", err=True)
+            sys.exit(1)
+
+        # Re-run the search using the search command logic
+        click.echo(f"Re-running: {entry.query}")
+        if entry.tags:
+            click.echo(f"  Tags: {', '.join(entry.tags)}")
+        click.echo(f"  Mode: {entry.mode}")
+        click.echo()
+
+        # Import and run search
+        from .core import search as core_search
+
+        result = run_async(core_search(
+            query=entry.query,
+            limit=10,
+            mode=entry.mode,
+            tags=entry.tags if entry.tags else None,
+            include_content=False,
+        ))
+
+        # Record this re-run in history
+        search_history.record_search(
+            query=entry.query,
+            result_count=len(result.results),
+            mode=entry.mode,
+            tags=entry.tags if entry.tags else None,
+        )
+
+        if as_json:
+            output([{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet} for r in result.results], as_json=True)
+        else:
+            if not result.results:
+                click.echo("No results found.")
+                return
+
+            rows = [
+                {"path": r.path, "title": r.title, "score": f"{r.score:.2f}"}
+                for r in result.results
+            ]
+            click.echo(format_table(rows, ["path", "title", "score"], {"path": 40, "title": 35}))
+        return
+
+    # Show history
+    entries = search_history.get_recent(limit=limit)
+
+    if as_json:
+        output([
+            {
+                "position": i + 1,
+                "query": e.query,
+                "timestamp": e.timestamp.isoformat(),
+                "result_count": e.result_count,
+                "mode": e.mode,
+                "tags": e.tags,
+            }
+            for i, e in enumerate(entries)
+        ], as_json=True)
+        return
+
+    if not entries:
+        click.echo("No search history.")
+        return
+
+    click.echo("Recent searches:\n")
+    for i, entry in enumerate(entries, 1):
+        time_str = entry.timestamp.strftime("%Y-%m-%d %H:%M")
+        tag_str = f" [tags: {', '.join(entry.tags)}]" if entry.tags else ""
+        result_str = f"{entry.result_count} results" if entry.result_count else "no results"
+        click.echo(f"  {i:2d}. {entry.query}")
+        click.echo(f"      {time_str} | {entry.mode} | {result_str}{tag_str}")
+
+    click.echo(f"\nTip: Use 'mx history --rerun N' to re-execute a search")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
