@@ -442,7 +442,7 @@ class TestUpdateEntryEdgeCases:
             "## Existing Section\n\nExisting content",
         )
 
-        result = await core.update_entry(
+        await core.update_entry(
             path="development/test.md",
             section_updates={"New Section": "New section content"},
         )
@@ -595,7 +595,7 @@ class TestDeleteEntryEdgeCases:
             _create_entry(
                 kb_root / "development" / f"source{i}.md",
                 f"Source {i}",
-                f"Links to [[development/target]]",
+                "Links to [[development/target]]",
             )
 
         await core.reindex()

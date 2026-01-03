@@ -17,7 +17,6 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -35,7 +34,7 @@ def run_async(coro):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def format_table(rows: list[dict], columns: list[str], max_widths: Optional[dict] = None) -> str:
+def format_table(rows: list[dict], columns: list[str], max_widths: dict | None = None) -> str:
     """Format rows as a simple table."""
     if not rows:
         return ""
@@ -266,7 +265,7 @@ def _detect_mcp_mode() -> bool:
     return False
 
 
-def _detect_current_project() -> Optional[str]:
+def _detect_current_project() -> str | None:
     """Detect current project from git remote, directory, or beads.
 
     Returns:
@@ -343,10 +342,13 @@ def _format_recent_entries(entries: list, project: str) -> str:
 @cli.command()
 @click.option("--full", is_flag=True, help="Force full CLI output (ignore MCP detection)")
 @click.option("--mcp", is_flag=True, help="Force MCP mode (minimal output)")
-@click.option("--project", "-p", help="Include recent entries for project (auto-detected if not specified)")
+@click.option(
+    "--project", "-p",
+    help="Include recent entries for project (auto-detected if not specified)",
+)
 @click.option("--days", "-d", default=7, help="Days to look back for project entries")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def prime(full: bool, mcp: bool, project: Optional[str], days: int, as_json: bool):
+def prime(full: bool, mcp: bool, project: str | None, days: int, as_json: bool):
     """Output agent workflow context for session start.
 
     Automatically detects MCP vs CLI mode and adapts output:
@@ -413,7 +415,10 @@ def prime(full: bool, mcp: bool, project: Optional[str], days: int, as_json: boo
 @click.option("--content", "-c", is_flag=True, help="Include full content in results")
 @click.option("--no-history", is_flag=True, help="Don't record this search in history")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def search(query: str, tags: Optional[str], mode: str, limit: int, content: bool, no_history: bool, as_json: bool):
+def search(
+    query: str, tags: str | None, mode: str, limit: int,
+    content: bool, no_history: bool, as_json: bool,
+):
     """Search the knowledge base.
 
     \b
@@ -445,7 +450,11 @@ def search(query: str, tags: Optional[str], mode: str, limit: int, content: bool
         )
 
     if as_json:
-        output([{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet} for r in result.results], as_json=True)
+        output(
+            [{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet}
+             for r in result.results],
+            as_json=True,
+        )
     else:
         if not result.results:
             click.echo("No results found.")
@@ -516,17 +525,20 @@ def get(path: str, as_json: bool, metadata: bool):
     help="Category/directory (required unless .kbcontext sets a primary path)",
 )
 @click.option("--content", help="Content (or use --file/--stdin)")
-@click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
+@click.option(
+    "--file", "-f", "file_path",
+    type=click.Path(exists=True), help="Read content from file",
+)
 @click.option("--stdin", is_flag=True, help="Read content from stdin")
-@click.option("--force", is_flag=True, help="Create even if potential duplicates are detected")
+@click.option("--force", is_flag=True, help="Create even if duplicates detected")
 @click.option("--dry-run", is_flag=True, help="Preview path/frontmatter/content without creating")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def add(
     title: str,
     tags: str,
     category: str,
-    content: Optional[str],
-    file_path: Optional[str],
+    content: str | None,
+    file_path: str | None,
     stdin: bool,
     force: bool,
     dry_run: bool,
@@ -585,7 +597,8 @@ def add(
             sys.exit(1)
 
         if as_json:
-            output(preview.model_dump() if hasattr(preview, 'model_dump') else preview, as_json=True)
+            data = preview.model_dump() if hasattr(preview, 'model_dump') else preview
+            output(data, as_json=True)
             return
 
         click.echo(f"Would create: {preview.absolute_path}")
@@ -606,7 +619,10 @@ def add(
         path = add_result.path if hasattr(add_result, 'path') else add_result.get('path')
         click.echo(f"Created: {path}")
 
-        suggested_links = add_result.suggested_links if hasattr(add_result, 'suggested_links') else add_result.get('suggested_links', [])
+        suggested_links = (
+            add_result.suggested_links if hasattr(add_result, 'suggested_links')
+            else add_result.get('suggested_links', [])
+        )
         if suggested_links:
             click.echo("\nSuggested links:")
             for link in suggested_links[:5]:
@@ -614,7 +630,10 @@ def add(
                 path_str = link.get('path', '') if isinstance(link, dict) else link.path
                 click.echo(f"  - {path_str} ({score:.2f})")
 
-        suggested_tags = add_result.suggested_tags if hasattr(add_result, 'suggested_tags') else add_result.get('suggested_tags', [])
+        suggested_tags = (
+            add_result.suggested_tags if hasattr(add_result, 'suggested_tags')
+            else add_result.get('suggested_tags', [])
+        )
         if suggested_tags:
             click.echo("\nSuggested tags:")
             for tag in suggested_tags[:5]:
@@ -747,7 +766,7 @@ def _suggest_tags_from_content(content: str, existing_tags: set) -> list[str]:
     return [m[0] for m in matches[:5]]
 
 
-def _suggest_category_from_content(content: str, categories: list[str]) -> Optional[str]:
+def _suggest_category_from_content(content: str, categories: list[str]) -> str | None:
     """Suggest category based on content.
 
     Args:
@@ -770,7 +789,10 @@ def _suggest_category_from_content(content: str, categories: list[str]) -> Optio
 
 
 @cli.command("quick-add")
-@click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
+@click.option(
+    "--file", "-f", "file_path",
+    type=click.Path(exists=True), help="Read content from file",
+)
 @click.option("--stdin", is_flag=True, help="Read content from stdin")
 @click.option("--content", "-c", help="Raw content to add")
 @click.option("--title", "-t", help="Override auto-detected title")
@@ -779,12 +801,12 @@ def _suggest_category_from_content(content: str, categories: list[str]) -> Optio
 @click.option("--confirm", "-y", is_flag=True, help="Auto-confirm without prompting")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def quick_add(
-    file_path: Optional[str],
+    file_path: str | None,
     stdin: bool,
-    content: Optional[str],
-    title: Optional[str],
-    tags: Optional[str],
-    category: Optional[str],
+    content: str | None,
+    title: str | None,
+    tags: str | None,
+    category: str | None,
     confirm: bool,
     as_json: bool,
 ):
@@ -800,7 +822,7 @@ def quick_add(
       mx quick-add -c "..." -y          # Auto-confirm creation
       echo "..." | mx quick-add --stdin --json  # Machine-readable
     """
-    from .core import add_entry, get_valid_categories, compute_tag_suggestions
+    from .core import add_entry, get_valid_categories
 
     # Resolve content source
     if stdin:
@@ -863,7 +885,8 @@ def quick_add(
 
     if not auto_category:
         click.echo(f"\nAvailable categories: {', '.join(valid_categories)}")
-        auto_category = click.prompt("Category", default=valid_categories[0] if valid_categories else "notes")
+        default_cat = valid_categories[0] if valid_categories else "notes"
+        auto_category = click.prompt("Category", default=default_cat)
 
     if not confirm:
         if not click.confirm("\nCreate entry with these settings?"):
@@ -900,9 +923,15 @@ def quick_add(
 @click.argument("path")
 @click.option("--tags", help="New tags (comma-separated)")
 @click.option("--content", help="New content")
-@click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
+@click.option(
+    "--file", "-f", "file_path",
+    type=click.Path(exists=True), help="Read content from file",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def update(path: str, tags: Optional[str], content: Optional[str], file_path: Optional[str], as_json: bool):
+def update(
+    path: str, tags: str | None, content: str | None,
+    file_path: str | None, as_json: bool,
+):
     """Update an existing knowledge base entry.
 
     \b
@@ -991,7 +1020,7 @@ def tree(path: str, depth: int, as_json: bool):
 @click.option("--category", "-c", help="Filter by category")
 @click.option("--limit", "-n", default=20, help="Max results")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def list_entries(tag: Optional[str], category: Optional[str], limit: int, as_json: bool):
+def list_entries(tag: str | None, category: str | None, limit: int, as_json: bool):
     """List knowledge base entries.
 
     \b
@@ -1023,9 +1052,12 @@ def list_entries(tag: Optional[str], category: Optional[str], limit: int, as_jso
 @cli.command("whats-new")
 @click.option("--days", "-d", default=30, help="Look back N days")
 @click.option("--limit", "-n", default=10, help="Max results")
-@click.option("--project", "-p", help="Filter by project name (matches path, source_project, or tags)")
+@click.option(
+    "--project", "-p",
+    help="Filter by project name (matches path, source_project, or tags)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def whats_new(days: int, limit: int, project: Optional[str], as_json: bool):
+def whats_new(days: int, limit: int, project: str | None, as_json: bool):
     """Show recently created or updated entries.
 
     \b
@@ -1240,7 +1272,11 @@ def hubs(limit: int, as_json: bool):
             click.echo("No hub entries found.")
             return
 
-        rows = [{"path": h["path"], "incoming": h["incoming"], "outgoing": h["outgoing"], "total": h["total"]} for h in result]
+        rows = [
+            {"path": h["path"], "incoming": h["incoming"],
+             "outgoing": h["outgoing"], "total": h["total"]}
+            for h in result
+        ]
         click.echo(format_table(rows, ["path", "incoming", "outgoing", "total"], {"path": 50}))
 
 
@@ -1291,7 +1327,7 @@ def suggest_links(path: str, limit: int, as_json: bool):
 @click.option("--rerun", "-r", type=int, help="Re-execute search at position N (1=most recent)")
 @click.option("--clear", is_flag=True, help="Clear all search history")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def history(limit: int, rerun: Optional[int], clear: bool, as_json: bool):
+def history(limit: int, rerun: int | None, clear: bool, as_json: bool):
     """Show recent search history and optionally re-run searches.
 
     \b
@@ -1342,7 +1378,12 @@ def history(limit: int, rerun: Optional[int], clear: bool, as_json: bool):
         )
 
         if as_json:
-            output([{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet} for r in result.results], as_json=True)
+            output(
+                [{"path": r.path, "title": r.title,
+                  "score": r.score, "snippet": r.snippet}
+                 for r in result.results],
+                as_json=True,
+            )
         else:
             if not result.results:
                 click.echo("No results found.")
@@ -1384,7 +1425,7 @@ def history(limit: int, rerun: Optional[int], clear: bool, as_json: bool):
         click.echo(f"  {i:2d}. {entry.query}")
         click.echo(f"      {time_str} | {entry.mode} | {result_str}{tag_str}")
 
-    click.echo(f"\nTip: Use 'mx history --rerun N' to re-execute a search")
+    click.echo("\nTip: Use 'mx history --rerun N' to re-execute a search")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1406,7 +1447,10 @@ def reindex():
 
     click.echo("Reindexing knowledge base...")
     result = run_async(core_reindex())
-    click.echo(f"✓ Indexed {result.kb_files} entries, {result.whoosh_docs} keyword docs, {result.chroma_docs} semantic docs")
+    click.echo(
+        f"✓ Indexed {result.kb_files} entries, "
+        f"{result.whoosh_docs} keyword docs, {result.chroma_docs} semantic docs"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1489,7 +1533,7 @@ def context_status(ctx):
 @click.option("--project", "-p", help="Project name (auto-detected from directory if not provided)")
 @click.option("--directory", "-d", help="KB directory (defaults to projects/<project>)")
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing .kbcontext file")
-def context_init(project: Optional[str], directory: Optional[str], force: bool):
+def context_init(project: str | None, directory: str | None, force: bool):
     """Create a new .kbcontext file in the current directory.
 
     \b
@@ -1613,6 +1657,7 @@ def _load_beads_registry() -> dict[str, Path]:
         Dict mapping project prefix to resolved path.
     """
     import yaml
+
     from .config import get_kb_root
 
     kb_root = get_kb_root()
@@ -1643,7 +1688,7 @@ def _load_beads_registry() -> dict[str, Path]:
         return {}
 
 
-def _resolve_beads_project(project: Optional[str]) -> tuple[str, Path]:
+def _resolve_beads_project(project: str | None) -> tuple[str, Path]:
     """Resolve beads project from prefix, cwd, or default.
 
     Args:
@@ -1692,7 +1737,7 @@ def _resolve_beads_project(project: Optional[str]) -> tuple[str, Path]:
     )
 
 
-def _parse_issue_id(issue_id: str, project: Optional[str]) -> tuple[str, str]:
+def _parse_issue_id(issue_id: str, project: str | None) -> tuple[str, str]:
     """Parse issue ID, extracting project prefix if present.
 
     Args:
@@ -1783,7 +1828,7 @@ def beads():
 @click.option("--type", "-t", "issue_type", help="Filter by type (task, bug, feature, epic)")
 @click.option("--limit", "-n", default=50, help="Max results")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def beads_list(project: Optional[str], status: str, issue_type: Optional[str], limit: int, as_json: bool):
+def beads_list(project: str | None, status: str, issue_type: str | None, limit: int, as_json: bool):
     """List issues from a beads project.
 
     \b
@@ -1839,7 +1884,7 @@ def beads_list(project: Optional[str], status: str, issue_type: Optional[str], l
 @click.option("--project", "-p", help="Beads project prefix (auto-detected from issue ID)")
 @click.option("--no-comments", is_flag=True, help="Exclude comments")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def beads_show(issue_id: str, project: Optional[str], no_comments: bool, as_json: bool):
+def beads_show(issue_id: str, project: str | None, no_comments: bool, as_json: bool):
     """Show detailed information for a specific issue.
 
     Issue ID can include project prefix (e.g., 'epstein-42') or just
@@ -1851,7 +1896,7 @@ def beads_show(issue_id: str, project: Optional[str], no_comments: bool, as_json
       mx beads show 42 -p epstein           # Equivalent with explicit project
       mx beads show epstein-42 --no-comments # Without comments
     """
-    from .beads_client import show_issue, get_comments
+    from .beads_client import get_comments, show_issue
 
     prefix, full_id = _parse_issue_id(issue_id, project)
     registry = _load_beads_registry()
@@ -1877,7 +1922,8 @@ def beads_show(issue_id: str, project: Optional[str], no_comments: bool, as_json
         click.echo()
         click.echo(f"Title:       {issue.get('title', '')}")
         click.echo(f"Status:      {issue.get('status', '')}")
-        click.echo(f"Priority:    {_format_priority(issue.get('priority'))} ({issue.get('priority', 2)})")
+        priority = issue.get('priority', 2)
+        click.echo(f"Priority:    {_format_priority(priority)} ({priority})")
         click.echo(f"Type:        {issue.get('issue_type', '')}")
         click.echo(f"Created:     {issue.get('created_at', '')} by {issue.get('created_by', '')}")
         if issue.get("updated_at"):
@@ -1906,7 +1952,7 @@ def beads_show(issue_id: str, project: Optional[str], no_comments: bool, as_json
 @click.option("--project", "-p", help="Beads project prefix from registry")
 @click.option("--compact", is_flag=True, help="Compact view (titles only)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def beads_kanban(project: Optional[str], compact: bool, as_json: bool):
+def beads_kanban(project: str | None, compact: bool, as_json: bool):
     """Display issues grouped by status (kanban board view).
 
     Shows issues in columns: Open | In Progress | Closed
@@ -1989,7 +2035,7 @@ def beads_kanban(project: Optional[str], compact: bool, as_json: bool):
 @beads.command("status")
 @click.option("--project", "-p", help="Beads project prefix from registry")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def beads_status(project: Optional[str], as_json: bool):
+def beads_status(project: str | None, as_json: bool):
     """Show project statistics and health summary.
 
     Displays counts by status, priority distribution, and type breakdown.

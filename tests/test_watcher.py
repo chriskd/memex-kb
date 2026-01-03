@@ -1,18 +1,18 @@
 """Tests for FileWatcher functionality."""
 
+import threading
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-import threading
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from memex.indexer.hybrid import HybridSearcher
 from memex.indexer import watcher as watcher_module
+from memex.indexer.chroma_index import ChromaIndex
+from memex.indexer.hybrid import HybridSearcher
 from memex.indexer.watcher import DebouncedHandler, FileWatcher
 from memex.indexer.whoosh_index import WhooshIndex
-from memex.indexer.chroma_index import ChromaIndex
 from memex.models import DocumentChunk, EntryMetadata
 
 pytestmark = pytest.mark.semantic

@@ -21,7 +21,7 @@ def _is_in_docker() -> bool:
         return True
     # Check cgroup for docker
     try:
-        with open("/proc/1/cgroup", "r") as f:
+        with open("/proc/1/cgroup") as f:
             return "docker" in f.read()
     except (FileNotFoundError, PermissionError):
         pass

@@ -3,19 +3,17 @@
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from memex.models import ViewStats
 from memex.views_tracker import (
-    CachedViewsTracker,
     PRUNE_INTERVAL_SECONDS,
+    CachedViewsTracker,
     cleanup_stale_entries,
     get_popular,
     load_views,
     record_view,
-    reset_global_tracker,
     save_views,
 )
 

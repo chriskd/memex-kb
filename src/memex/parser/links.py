@@ -6,6 +6,7 @@ from pathlib import Path
 from .md_renderer import extract_links_only, normalize_link
 from .title_index import TitleIndex, build_title_index, resolve_link_target
 
+
 def extract_links(content: str) -> list[str]:
     """Extract bidirectional links from markdown content.
 

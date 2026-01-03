@@ -13,7 +13,6 @@ from . import core
 from .config import DEFAULT_SEARCH_LIMIT, LINK_SUGGESTION_MIN_SCORE
 from .models import KBEntry, QualityReport, SearchResponse
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Input Validation
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,7 +138,10 @@ def _validate_section_updates(section_updates: dict[str, str] | None) -> dict[st
 
 mcp = FastMCP(
     name="memex",
-    instructions="Knowledge base with semantic search. Use search/get/add/update for entries. Use [[links]] for connections.",
+    instructions=(
+        "Knowledge base with semantic search. "
+        "Use search/get/add/update for entries. Use [[links]] for connections."
+    ),
 )
 
 
@@ -159,7 +161,10 @@ _get_current_project = core.get_current_project
 
 @mcp.tool(
     name="search",
-    description="Search the knowledge base using hybrid keyword + semantic search. Returns ranked entries.",
+    description=(
+        "Search the knowledge base using hybrid keyword + semantic search. "
+        "Returns ranked entries."
+    ),
 )
 async def search_tool(
     query: str,
@@ -382,6 +387,7 @@ async def suggest_links_tool(
 def main():
     """Run the MCP server."""
     import logging
+
     from ._logging import configure_logging
 
     configure_logging()

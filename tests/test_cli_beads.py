@@ -11,14 +11,12 @@ import pytest
 from click.testing import CliRunner
 
 from memex.cli import (
-    cli,
-    _load_beads_registry,
-    _resolve_beads_project,
-    _parse_issue_id,
-    _get_beads_db_or_fail,
     _format_priority,
+    _get_beads_db_or_fail,
+    _load_beads_registry,
+    _parse_issue_id,
+    cli,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -245,8 +243,10 @@ class TestBeadsList:
     @patch("memex.cli._load_beads_registry")
     @patch("memex.beads_client.find_beads_db")
     @patch("memex.beads_client.list_issues")
-    def test_list_with_status_filter(self, mock_list, mock_find, mock_registry_fn,
-                                     runner, mock_beads_project, mock_issues, tmp_path, monkeypatch):
+    def test_list_with_status_filter(
+        self, mock_list, mock_find, mock_registry_fn, runner,
+        mock_beads_project, mock_issues, tmp_path, monkeypatch,
+    ):
         """Filters issues by status."""
         monkeypatch.setenv("MEMEX_KB_ROOT", str(tmp_path))
         mock_registry_fn.return_value = {"test": tmp_path}
@@ -347,8 +347,10 @@ class TestBeadsKanban:
     @patch("memex.cli._load_beads_registry")
     @patch("memex.beads_client.find_beads_db")
     @patch("memex.beads_client.list_issues")
-    def test_kanban_groups_by_status(self, mock_list, mock_find, mock_registry_fn,
-                                     runner, mock_beads_project, mock_issues, tmp_path, monkeypatch):
+    def test_kanban_groups_by_status(
+        self, mock_list, mock_find, mock_registry_fn, runner,
+        mock_beads_project, mock_issues, tmp_path, monkeypatch,
+    ):
         """Groups issues by status."""
         monkeypatch.setenv("MEMEX_KB_ROOT", str(tmp_path))
         mock_registry_fn.return_value = {"test": tmp_path}

@@ -57,7 +57,10 @@ def sample_chunks() -> list[DocumentChunk]:
         DocumentChunk(
             path="docs/testing.md",
             section="unit-tests",
-            content="Unit testing is essential for software quality assurance and regression prevention.",
+            content=(
+                "Unit testing is essential for software quality assurance "
+                "and regression prevention."
+            ),
             metadata=EntryMetadata(
                 title="Testing Guide",
                 tags=["testing", "quality"],
@@ -622,7 +625,7 @@ class TestWhooshSearchMetadata:
         chunk = DocumentChunk(
             path="snippet/test.md",
             section=None,
-            content="This is a very long document that should be truncated to create a snippet. " * 10,
+            content="This is a long document that should be truncated to snippet. " * 10,
             metadata=EntryMetadata(
                 title="Long Doc",
                 tags=["test"],

@@ -2,7 +2,6 @@
 
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,7 +29,10 @@ def sample_chunk() -> DocumentChunk:
     return DocumentChunk(
         path="test/sample.md",
         section="intro",
-        content="Machine learning is a subset of artificial intelligence focused on data-driven algorithms.",
+        content=(
+            "Machine learning is a subset of artificial intelligence "
+            "focused on data-driven algorithms."
+        ),
         metadata=EntryMetadata(
             title="ML Basics",
             tags=["machine-learning", "ai"],
@@ -49,7 +51,10 @@ def sample_chunks() -> list[DocumentChunk]:
         DocumentChunk(
             path="ai/neural_nets.md",
             section="intro",
-            content="Neural networks are computing systems inspired by biological neural networks in animal brains.",
+            content=(
+                "Neural networks are computing systems inspired by "
+                "biological neural networks in animal brains."
+            ),
             metadata=EntryMetadata(
                 title="Neural Networks",
                 tags=["neural-networks", "deep-learning"],
@@ -60,7 +65,10 @@ def sample_chunks() -> list[DocumentChunk]:
         DocumentChunk(
             path="ai/transformers.md",
             section="architecture",
-            content="Transformer architecture revolutionized natural language processing with self-attention mechanisms.",
+            content=(
+                "Transformer architecture revolutionized natural language processing "
+                "with self-attention mechanisms."
+            ),
             metadata=EntryMetadata(
                 title="Transformers",
                 tags=["transformers", "nlp"],
@@ -71,7 +79,10 @@ def sample_chunks() -> list[DocumentChunk]:
         DocumentChunk(
             path="dev/databases.md",
             section=None,
-            content="Relational databases use SQL for querying structured data with ACID guarantees.",
+            content=(
+                "Relational databases use SQL for querying structured data "
+                "with ACID guarantees."
+            ),
             metadata=EntryMetadata(
                 title="Database Guide",
                 tags=["database", "sql"],
@@ -288,7 +299,7 @@ class TestChromaSearch:
             DocumentChunk(
                 path=f"docs/ai{i}.md",
                 section=None,
-                content=f"Artificial intelligence document {i} about neural networks and deep learning",
+                content=f"AI document {i} about neural networks and deep learning",
                 metadata=EntryMetadata(
                     title=f"AI Doc {i}",
                     tags=["ai"],
@@ -303,7 +314,7 @@ class TestChromaSearch:
         assert len(results) == 5
 
     def test_search_with_no_results(self, chroma_index, sample_chunk):
-        """Search with poor semantic match returns results (embedding-based always finds something)."""
+        """Search with poor semantic match returns results (embedding finds something)."""
         chroma_index.index_document(sample_chunk)
         # Very unrelated query
         results = chroma_index.search("completely unrelated topic xyz")
@@ -688,7 +699,7 @@ class TestChromaSearchMetadata:
         chunk = DocumentChunk(
             path="snippet/test.md",
             section=None,
-            content="This is a very long document that should be truncated to create a snippet. " * 10,
+            content="This is a long document that should be truncated to snippet. " * 10,
             metadata=EntryMetadata(
                 title="Long Doc",
                 tags=["test"],

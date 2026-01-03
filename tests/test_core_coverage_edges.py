@@ -12,7 +12,7 @@ import pytest
 
 from memex import core
 from memex.context import KBContext
-from memex.models import SearchResult, ViewStats
+from memex.models import ViewStats
 
 
 @pytest.fixture

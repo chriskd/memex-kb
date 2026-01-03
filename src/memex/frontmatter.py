@@ -149,7 +149,7 @@ def update_metadata_for_edit(
         metadata: Existing entry metadata.
         new_tags: Updated tags (or None to preserve existing).
         new_contributor: New contributor to add to contributors list.
-        edit_source: Project making the edit (added to edit_sources if different from source_project).
+        edit_source: Project making the edit (added to edit_sources if different).
         model: LLM model identifier for the edit.
         git_branch: Current git branch.
         actor: Actor making the edit.

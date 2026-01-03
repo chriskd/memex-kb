@@ -148,7 +148,8 @@ Mentions [[development/python/foo]].
         destination="architecture/patterns/foo.md",
     )
 
-    assert any("development/python/foo.md -> architecture/patterns/foo.md" in entry for entry in result["moved"])
+    expected = "development/python/foo.md -> architecture/patterns/foo.md"
+    assert any(expected in entry for entry in result["moved"])
     assert result["links_updated"] == 1
     assert (kb_root / "architecture" / "patterns" / "foo.md").exists()
     assert not source_file.exists()

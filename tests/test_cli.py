@@ -6,15 +6,13 @@ and error handling for all CLI commands.
 """
 
 import json
-import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
-from memex.cli import cli, format_table, format_tree, _normalize_error_message
-
+from memex.cli import _normalize_error_message, cli, format_table, format_tree
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -102,7 +100,9 @@ def mock_add_preview():
     result = MagicMock()
     result.path = "tooling/preview-entry.md"
     result.absolute_path = "/kb/tooling/preview-entry.md"
-    result.frontmatter = "---\n" "title: Preview\n" "tags:\n" "  - foo\n" "created: 2026-01-03\n" "---\n\n"
+    result.frontmatter = (
+        "---\n" "title: Preview\n" "tags:\n" "  - foo\n" "created: 2026-01-03\n" "---\n\n"
+    )
     result.content = "# Preview\n\nContent."
     result.warning = None
     result.potential_duplicates = []
@@ -269,9 +269,8 @@ class TestSearchCommand:
         result = runner.invoke(cli, ["search", "docker", "--tags", "infrastructure,devops"])
 
         assert result.exit_code == 0
-        # Verify tags were split correctly
-        call_args = mock_run_async.call_args[0][0]
-        # The coroutine was called with tags parameter
+        # Verify tags were split correctly - coroutine was called with tags parameter
+        _ = mock_run_async.call_args[0][0]
 
     @patch("memex.cli.run_async")
     def test_search_with_mode(self, mock_run_async, runner, mock_search_result):
@@ -640,7 +639,10 @@ class TestQuickAddCommand:
     @patch("memex.cli.run_async")
     @patch("memex.core.get_valid_categories")
     @patch("memex.config.get_kb_root")
-    def test_quick_add_with_overrides(self, mock_kb_root, mock_get_categories, mock_run_async, runner, tmp_path, mock_add_result):
+    def test_quick_add_with_overrides(
+        self, mock_kb_root, mock_get_categories, mock_run_async,
+        runner, tmp_path, mock_add_result,
+    ):
         """Test quick-add with manual overrides."""
         mock_get_categories.return_value = ["projects", "tooling"]
         mock_kb_root.return_value = tmp_path
@@ -678,7 +680,10 @@ class TestQuickAddCommand:
     @patch("memex.cli.run_async")
     @patch("memex.core.get_valid_categories")
     @patch("memex.config.get_kb_root")
-    def test_quick_add_stdin(self, mock_kb_root, mock_get_categories, mock_run_async, runner, tmp_path, mock_add_result):
+    def test_quick_add_stdin(
+        self, mock_kb_root, mock_get_categories, mock_run_async,
+        runner, tmp_path, mock_add_result,
+    ):
         """Test quick-add with stdin input."""
         mock_get_categories.return_value = ["projects"]
         mock_kb_root.return_value = tmp_path
@@ -704,7 +709,9 @@ class TestInfoCommand:
     @patch("memex.core.get_valid_categories")
     @patch("memex.config.get_index_root")
     @patch("memex.config.get_kb_root")
-    def test_info_basic(self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path):
+    def test_info_basic(
+        self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path,
+    ):
         """Test basic info output."""
         kb_root = tmp_path / "kb"
         index_root = tmp_path / "indices"
@@ -731,7 +738,9 @@ class TestInfoCommand:
     @patch("memex.core.get_valid_categories")
     @patch("memex.config.get_index_root")
     @patch("memex.config.get_kb_root")
-    def test_info_json_output(self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path):
+    def test_info_json_output(
+        self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path,
+    ):
         """Test info JSON output."""
         kb_root = tmp_path / "kb"
         index_root = tmp_path / "indices"
@@ -755,7 +764,9 @@ class TestInfoCommand:
     @patch("memex.core.get_valid_categories")
     @patch("memex.config.get_index_root")
     @patch("memex.config.get_kb_root")
-    def test_config_alias(self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path):
+    def test_config_alias(
+        self, mock_get_kb_root, mock_get_index_root, mock_get_categories, runner, tmp_path,
+    ):
         """Test config alias delegates to info."""
         kb_root = tmp_path / "kb"
         index_root = tmp_path / "indices"
@@ -1457,7 +1468,9 @@ class TestContextCommand:
     @patch("memex.context.get_kb_context")
     @patch("memex.config.get_kb_root")
     @patch("memex.context.validate_context")
-    def test_context_validate_success(self, mock_validate, mock_kb_root, mock_get_context, runner, tmp_path):
+    def test_context_validate_success(
+        self, mock_validate, mock_kb_root, mock_get_context, runner, tmp_path,
+    ):
         """Test context validate with no warnings."""
         mock_ctx = MagicMock()
         mock_ctx.source_file = Path("/project/.kbcontext")
@@ -1473,7 +1486,9 @@ class TestContextCommand:
     @patch("memex.context.get_kb_context")
     @patch("memex.config.get_kb_root")
     @patch("memex.context.validate_context")
-    def test_context_validate_with_warnings(self, mock_validate, mock_kb_root, mock_get_context, runner, tmp_path):
+    def test_context_validate_with_warnings(
+        self, mock_validate, mock_kb_root, mock_get_context, runner, tmp_path,
+    ):
         """Test context validate with warnings."""
         mock_ctx = MagicMock()
         mock_ctx.source_file = Path("/project/.kbcontext")
@@ -1607,6 +1622,7 @@ class TestHistoryCommand:
     def test_history_shows_entries(self, mock_get_recent, runner):
         """Test history displays entries correctly."""
         from datetime import datetime
+
         from memex.models import SearchHistoryEntry
 
         mock_get_recent.return_value = [
@@ -1638,6 +1654,7 @@ class TestHistoryCommand:
     def test_history_json_output(self, mock_get_recent, runner):
         """Test history with JSON output."""
         from datetime import datetime
+
         from memex.models import SearchHistoryEntry
 
         mock_get_recent.return_value = [
@@ -1675,6 +1692,7 @@ class TestHistoryCommand:
     def test_history_rerun(self, mock_run_async, mock_get_by_index, mock_record, runner):
         """Test history rerun."""
         from datetime import datetime
+
         from memex.models import SearchHistoryEntry
 
         mock_get_by_index.return_value = SearchHistoryEntry(

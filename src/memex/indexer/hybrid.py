@@ -17,8 +17,8 @@ from ..config import (
     PROJECT_CONTEXT_BOOST,
     RRF_K,
     TAG_MATCH_BOOST,
-    get_kb_root,
     get_index_root,
+    get_kb_root,
 )
 from ..models import DocumentChunk, IndexStatus, SearchResult
 from .chroma_index import ChromaIndex
@@ -95,11 +95,15 @@ class HybridSearcher:
         if mode == "keyword":
             results = self._whoosh.search(query, limit=fetch_limit)
             if apply_adjustments:
-                results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
+                results = self._apply_ranking_adjustments(
+                    query, results, project_context, kb_context,
+                )
         elif mode == "semantic":
             results = self._chroma.search(query, limit=fetch_limit)
             if apply_adjustments:
-                results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
+                results = self._apply_ranking_adjustments(
+                    query, results, project_context, kb_context,
+                )
         else:
             results = self._hybrid_search(
                 query,
@@ -141,11 +145,15 @@ class HybridSearcher:
             return []
         if not whoosh_results:
             if apply_adjustments:
-                return self._apply_ranking_adjustments(query, chroma_results[:limit], project_context, kb_context)
+                return self._apply_ranking_adjustments(
+                    query, chroma_results[:limit], project_context, kb_context,
+                )
             return chroma_results[:limit]
         if not chroma_results:
             if apply_adjustments:
-                return self._apply_ranking_adjustments(query, whoosh_results[:limit], project_context, kb_context)
+                return self._apply_ranking_adjustments(
+                    query, whoosh_results[:limit], project_context, kb_context,
+                )
             return whoosh_results[:limit]
 
         # Apply RRF
@@ -229,7 +237,9 @@ class HybridSearcher:
             )
 
         if apply_adjustments:
-            return self._apply_ranking_adjustments(query, final_results, project_context, kb_context)
+            return self._apply_ranking_adjustments(
+                query, final_results, project_context, kb_context,
+            )
         return final_results
 
     def _apply_ranking_adjustments(

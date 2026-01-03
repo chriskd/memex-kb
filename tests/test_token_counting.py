@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 import tiktoken
 
-from memex.models import DocumentChunk, EntryMetadata
-from memex.parser.markdown import _get_token_count, parse_entry
-from memex.indexer.whoosh_index import WhooshIndex
 from memex.indexer.chroma_index import ChromaIndex
 from memex.indexer.hybrid import HybridSearcher
+from memex.indexer.whoosh_index import WhooshIndex
+from memex.models import DocumentChunk, EntryMetadata
+from memex.parser.markdown import _get_token_count, parse_entry
 
 
 class TestTokenCountFunction:

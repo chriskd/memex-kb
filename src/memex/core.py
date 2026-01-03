@@ -19,11 +19,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
 
-log = logging.getLogger(__name__)
-
 from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
-from .health_cache import get_entry_metadata
-from .tags_cache import ensure_tags_cache, get_tag_entries, rebuild_tags_cache
 from .config import (
     DUPLICATE_DETECTION_LIMIT,
     DUPLICATE_DETECTION_MIN_SCORE,
@@ -34,8 +30,9 @@ from .config import (
     get_kb_root,
 )
 from .context import KBContext, get_kb_context
-from .frontmatter import build_frontmatter, create_new_metadata, update_metadata_for_edit
 from .evaluation import run_quality_checks
+from .frontmatter import build_frontmatter, create_new_metadata, update_metadata_for_edit
+from .health_cache import get_entry_metadata
 from .indexer import HybridSearcher
 from .models import (
     AddEntryPreview,
@@ -50,7 +47,9 @@ from .models import (
     SearchSuggestion,
 )
 from .parser import ParseError, extract_links, parse_entry, update_links_batch
+from .tags_cache import ensure_tags_cache, get_tag_entries, rebuild_tags_cache
 
+log = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Module-level state (lazy initialization)
@@ -851,7 +850,7 @@ async def search(
         SearchResponse with results and optional warnings.
     """
     searcher = get_searcher()
-    # Auto-detect project context for boosting entries from current project (async to avoid blocking)
+    # Auto-detect project context for boosting entries from current project
     project_context = await get_current_project_async()
     # Auto-discover KB context if not provided
     if kb_context is None:
@@ -1250,7 +1249,11 @@ async def update_entry(
         min_score=0.3,
     )
 
-    return {"path": relative_path, "suggested_links": suggested_links, "suggested_tags": suggested_tags}
+    return {
+        "path": relative_path,
+        "suggested_links": suggested_links,
+        "suggested_tags": suggested_tags,
+    }
 
 
 async def get_entry(path: str) -> KBEntry:
@@ -1410,7 +1413,10 @@ def _resolve_add_entry_directory(
     if kb_context and kb_context.primary:
         abs_dir, normalized_dir = validate_nested_path(kb_context.primary, kb_root)
         if abs_dir.exists() and not abs_dir.is_dir():
-            raise ValueError(f"Context primary path exists but is not a directory: {kb_context.primary}")
+            raise ValueError(
+                f"Context primary path exists but is not a directory: "
+                f"{kb_context.primary}"
+            )
         if create_dirs:
             abs_dir.mkdir(parents=True, exist_ok=True)
         return abs_dir, normalized_dir
@@ -1822,7 +1828,8 @@ async def move(
     valid_categories = get_valid_categories(kb_root)
     if dest_category not in valid_categories:
         raise ValueError(
-            f"Destination must be within a valid category. Valid categories: {', '.join(valid_categories)}"
+            f"Destination must be within a valid category. "
+            f"Valid categories: {', '.join(valid_categories)}"
         )
 
     # Protect category root directories from being moved

@@ -7,14 +7,10 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
-
-log = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-
-from .events import Event, EventType, get_broadcaster
 
 from ..backlinks_cache import ensure_backlink_cache
 from ..beads_client import find_beads_db, get_comments, list_issues, show_issue
@@ -22,7 +18,9 @@ from ..config import get_kb_root
 from ..indexer import HybridSearcher
 from ..models import SearchResult
 from ..parser import ParseError, extract_links, parse_entry, render_markdown
+from .events import Event, EventType, get_broadcaster
 
+log = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Memex KB Explorer",
@@ -667,12 +665,16 @@ async def get_beads_config():
 
 
 @app.get("/api/beads/kanban", response_model=BeadsKanbanResponse)
-async def get_beads_kanban(project_path: str | None = Query(None, description="Optional beads project path")):
+async def get_beads_kanban(
+    project_path: str | None = Query(None, description="Optional beads project path"),
+):
     """Get kanban board for a beads project."""
     if project_path:
         project = find_beads_db(project_path)
         if not project:
-            raise HTTPException(status_code=404, detail=f"No beads project found at: {project_path}")
+            raise HTTPException(
+                status_code=404, detail=f"No beads project found at: {project_path}",
+            )
     else:
         project = _get_default_beads_project()
         if not project:
@@ -709,12 +711,17 @@ async def get_beads_kanban(project_path: str | None = Query(None, description="O
 
 
 @app.get("/api/beads/issues/{issue_id}", response_model=BeadsIssueDetailResponse)
-async def get_beads_issue(issue_id: str, project_path: str | None = Query(None, description="Optional beads project path")):
+async def get_beads_issue(
+    issue_id: str,
+    project_path: str | None = Query(None, description="Optional beads project path"),
+):
     """Get detailed issue info with comments."""
     if project_path:
         project = find_beads_db(project_path)
         if not project:
-            raise HTTPException(status_code=404, detail=f"No beads project found at: {project_path}")
+            raise HTTPException(
+                status_code=404, detail=f"No beads project found at: {project_path}",
+            )
     else:
         project = _get_default_beads_project()
         if not project:

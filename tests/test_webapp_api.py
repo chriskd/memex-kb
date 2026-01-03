@@ -1,14 +1,12 @@
 """Comprehensive tests for webapp/api.py REST API endpoints."""
 
-import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from memex.webapp.api import app, _searcher
-
+from memex.webapp.api import app
 
 # =============================================================================
 # Fixtures
@@ -818,7 +816,6 @@ class TestLifespanEvents:
     def test_file_watcher_reference(self, sample_kb, mock_searcher, monkeypatch):
         """Verify file watcher module is accessible."""
         # Test that the watcher module can be imported
-        from memex.webapp.api import _file_watcher
         from memex.indexer.watcher import FileWatcher
 
         # Verify FileWatcher class exists
@@ -845,7 +842,7 @@ class TestSearcherInitialization:
             mock_instance.status.return_value = mock_status
             MockSearcher.return_value = mock_instance
 
-            searcher = api_module._get_searcher()
+            api_module._get_searcher()
 
             # Should have called reindex
             mock_instance.reindex.assert_called_once()

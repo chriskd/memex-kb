@@ -14,7 +14,6 @@ from markdown_it import MarkdownIt
 from markdown_it.renderer import RendererHTML
 from markdown_it.rules_inline import StateInline
 
-
 # Pattern for [[target]] or [[target|alias]]
 # Groups: 1=target, 2=alias (optional, without the |)
 WIKILINK_PATTERN = re.compile(r"\[\[([^|\]\n]+)(?:\|([^\]\n]+))?\]\]")

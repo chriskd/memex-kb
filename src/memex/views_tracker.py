@@ -75,7 +75,7 @@ class CachedViewsTracker:
         self._last_prune_time: float = 0.0
         self._loaded = False
 
-    def __enter__(self) -> "CachedViewsTracker":
+    def __enter__(self) -> CachedViewsTracker:
         """Enter context manager."""
         return self
 

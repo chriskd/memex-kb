@@ -1,8 +1,6 @@
 """Tests for incremental indexing functionality."""
 
-import json
 import time
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -11,7 +9,6 @@ from memex.indexer.chroma_index import ChromaIndex
 from memex.indexer.hybrid import HybridSearcher, ReindexStats
 from memex.indexer.manifest import IndexManifest
 from memex.indexer.whoosh_index import WhooshIndex
-
 
 # =============================================================================
 # IndexManifest Tests
@@ -286,7 +283,7 @@ Updated content with more text.
 
     def test_incremental_detects_deleted(self, hybrid_searcher, kb_root):
         """Incremental reindex detects and removes deleted files."""
-        file1 = self._create_md_file(
+        self._create_md_file(
             kb_root,
             "keep.md",
             """---
@@ -407,7 +404,7 @@ Content.
 
     def test_combined_operations(self, hybrid_searcher, kb_root):
         """Test add, modify, and delete in same reindex."""
-        keep = self._create_md_file(
+        self._create_md_file(
             kb_root,
             "keep.md",
             """---

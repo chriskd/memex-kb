@@ -13,14 +13,12 @@ from memex.tags_cache import (
     CACHE_FILENAME,
     _cache_path,
     _get_file_mtime,
-    _incremental_update,
     ensure_tags_cache,
     get_tag_entries,
     load_cache,
     rebuild_tags_cache,
     save_cache,
 )
-
 
 # -----------------------------------------------------------------------------
 # Helper functions

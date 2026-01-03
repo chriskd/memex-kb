@@ -20,7 +20,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from memex.parser import parse_entry, ParseError
+from memex.parser import ParseError, parse_entry
 
 # Cache configuration
 CACHE_DIR = Path("/tmp")

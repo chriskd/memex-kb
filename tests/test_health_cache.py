@@ -190,7 +190,7 @@ class TestEnsureHealthCache:
         _create_entry(kb_root / "test.md", title="Test", tags=["test"])
 
         # First call - builds cache
-        result1 = ensure_health_cache(kb_root, index_root)
+        ensure_health_cache(kb_root, index_root)
 
         # Modify cache file to detect if it's being read
         cache_path = index_root / CACHE_FILENAME
