@@ -459,6 +459,7 @@ def get(path: str, as_json: bool, metadata: bool):
 @click.option("--content", help="Content (or use --file/--stdin)")
 @click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
 @click.option("--stdin", is_flag=True, help="Read content from stdin")
+@click.option("--force", is_flag=True, help="Create even if potential duplicates are detected")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def add(
     title: str,
@@ -467,6 +468,7 @@ def add(
     content: Optional[str],
     file_path: Optional[str],
     stdin: bool,
+    force: bool,
     as_json: bool,
 ):
     """Create a new knowledge base entry.
@@ -490,41 +492,73 @@ def add(
 
     tag_list = [t.strip() for t in tags.split(",")]
 
+    def _print_created(add_result):
+        path = add_result.path if hasattr(add_result, 'path') else add_result.get('path')
+        click.echo(f"Created: {path}")
+
+        suggested_links = add_result.suggested_links if hasattr(add_result, 'suggested_links') else add_result.get('suggested_links', [])
+        if suggested_links:
+            click.echo("\nSuggested links:")
+            for link in suggested_links[:5]:
+                score = link.get('score', 0) if isinstance(link, dict) else link.score
+                path_str = link.get('path', '') if isinstance(link, dict) else link.path
+                click.echo(f"  - {path_str} ({score:.2f})")
+
+        suggested_tags = add_result.suggested_tags if hasattr(add_result, 'suggested_tags') else add_result.get('suggested_tags', [])
+        if suggested_tags:
+            click.echo("\nSuggested tags:")
+            for tag in suggested_tags[:5]:
+                tag_name = tag.get('tag', '') if isinstance(tag, dict) else tag.tag
+                reason = tag.get('reason', '') if isinstance(tag, dict) else tag.reason
+                click.echo(f"  - {tag_name} ({reason})")
+
+    def _print_duplicates(add_result):
+        warning = add_result.warning or "Potential duplicates detected."
+        warning = warning.replace("force=True", "--force")
+        click.echo(f"Warning: {warning}")
+        click.echo("Potential duplicates:")
+        for dup in add_result.potential_duplicates[:3]:
+            click.echo(f"  - {dup.path} ({dup.score:.0%} similar)")
+
     try:
-        result = run_async(add_entry(title=title, content=content, tags=tag_list, category=category))
+        result = run_async(add_entry(
+            title=title,
+            content=content,
+            tags=tag_list,
+            category=category,
+            force=force,
+        ))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
     if as_json:
         output(result.model_dump() if hasattr(result, 'model_dump') else result, as_json=True)
-    else:
-        # Handle AddEntryResponse or dict
-        if hasattr(result, 'created') and not result.created:
-            click.echo(f"Warning: {result.warning}")
-            click.echo(f"Potential duplicates:")
-            for dup in result.potential_duplicates[:3]:
-                click.echo(f"  - {dup.path} ({dup.score:.0%} similar)")
-            click.echo(f"\nUse --force to create anyway (if supported)")
-        else:
-            path = result.path if hasattr(result, 'path') else result.get('path')
-            click.echo(f"Created: {path}")
+        return
 
-            suggested_links = result.suggested_links if hasattr(result, 'suggested_links') else result.get('suggested_links', [])
-            if suggested_links:
-                click.echo("\nSuggested links:")
-                for link in suggested_links[:5]:
-                    score = link.get('score', 0) if isinstance(link, dict) else link.score
-                    path_str = link.get('path', '') if isinstance(link, dict) else link.path
-                    click.echo(f"  - {path_str} ({score:.2f})")
+    # Handle AddEntryResponse or dict
+    if hasattr(result, 'created') and not result.created:
+        _print_duplicates(result)
+        if not force and sys.stdin.isatty():
+            if click.confirm("\nCreate anyway?"):
+                try:
+                    result = run_async(add_entry(
+                        title=title,
+                        content=content,
+                        tags=tag_list,
+                        category=category,
+                        force=True,
+                    ))
+                except Exception as e:
+                    click.echo(f"Error: {e}", err=True)
+                    sys.exit(1)
+                if hasattr(result, 'created') and not result.created:
+                    _print_duplicates(result)
+                else:
+                    _print_created(result)
+        return
 
-            suggested_tags = result.suggested_tags if hasattr(result, 'suggested_tags') else result.get('suggested_tags', [])
-            if suggested_tags:
-                click.echo("\nSuggested tags:")
-                for tag in suggested_tags[:5]:
-                    tag_name = tag.get('tag', '') if isinstance(tag, dict) else tag.tag
-                    reason = tag.get('reason', '') if isinstance(tag, dict) else tag.reason
-                    click.echo(f"  - {tag_name} ({reason})")
+    _print_created(result)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
