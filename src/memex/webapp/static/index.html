@@ -11,6 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
         :root {
             /* Deep void backgrounds */
@@ -1584,6 +1585,47 @@
             background: var(--cyan-muted);
             color: var(--text-primary);
         }
+
+        /* Mermaid diagrams */
+        .mermaid {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 28px 0;
+            overflow-x: auto;
+        }
+
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .mermaid-error {
+            background: var(--rose-muted);
+            border: 1px solid var(--rose);
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin: 28px 0;
+            font-family: var(--font-mono);
+            font-size: 0.8125rem;
+            color: var(--rose);
+        }
+
+        .mermaid-error-title {
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .mermaid-error-code {
+            background: var(--bg-surface);
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-top: 12px;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            font-size: 0.75rem;
+        }
     </style>
 </head>
 <body>
@@ -1793,16 +1835,103 @@
             }
         };
 
+        // Custom renderer to handle mermaid code blocks
+        const mermaidRenderer = {
+            code(code, infostring) {
+                const lang = (infostring || '').split(/\s+/)[0];
+                if (lang === 'mermaid') {
+                    // Return a placeholder div that will be processed by mermaid
+                    const id = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+                    return `<div class="mermaid" data-mermaid-id="${id}">${escapeHtmlForMermaid(code)}</div>`;
+                }
+                // Fall back to default code rendering with highlight.js
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        const highlighted = hljs.highlight(code, { language: lang }).value;
+                        return `<pre><code class="hljs language-${lang}">${highlighted}</code></pre>`;
+                    } catch (e) {
+                        console.warn('Highlight.js error:', e);
+                    }
+                }
+                return `<pre><code>${escapeHtmlForMermaid(code)}</code></pre>`;
+            }
+        };
+
+        // Helper to escape HTML for mermaid content
+        function escapeHtmlForMermaid(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
         marked.use({
             extensions: [wikiLinkExtension],
+            renderer: mermaidRenderer,
             gfm: true,
             breaks: false,
             headerIds: false,
         });
 
+        // Initialize mermaid with dark theme
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#22d3ee',
+                primaryTextColor: '#e8e6e3',
+                primaryBorderColor: '#3a4158',
+                lineColor: '#6b7280',
+                secondaryColor: '#1a1e28',
+                tertiaryColor: '#151820',
+                background: '#151820',
+                mainBkg: '#1a1e28',
+                secondBkg: '#151820',
+                nodeBorder: '#3a4158',
+                clusterBkg: '#0f1118',
+                clusterBorder: '#262b3a',
+                titleColor: '#e8e6e3',
+                edgeLabelBackground: '#151820',
+                nodeTextColor: '#e8e6e3',
+            },
+            flowchart: {
+                curve: 'basis',
+                padding: 20,
+            },
+            sequence: {
+                actorMargin: 50,
+                boxMargin: 10,
+                boxTextMargin: 5,
+            },
+        });
+
         // Render markdown to HTML
         function renderMarkdown(content) {
             return marked.parse(content);
+        }
+
+        // Process mermaid diagrams after content is rendered
+        async function processMermaidDiagrams(container) {
+            const mermaidElements = container.querySelectorAll('.mermaid');
+            if (mermaidElements.length === 0) return;
+
+            for (const el of mermaidElements) {
+                const id = el.dataset.mermaidId;
+                const code = el.textContent;
+
+                try {
+                    const { svg } = await mermaid.render(id, code);
+                    el.innerHTML = svg;
+                } catch (e) {
+                    console.error('Mermaid rendering error:', e);
+                    el.className = 'mermaid-error';
+                    el.innerHTML = `
+                        <div class="mermaid-error-title">Diagram rendering failed</div>
+                        <div>${escapeHtml(e.message || 'Unknown error')}</div>
+                        <div class="mermaid-error-code">${escapeHtmlForMermaid(code)}</div>
+                    `;
+                }
+            }
         }
 
         // Initialize
@@ -2132,6 +2261,9 @@
                 $('#entry-content').querySelectorAll('pre code').forEach(block => {
                     hljs.highlightElement(block);
                 });
+
+                // Process mermaid diagrams
+                await processMermaidDiagrams($('#entry-content'));
 
                 updateLinksPanel(entry);
 
