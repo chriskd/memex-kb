@@ -14,3 +14,4 @@ epstein: /srv/fast/code/epstein
 voidlabs-ansible: /srv/fast/code/voidlabs-ansible
 voidlabs-devtools: /srv/fast/code/voidlabs-devtools
 memex: .
+voidlabs-kb: .  # Alias - issues use this prefix

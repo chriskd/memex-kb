@@ -1599,6 +1599,522 @@ def delete(path: str, force: bool, as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Beads Integration
+# ─────────────────────────────────────────────────────────────────────────────
+
+PRIORITY_LABELS = {0: "critical", 1: "high", 2: "medium", 3: "low", 4: "backlog"}
+PRIORITY_ABBREV = {0: "crit", 1: "high", 2: "med", 3: "low", 4: "back"}
+
+
+def _load_beads_registry() -> dict[str, Path]:
+    """Load beads project registry from .beads-registry.yaml.
+
+    Returns:
+        Dict mapping project prefix to resolved path.
+    """
+    import yaml
+    from .config import get_kb_root
+
+    kb_root = get_kb_root()
+    registry_path = kb_root / ".beads-registry.yaml"
+
+    if not registry_path.exists():
+        return {}
+
+    try:
+        with open(registry_path) as f:
+            raw = yaml.safe_load(f) or {}
+
+        # Resolve relative paths
+        resolved = {}
+        for prefix, path_str in raw.items():
+            if not isinstance(path_str, str) or path_str.startswith("#"):
+                continue
+            if path_str == ".":
+                resolved[prefix] = kb_root
+            else:
+                path = Path(path_str)
+                if not path.is_absolute():
+                    path = kb_root / path
+                resolved[prefix] = path.resolve()
+
+        return resolved
+    except Exception:
+        return {}
+
+
+def _resolve_beads_project(project: Optional[str]) -> tuple[str, Path]:
+    """Resolve beads project from prefix, cwd, or default.
+
+    Args:
+        project: Optional project prefix from --project flag
+
+    Returns:
+        Tuple of (prefix, project_path)
+
+    Raises:
+        click.ClickException: If project cannot be resolved
+    """
+    from .beads_client import find_beads_db
+    from .config import get_kb_root
+
+    registry = _load_beads_registry()
+
+    if project:
+        # Explicit project specified
+        if project in registry:
+            return project, registry[project]
+        available = ", ".join(sorted(registry.keys())) if registry else "(none)"
+        raise click.ClickException(f"Unknown project '{project}'. Available: {available}")
+
+    # Try to detect from cwd
+    cwd = Path.cwd()
+    for prefix, path in registry.items():
+        try:
+            if cwd == path or cwd.is_relative_to(path):
+                return prefix, path
+        except ValueError:
+            continue
+
+    # Try KB root as fallback
+    kb_root = get_kb_root()
+    beads = find_beads_db(kb_root)
+    if beads:
+        for prefix, path in registry.items():
+            if path == kb_root:
+                return prefix, path
+        return "kb", kb_root
+
+    available = ", ".join(sorted(registry.keys())) if registry else "(none)"
+    raise click.ClickException(
+        f"No beads project found. Use --project or run from a project directory.\n"
+        f"Available projects: {available}"
+    )
+
+
+def _parse_issue_id(issue_id: str, project: Optional[str]) -> tuple[str, str]:
+    """Parse issue ID, extracting project prefix if present.
+
+    Args:
+        issue_id: Issue ID like 'memex-42', 'voidlabs-kb-abc', or '42'
+        project: Explicit project prefix if provided
+
+    Returns:
+        Tuple of (project_prefix, full_issue_id)
+    """
+    registry = _load_beads_registry()
+
+    # Try to match a known prefix
+    for prefix in sorted(registry.keys(), key=len, reverse=True):
+        if issue_id.startswith(f"{prefix}-"):
+            return prefix, issue_id
+
+    # If project explicitly provided, use it
+    if project:
+        full_id = f"{project}-{issue_id}" if not issue_id.startswith(project) else issue_id
+        return project, full_id
+
+    raise click.ClickException(
+        f"Cannot determine project for issue '{issue_id}'. "
+        "Use format 'project-123' or specify --project."
+    )
+
+
+def _get_beads_db_or_fail(project_path: Path, project_prefix: str):
+    """Get beads database or raise ClickException.
+
+    Args:
+        project_path: Path to project root
+        project_prefix: Project prefix for error messages
+
+    Returns:
+        BeadsProject with validated db_path
+
+    Raises:
+        click.ClickException: If beads database not found
+    """
+    from .beads_client import find_beads_db
+
+    if not project_path.exists():
+        raise click.ClickException(f"Beads project path does not exist: {project_path}")
+
+    beads = find_beads_db(project_path)
+    if not beads:
+        raise click.ClickException(
+            f"No beads database found for '{project_prefix}' at: {project_path}/.beads/beads.db"
+        )
+
+    return beads
+
+
+def _format_priority(priority: int | None) -> str:
+    """Format priority as label."""
+    if priority is None:
+        return "medium"
+    return PRIORITY_LABELS.get(priority, "medium")
+
+
+@cli.group()
+def beads():
+    """Browse beads issue tracking across registered projects.
+
+    Beads projects are registered in .beads-registry.yaml at KB root.
+    Use --project to specify a project, or commands auto-detect from cwd.
+
+    \b
+    Quick start:
+      mx beads list                    # List issues
+      mx beads show epstein-42         # Show issue details
+      mx beads kanban                  # Kanban board view
+      mx beads status                  # Project statistics
+      mx beads projects                # List registered projects
+    """
+    pass
+
+
+@beads.command("list")
+@click.option("--project", "-p", help="Beads project prefix from registry")
+@click.option(
+    "--status", "-s",
+    type=click.Choice(["open", "in_progress", "closed", "all"]),
+    default="all",
+    help="Filter by status"
+)
+@click.option("--type", "-t", "issue_type", help="Filter by type (task, bug, feature, epic)")
+@click.option("--limit", "-n", default=50, help="Max results")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def beads_list(project: Optional[str], status: str, issue_type: Optional[str], limit: int, as_json: bool):
+    """List issues from a beads project.
+
+    \b
+    Examples:
+      mx beads list                         # All issues from detected project
+      mx beads list -p epstein              # Issues from epstein project
+      mx beads list --status=open           # Only open issues
+      mx beads list --type=bug --limit=10   # 10 bugs
+    """
+    from .beads_client import list_issues
+
+    prefix, project_path = _resolve_beads_project(project)
+    beads = _get_beads_db_or_fail(project_path, prefix)
+
+    issues = list_issues(beads.db_path)
+
+    # Apply filters
+    if status != "all":
+        issues = [i for i in issues if i.get("status") == status]
+    if issue_type:
+        issues = [i for i in issues if i.get("issue_type") == issue_type]
+
+    # Limit results
+    issues = issues[:limit]
+
+    # Add priority labels
+    for issue in issues:
+        issue["priority_label"] = _format_priority(issue.get("priority"))
+
+    if as_json:
+        output(issues, as_json=True)
+    else:
+        if not issues:
+            click.echo(f"No issues found for {prefix}")
+            return
+
+        rows = [
+            {
+                "id": i.get("id", ""),
+                "status": i.get("status", ""),
+                "priority": i.get("priority_label", ""),
+                "type": i.get("issue_type", ""),
+                "title": i.get("title", ""),
+            }
+            for i in issues
+        ]
+        click.echo(format_table(rows, ["id", "status", "priority", "type", "title"], {"title": 50}))
+        click.echo(f"\nShowing {len(issues)} issues from {prefix}")
+
+
+@beads.command("show")
+@click.argument("issue_id")
+@click.option("--project", "-p", help="Beads project prefix (auto-detected from issue ID)")
+@click.option("--no-comments", is_flag=True, help="Exclude comments")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def beads_show(issue_id: str, project: Optional[str], no_comments: bool, as_json: bool):
+    """Show detailed information for a specific issue.
+
+    Issue ID can include project prefix (e.g., 'epstein-42') or just
+    the number if --project is specified.
+
+    \b
+    Examples:
+      mx beads show epstein-42              # Full issue details with comments
+      mx beads show 42 -p epstein           # Equivalent with explicit project
+      mx beads show epstein-42 --no-comments # Without comments
+    """
+    from .beads_client import show_issue, get_comments
+
+    prefix, full_id = _parse_issue_id(issue_id, project)
+    registry = _load_beads_registry()
+
+    if prefix not in registry:
+        available = ", ".join(sorted(registry.keys())) if registry else "(none)"
+        raise click.ClickException(f"Unknown project '{prefix}'. Available: {available}")
+
+    project_path = registry[prefix]
+    beads = _get_beads_db_or_fail(project_path, prefix)
+
+    issue = show_issue(beads.db_path, full_id)
+    if not issue:
+        raise click.ClickException(f"Issue not found: {full_id}")
+
+    comments = [] if no_comments else get_comments(beads.db_path, full_id)
+
+    if as_json:
+        output({"issue": issue, "comments": comments}, as_json=True)
+    else:
+        click.echo(f"Issue: {full_id}")
+        click.echo("=" * 80)
+        click.echo()
+        click.echo(f"Title:       {issue.get('title', '')}")
+        click.echo(f"Status:      {issue.get('status', '')}")
+        click.echo(f"Priority:    {_format_priority(issue.get('priority'))} ({issue.get('priority', 2)})")
+        click.echo(f"Type:        {issue.get('issue_type', '')}")
+        click.echo(f"Created:     {issue.get('created_at', '')} by {issue.get('created_by', '')}")
+        if issue.get("updated_at"):
+            click.echo(f"Updated:     {issue.get('updated_at', '')}")
+
+        if issue.get("description"):
+            click.echo()
+            click.echo("Description:")
+            for line in issue["description"].split("\n"):
+                click.echo(f"  {line}")
+
+        if comments:
+            click.echo()
+            click.echo("-" * 80)
+            click.echo(f"Comments ({len(comments)}):")
+            click.echo("-" * 80)
+            for c in comments:
+                click.echo()
+                click.echo(f"[{c.get('created_at', '')}] {c.get('author', '')}:")
+                content = c.get("content", "")
+                for line in content.split("\n"):
+                    click.echo(f"  {line}")
+
+
+@beads.command("kanban")
+@click.option("--project", "-p", help="Beads project prefix from registry")
+@click.option("--compact", is_flag=True, help="Compact view (titles only)")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def beads_kanban(project: Optional[str], compact: bool, as_json: bool):
+    """Display issues grouped by status (kanban board view).
+
+    Shows issues in columns: Open | In Progress | Closed
+
+    \b
+    Examples:
+      mx beads kanban                       # Kanban for detected project
+      mx beads kanban -p voidlabs-ansible   # Specific project
+      mx beads kanban --compact             # Titles only
+    """
+    from .beads_client import list_issues
+
+    prefix, project_path = _resolve_beads_project(project)
+    beads = _get_beads_db_or_fail(project_path, prefix)
+
+    issues = list_issues(beads.db_path)
+
+    # Group by status
+    columns = {
+        "open": {"status": "open", "label": "Open", "issues": []},
+        "in_progress": {"status": "in_progress", "label": "In Progress", "issues": []},
+        "closed": {"status": "closed", "label": "Closed", "issues": []},
+    }
+
+    for issue in issues:
+        status = issue.get("status", "open")
+        if status in columns:
+            columns[status]["issues"].append({
+                "id": issue.get("id", ""),
+                "title": issue.get("title", ""),
+                "priority": issue.get("priority", 3),
+                "priority_label": _format_priority(issue.get("priority")),
+            })
+
+    # Sort by priority within each column
+    for col in columns.values():
+        col["issues"].sort(key=lambda x: x.get("priority", 3))
+
+    if as_json:
+        output({
+            "project": prefix,
+            "total_issues": len(issues),
+            "columns": list(columns.values()),
+        }, as_json=True)
+    else:
+        total = len(issues)
+        click.echo(f"Kanban: {prefix} ({total} issues)")
+        click.echo()
+
+        # Format as columns
+        col_width = 28
+        col_list = list(columns.values())
+
+        # Header
+        headers = [f"{c['label'].upper()} ({len(c['issues'])})" for c in col_list]
+        click.echo("  ".join(h.ljust(col_width) for h in headers))
+        click.echo("  ".join("-" * col_width for _ in col_list))
+
+        # Rows
+        max_rows = max(len(c["issues"]) for c in col_list) if col_list else 0
+        for row_idx in range(min(max_rows, 20)):  # Limit to 20 rows
+            row_parts = []
+            for col in col_list:
+                if row_idx < len(col["issues"]):
+                    issue = col["issues"][row_idx]
+                    short_id = issue["id"].split("-")[-1] if "-" in issue["id"] else issue["id"]
+                    if compact:
+                        text = f"#{short_id} {issue['title']}"
+                    else:
+                        prio = PRIORITY_ABBREV.get(issue.get("priority", 3), "med")
+                        text = f"[{prio}] #{short_id} {issue['title']}"
+                    if len(text) > col_width - 1:
+                        text = text[:col_width - 4] + "..."
+                else:
+                    text = ""
+                row_parts.append(text.ljust(col_width))
+            click.echo("  ".join(row_parts))
+
+
+@beads.command("status")
+@click.option("--project", "-p", help="Beads project prefix from registry")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def beads_status(project: Optional[str], as_json: bool):
+    """Show project statistics and health summary.
+
+    Displays counts by status, priority distribution, and type breakdown.
+
+    \b
+    Examples:
+      mx beads status                       # Stats for detected project
+      mx beads status -p memex              # Stats for memex project
+    """
+    from .beads_client import list_issues
+
+    prefix, project_path = _resolve_beads_project(project)
+    beads = _get_beads_db_or_fail(project_path, prefix)
+
+    issues = list_issues(beads.db_path)
+
+    # Count by status
+    by_status = {"open": 0, "in_progress": 0, "closed": 0}
+    for issue in issues:
+        status = issue.get("status", "open")
+        if status in by_status:
+            by_status[status] += 1
+
+    # Count by priority
+    by_priority = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    for issue in issues:
+        prio = issue.get("priority", 2)
+        if prio in by_priority:
+            by_priority[prio] += 1
+
+    # Count by type
+    by_type: dict[str, int] = {}
+    for issue in issues:
+        itype = issue.get("issue_type", "task")
+        by_type[itype] = by_type.get(itype, 0) + 1
+
+    if as_json:
+        output({
+            "project": prefix,
+            "project_path": str(project_path),
+            "db_path": str(beads.db_path),
+            "total": len(issues),
+            "by_status": by_status,
+            "by_priority": {PRIORITY_LABELS[k]: v for k, v in by_priority.items()},
+            "by_type": by_type,
+        }, as_json=True)
+    else:
+        click.echo(f"Beads Status: {prefix}")
+        click.echo("=" * 80)
+        click.echo()
+        click.echo("By Status:")
+        click.echo(f"  Open:         {by_status['open']} issues")
+        click.echo(f"  In Progress:  {by_status['in_progress']} issues")
+        click.echo(f"  Closed:       {by_status['closed']} issues")
+        click.echo(f"  Total:        {len(issues)} issues")
+        click.echo()
+        click.echo("By Priority:")
+        for prio, label in PRIORITY_LABELS.items():
+            click.echo(f"  {label.capitalize():12}  {by_priority[prio]}")
+        click.echo()
+        click.echo("By Type:")
+        for itype, count in sorted(by_type.items()):
+            click.echo(f"  {itype.capitalize():12}  {count}")
+        click.echo()
+        click.echo(f"Project Path: {project_path}")
+        click.echo(f"DB Path:      {beads.db_path}")
+
+
+@beads.command("projects")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def beads_projects(as_json: bool):
+    """List all registered beads projects from .beads-registry.yaml.
+
+    Shows project prefix, path, and availability status.
+
+    \b
+    Examples:
+      mx beads projects                     # List all projects
+      mx beads projects --json              # JSON output
+    """
+    from .beads_client import find_beads_db
+    from .config import get_kb_root
+
+    registry = _load_beads_registry()
+    kb_root = get_kb_root()
+    registry_path = kb_root / ".beads-registry.yaml"
+
+    projects = []
+    for prefix, path in sorted(registry.items()):
+        beads = find_beads_db(path)
+        projects.append({
+            "prefix": prefix,
+            "path": str(path),
+            "available": beads is not None,
+        })
+
+    if as_json:
+        output({
+            "registry_path": str(registry_path),
+            "projects": projects,
+        }, as_json=True)
+    else:
+        click.echo("BEADS PROJECTS")
+        click.echo("=" * 80)
+        click.echo()
+
+        if not projects:
+            click.echo("No projects registered.")
+            click.echo(f"\nCreate {registry_path} to register projects.")
+            return
+
+        rows = [
+            {
+                "prefix": p["prefix"],
+                "path": p["path"],
+                "status": "available" if p["available"] else "not found",
+            }
+            for p in projects
+        ]
+        click.echo(format_table(rows, ["prefix", "path", "status"], {"path": 40}))
+        click.echo()
+        click.echo(f"Registry: {registry_path}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 
