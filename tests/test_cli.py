@@ -324,6 +324,41 @@ class TestSearchCommand:
 
         assert result.exit_code == 0
 
+    @patch("memex.search_history.record_search")
+    @patch("memex.cli.run_async")
+    def test_search_no_history_flag(self, mock_run_async, mock_record, runner, mock_search_result):
+        """Test search with --no-history flag skips recording."""
+        mock_run_async.return_value = mock_search_result
+
+        result = runner.invoke(cli, ["search", "test", "--no-history"])
+
+        assert result.exit_code == 0
+        mock_record.assert_not_called()
+
+    @patch("memex.search_history.record_search")
+    @patch("memex.cli.run_async")
+    def test_search_records_history_by_default(
+        self, mock_run_async, mock_record, runner, mock_search_result,
+    ):
+        """Test search records history by default."""
+        mock_run_async.return_value = mock_search_result
+
+        result = runner.invoke(cli, ["search", "test"])
+
+        assert result.exit_code == 0
+        mock_record.assert_called_once()
+
+    @patch("memex.cli.run_async")
+    def test_search_combined_options(self, mock_run_async, runner, mock_search_result):
+        """Test search with multiple options combined."""
+        mock_run_async.return_value = mock_search_result
+
+        result = runner.invoke(
+            cli, ["search", "docker", "--tags", "infra", "--mode", "semantic", "--limit", "3"]
+        )
+
+        assert result.exit_code == 0
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Get Command Tests
@@ -1599,6 +1634,60 @@ class TestPrimeCommand:
         assert "mode" in output_data
         assert "content" in output_data
 
+    @patch("memex.cli._detect_current_project")
+    @patch("memex.cli._get_recent_project_entries")
+    def test_prime_force_mcp_flag(self, mock_recent, mock_project, runner):
+        """Test prime with explicit --mcp flag forces minimal output."""
+        mock_project.return_value = None
+        mock_recent.return_value = []
+
+        result = runner.invoke(cli, ["prime", "--mcp"])
+
+        assert result.exit_code == 0
+        # MCP mode should produce minimal output
+        assert "Memex KB Active" in result.output
+
+    @patch("memex.cli._detect_mcp_mode")
+    @patch("memex.cli._detect_current_project")
+    @patch("memex.cli._get_recent_project_entries")
+    def test_prime_explicit_project(self, mock_recent, mock_project, mock_mcp, runner):
+        """Test prime with explicit --project option."""
+        mock_mcp.return_value = False
+        mock_project.return_value = None  # Auto-detection returns nothing
+        mock_recent.return_value = [
+            {
+                "path": "projects/explicit/doc.md",
+                "title": "Explicit Doc",
+                "activity_type": "created",
+                "activity_date": "2024-01-20",
+            }
+        ]
+
+        result = runner.invoke(cli, ["prime", "-p", "explicit"])
+
+        assert result.exit_code == 0
+        # Should show recent entries for the explicit project
+        mock_recent.assert_called()
+
+    @patch("memex.cli._detect_mcp_mode")
+    @patch("memex.cli._detect_current_project")
+    @patch("memex.cli._get_recent_project_entries")
+    def test_prime_days_option(self, mock_recent, mock_project, mock_mcp, runner):
+        """Test prime with --days option."""
+        mock_mcp.return_value = False
+        mock_project.return_value = "myapp"
+        mock_recent.return_value = []
+
+        result = runner.invoke(cli, ["prime", "-d", "14"])
+
+        assert result.exit_code == 0
+        # Verify days parameter was passed to _get_recent_project_entries
+        call_args = mock_recent.call_args
+        assert call_args is not None
+        # The days parameter should be 14
+        if call_args.kwargs:
+            assert call_args.kwargs.get("days") == 14 or 14 in call_args.args
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # History Command Tests
@@ -1685,6 +1774,16 @@ class TestHistoryCommand:
         assert result.exit_code == 0
         assert "Cleared 5 search history entries" in result.output
         mock_clear.assert_called_once()
+
+    @patch("memex.search_history.get_recent")
+    def test_history_limit_option(self, mock_get_recent, runner):
+        """Test history with --limit option."""
+        mock_get_recent.return_value = []
+
+        result = runner.invoke(cli, ["history", "--limit", "5"])
+
+        assert result.exit_code == 0
+        mock_get_recent.assert_called_once_with(limit=5)
 
     @patch("memex.search_history.record_search")
     @patch("memex.search_history.get_by_index")

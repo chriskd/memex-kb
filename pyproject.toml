@@ -79,3 +79,7 @@ select = ["E", "F", "I", "UP"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+filterwarnings = [
+    # Expected when mocking run_async - the coroutine is intentionally discarded
+    "ignore:coroutine .* was never awaited:RuntimeWarning",
+]

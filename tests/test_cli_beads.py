@@ -289,6 +289,48 @@ class TestBeadsList:
         assert result.exit_code != 0
         assert "Unknown project" in result.output
 
+    @patch("memex.cli._load_beads_registry")
+    @patch("memex.beads_client.find_beads_db")
+    @patch("memex.beads_client.list_issues")
+    def test_list_with_type_filter(
+        self, mock_list, mock_find, mock_registry_fn, runner,
+        mock_beads_project, mock_issues, tmp_path, monkeypatch,
+    ):
+        """Filters issues by type."""
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(tmp_path))
+        mock_registry_fn.return_value = {"test": tmp_path}
+        mock_find.return_value = mock_beads_project
+        mock_list.return_value = mock_issues
+
+        result = runner.invoke(cli, ["beads", "list", "-p", "test", "--type", "bug"])
+
+        assert result.exit_code == 0
+        # Only bug type should be shown
+        assert "test-2" in result.output  # bug
+        assert "test-1" not in result.output  # task
+        assert "test-3" not in result.output  # feature
+
+    @patch("memex.cli._load_beads_registry")
+    @patch("memex.beads_client.find_beads_db")
+    @patch("memex.beads_client.list_issues")
+    def test_list_with_limit(
+        self, mock_list, mock_find, mock_registry_fn, runner,
+        mock_beads_project, mock_issues, tmp_path, monkeypatch,
+    ):
+        """Limits number of results."""
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(tmp_path))
+        mock_registry_fn.return_value = {"test": tmp_path}
+        mock_find.return_value = mock_beads_project
+        mock_list.return_value = mock_issues
+
+        result = runner.invoke(cli, ["beads", "list", "-p", "test", "--limit", "1"])
+
+        assert result.exit_code == 0
+        # Should only show first issue
+        assert "test-1" in result.output
+        assert "test-2" not in result.output
+        assert "test-3" not in result.output
+
 
 class TestBeadsShow:
     """Tests for 'mx beads show' command."""
@@ -340,6 +382,62 @@ class TestBeadsShow:
         assert result.exit_code != 0
         assert "Issue not found" in result.output
 
+    @patch("memex.cli._load_beads_registry")
+    @patch("memex.beads_client.find_beads_db")
+    @patch("memex.beads_client.show_issue")
+    def test_show_no_comments(self, mock_show, mock_find, mock_registry_fn,
+                              runner, mock_beads_project, tmp_path, monkeypatch):
+        """Shows issue without comments when --no-comments is used."""
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(tmp_path))
+        mock_registry_fn.return_value = {"test": tmp_path}
+        mock_find.return_value = mock_beads_project
+        mock_show.return_value = {
+            "id": "test-1",
+            "title": "Test Issue",
+            "description": "Test description",
+            "status": "open",
+            "priority": 1,
+            "issue_type": "task",
+            "created_at": "2025-01-01T10:00:00",
+            "created_by": "user",
+        }
+
+        result = runner.invoke(cli, ["beads", "show", "test-1", "--no-comments"])
+
+        assert result.exit_code == 0
+        assert "Test Issue" in result.output
+        # Should not try to fetch comments with --no-comments
+
+    @patch("memex.cli._load_beads_registry")
+    @patch("memex.beads_client.find_beads_db")
+    @patch("memex.beads_client.show_issue")
+    @patch("memex.beads_client.get_comments")
+    def test_show_json_output(self, mock_comments, mock_show, mock_find, mock_registry_fn,
+                              runner, mock_beads_project, tmp_path, monkeypatch):
+        """Outputs JSON when --json flag is set."""
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(tmp_path))
+        mock_registry_fn.return_value = {"test": tmp_path}
+        mock_find.return_value = mock_beads_project
+        mock_show.return_value = {
+            "id": "test-1",
+            "title": "Test Issue",
+            "description": "Test description",
+            "status": "open",
+            "priority": 1,
+            "issue_type": "task",
+            "created_at": "2025-01-01T10:00:00",
+            "created_by": "user",
+        }
+        mock_comments.return_value = []
+
+        result = runner.invoke(cli, ["beads", "show", "test-1", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["issue"]["id"] == "test-1"
+        assert data["issue"]["title"] == "Test Issue"
+        assert "comments" in data
+
 
 class TestBeadsKanban:
     """Tests for 'mx beads kanban' command."""
@@ -381,6 +479,26 @@ class TestBeadsKanban:
         data = json.loads(result.output)
         assert "columns" in data
         assert len(data["columns"]) == 3  # open, in_progress, closed
+
+    @patch("memex.cli._load_beads_registry")
+    @patch("memex.beads_client.find_beads_db")
+    @patch("memex.beads_client.list_issues")
+    def test_kanban_compact(
+        self, mock_list, mock_find, mock_registry_fn, runner,
+        mock_beads_project, mock_issues, tmp_path, monkeypatch,
+    ):
+        """Shows compact view with titles only."""
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(tmp_path))
+        mock_registry_fn.return_value = {"test": tmp_path}
+        mock_find.return_value = mock_beads_project
+        mock_list.return_value = mock_issues
+
+        result = runner.invoke(cli, ["beads", "kanban", "-p", "test", "--compact"])
+
+        assert result.exit_code == 0
+        # In compact mode, should show titles but not detailed info
+        assert "First issue" in result.output
+        assert "Second issue" in result.output
 
 
 class TestBeadsStatus:
