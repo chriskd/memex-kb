@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from memex.cli import cli, format_table, format_tree
+from memex.cli import cli, format_table, format_tree, _normalize_error_message
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -188,6 +188,36 @@ class TestFormatTree:
         assert "parent/" in result
         assert "child/" in result
         assert "file.md" in result
+
+
+class TestNormalizeErrorMessage:
+    """Tests for CLI error normalization."""
+
+    def test_rewrites_category_directory_hint(self):
+        """Category/directory guidance uses CLI flag name."""
+        message = (
+            "Either 'category' or 'directory' must be provided. "
+            "Existing categories: tooling, devops"
+        )
+        normalized = _normalize_error_message(message)
+
+        assert "Either --category must be provided" in normalized
+
+    def test_rewrites_force_true_to_flag(self):
+        """force=True becomes --force."""
+        message = "Use force=True to delete anyway, or update linking entries first."
+        normalized = _normalize_error_message(message)
+
+        assert "force=True" not in normalized
+        assert "--force" in normalized
+
+    def test_rewrites_rmdir_guidance(self):
+        """Removes references to missing CLI commands."""
+        message = "Path is not a file: docs. Use rmdir for directories."
+        normalized = _normalize_error_message(message)
+
+        assert "rmdir" not in normalized
+        assert "Delete entries inside" in normalized
 
 
 # ─────────────────────────────────────────────────────────────────────────────

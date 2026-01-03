@@ -77,6 +77,20 @@ def output(data, as_json: bool = False):
         click.echo(data)
 
 
+def _normalize_error_message(message: str) -> str:
+    """Normalize core error messages to CLI-friendly guidance."""
+    normalized = message.replace("force=True", "--force")
+    normalized = normalized.replace(
+        "Either 'category' or 'directory' must be provided",
+        "Either --category must be provided",
+    )
+    normalized = normalized.replace(
+        "Use rmdir for directories.",
+        "Delete entries inside or remove the directory manually.",
+    )
+    return normalized
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main CLI Group
 # ─────────────────────────────────────────────────────────────────────────────
@@ -427,7 +441,7 @@ def get(path: str, as_json: bool, metadata: bool):
     try:
         entry = run_async(get_entry(path=path))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
         sys.exit(1)
 
     if as_json:
@@ -514,7 +528,7 @@ def add(
 
     def _print_duplicates(add_result):
         warning = add_result.warning or "Potential duplicates detected."
-        warning = warning.replace("force=True", "--force")
+        warning = _normalize_error_message(warning)
         click.echo(f"Warning: {warning}")
         click.echo("Potential duplicates:")
         for dup in add_result.potential_duplicates[:3]:
@@ -529,7 +543,7 @@ def add(
             force=force,
         ))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
         sys.exit(1)
 
     if as_json:
@@ -550,7 +564,7 @@ def add(
                         force=True,
                     ))
                 except Exception as e:
-                    click.echo(f"Error: {e}", err=True)
+                    click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
                     sys.exit(1)
                 if hasattr(result, 'created') and not result.created:
                     _print_duplicates(result)
@@ -766,7 +780,7 @@ def quick_add(
             force=True,  # Skip duplicate check for quick-add
         ))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
         sys.exit(1)
 
     if hasattr(result, 'created') and not result.created:
@@ -806,7 +820,7 @@ def update(path: str, tags: Optional[str], content: Optional[str], file_path: Op
     try:
         result = run_async(update_entry(path=path, content=content, tags=tag_list))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
         sys.exit(1)
 
     if as_json:
@@ -1093,7 +1107,7 @@ def suggest_links(path: str, limit: int, as_json: bool):
     try:
         result = run_async(core_suggest_links(path=path, limit=limit))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
         sys.exit(1)
 
     if as_json:
@@ -1309,7 +1323,7 @@ def delete(path: str, force: bool, as_json: bool):
     try:
         result = run_async(delete_entry(path=path, force=force))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
         sys.exit(1)
 
     if as_json:
