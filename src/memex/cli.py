@@ -929,16 +929,16 @@ def quick_add(
 
 
 @cli.command()
-@click.argument("path")
-@click.option("--tags", help="New tags (comma-separated)")
-@click.option("--content", help="New content")
+@click.argument("path", metavar="PATH")
+@click.option("--tags", help="Replace tags (comma-separated). Preserves existing if omitted")
+@click.option("--content", help="New content (replaces existing unless --append)")
 @click.option(
     "--file", "-f", "file_path",
     type=click.Path(exists=True), help="Read content from file",
 )
 @click.option("--stdin", is_flag=True, help="Read content from stdin")
 @click.option("--append", is_flag=True, help="Append to end instead of replacing")
-@click.option("--timestamp", is_flag=True, help="Prepend timestamp to appended content")
+@click.option("--timestamp", is_flag=True, help="Add '## YYYY-MM-DD HH:MM UTC' header")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def update(
     path: str, tags: str | None, content: str | None,
@@ -946,12 +946,15 @@ def update(
 ):
     """Update an existing knowledge base entry.
 
+    PATH is relative to KB root (e.g., "tooling/my-entry.md").
+    Requires --content, --file, --stdin, or --tags.
+
     \b
     Examples:
-      mx update path/entry.md --tags="new,tags"
-      mx update path/entry.md --file=updated-content.md
-      mx update path/entry.md --stdin --append --timestamp
-      echo "Session notes" | mx update path/entry.md --stdin --append
+      mx update tooling/notes.md --tags="python,tooling"
+      mx update tooling/notes.md --content="New content" --append
+      mx update tooling/notes.md --file=session.md --append
+      echo "Done for today" | mx update tooling/notes.md --stdin --append --timestamp
     """
     from datetime import datetime, timezone
     from .core import update_entry
