@@ -22,6 +22,17 @@ _SEMANTIC_DEPS_MESSAGE = (
 )
 
 
+def semantic_deps_available() -> bool:
+    """Check if semantic search dependencies (chromadb, sentence-transformers) are installed."""
+    try:
+        import chromadb  # noqa: F401
+        from sentence_transformers import SentenceTransformer  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def _require_chromadb():
     try:
         import chromadb
@@ -136,7 +147,11 @@ class ChromaIndex:
 
         Args:
             chunk: The document chunk to index.
+
+        No-op if semantic dependencies are not installed.
         """
+        if not semantic_deps_available():
+            return
         collection = self._get_collection()
 
         # Create unique chunk ID
@@ -180,8 +195,12 @@ class ChromaIndex:
 
         Args:
             chunks: List of document chunks to index.
+
+        No-op if semantic dependencies are not installed.
         """
         if not chunks:
+            return
+        if not semantic_deps_available():
             return
 
         collection = self._get_collection()
@@ -278,7 +297,10 @@ class ChromaIndex:
 
         Returns:
             List of search results with normalized scores.
+            Returns empty list if semantic dependencies are not installed.
         """
+        if not semantic_deps_available():
+            return []
         collection = self._get_collection()
 
         # Check if collection is empty
@@ -345,7 +367,12 @@ class ChromaIndex:
         return search_results
 
     def clear(self) -> None:
-        """Clear all documents from the index."""
+        """Clear all documents from the index.
+
+        No-op if semantic dependencies are not installed.
+        """
+        if not semantic_deps_available():
+            return
         # Force initialize client if needed
         if self._client is None:
             self._get_collection()
@@ -363,7 +390,12 @@ class ChromaIndex:
             )
 
     def doc_count(self) -> int:
-        """Return the number of documents in the index."""
+        """Return the number of documents in the index.
+
+        Returns 0 if semantic dependencies are not installed.
+        """
+        if not semantic_deps_available():
+            return 0
         collection = self._get_collection()
         return collection.count()
 
@@ -372,7 +404,11 @@ class ChromaIndex:
 
         Args:
             path: The document path to delete.
+
+        No-op if semantic dependencies are not installed.
         """
+        if not semantic_deps_available():
+            return
         collection = self._get_collection()
 
         # Query for all chunks with this path
@@ -392,8 +428,12 @@ class ChromaIndex:
 
         Args:
             paths: List of document paths to delete.
+
+        No-op if semantic dependencies are not installed.
         """
         if not paths:
+            return
+        if not semantic_deps_available():
             return
 
         collection = self._get_collection()
@@ -411,7 +451,10 @@ class ChromaIndex:
         """Preload the embedding model and collection to avoid first-query latency.
 
         Call this at startup to warm up the model before any searches.
+        No-op if semantic dependencies are not installed.
         """
+        if not semantic_deps_available():
+            return
         # Load the embedding model (this is the slow part - 2-3s)
         self._get_model()
         # Initialize the collection
