@@ -22,10 +22,36 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         assert "---" in result
-        assert "title: Test Entry" in result
+        assert 'title: "Test Entry"' in result
         assert "tags:" in result
         assert "  - python" in result
         assert "created: 2024-01-15" in result
+
+    def test_title_with_colon(self):
+        """Titles with colons are properly quoted for valid YAML."""
+        metadata = EntryMetadata(
+            title="vl-mail: Lightweight Agent Mail CLI",
+            tags=["test"],
+            created=date(2024, 1, 15),
+        )
+
+        result = build_frontmatter(metadata)
+
+        # Title must be quoted to be valid YAML
+        assert 'title: "vl-mail: Lightweight Agent Mail CLI"' in result
+
+    def test_title_with_quotes(self):
+        """Titles with quotes are properly escaped."""
+        metadata = EntryMetadata(
+            title='Entry with "quoted" text',
+            tags=["test"],
+            created=date(2024, 1, 15),
+        )
+
+        result = build_frontmatter(metadata)
+
+        # Internal quotes must be escaped
+        assert 'title: "Entry with \\"quoted\\" text"' in result
 
     def test_with_updated_date(self):
         """Includes updated date when present."""
@@ -213,7 +239,7 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         # Check all fields are present
-        assert "title: Complete Entry" in result
+        assert 'title: "Complete Entry"' in result
         assert "  - python" in result
         assert "  - testing" in result
         assert "created: 2024-01-01" in result
