@@ -574,6 +574,71 @@ class TestUpdateEntryEdgeCases:
                 section_updates={"Section": "New content"},
             )
 
+    @pytest.mark.asyncio
+    async def test_update_entry_append_strips_trailing_whitespace(self, kb_root, index_root):
+        """Appending should strip trailing whitespace from existing content."""
+        _create_entry(
+            kb_root / "development" / "test.md",
+            "Test Entry",
+            "Content with trailing spaces    \n\n\n",
+        )
+
+        await core.update_entry(
+            path="development/test.md",
+            content="Appended",
+            append=True,
+        )
+
+        entry = await core.get_entry("development/test.md")
+        # Should have exactly two newlines between sections (no extra)
+        assert "\n\n\n" not in entry.content
+        assert "Content with trailing spaces\n\nAppended" in entry.content
+
+    @pytest.mark.asyncio
+    async def test_update_entry_append_to_empty_content(self, kb_root, index_root):
+        """Appending to entry with empty content should work."""
+        _create_entry(
+            kb_root / "development" / "test.md",
+            "Test Entry",
+            "",
+        )
+
+        await core.update_entry(
+            path="development/test.md",
+            content="First content",
+            append=True,
+        )
+
+        entry = await core.get_entry("development/test.md")
+        assert "First content" in entry.content
+
+    @pytest.mark.asyncio
+    async def test_update_entry_append_multiline_content(self, kb_root, index_root):
+        """Appending multiline content should preserve formatting."""
+        _create_entry(
+            kb_root / "development" / "test.md",
+            "Test Entry",
+            "Existing content",
+        )
+
+        multiline = """## Session Log
+
+- Fixed bug A
+- Added feature B
+- Tested feature C"""
+
+        await core.update_entry(
+            path="development/test.md",
+            content=multiline,
+            append=True,
+        )
+
+        entry = await core.get_entry("development/test.md")
+        assert "Existing content" in entry.content
+        assert "## Session Log" in entry.content
+        assert "- Fixed bug A" in entry.content
+        assert "- Tested feature C" in entry.content
+
 
 class TestDeleteEntryEdgeCases:
     """Edge case tests for delete_entry function."""

@@ -1417,6 +1417,76 @@ class TestUpdateCommand:
         assert result.exit_code == 1
         assert "--stdin and --content are mutually exclusive" in result.output
 
+    @patch("memex.cli.run_async")
+    def test_update_file_with_append(self, mock_run_async, runner, tmp_path):
+        """Test update command with --file and --append flags."""
+        content_file = tmp_path / "content.md"
+        content_file.write_text("Content from file")
+
+        mock_run_async.return_value = {"path": "entry.md"}
+
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--file", str(content_file), "--append"]
+        )
+
+        assert result.exit_code == 0
+        assert "Appended to: entry.md" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_update_file_with_append_and_timestamp(self, mock_run_async, runner, tmp_path):
+        """Test update command with --file, --append, and --timestamp flags."""
+        content_file = tmp_path / "content.md"
+        content_file.write_text("Session notes from file")
+
+        mock_run_async.return_value = {"path": "entry.md"}
+
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--file", str(content_file), "--append", "--timestamp"]
+        )
+
+        assert result.exit_code == 0
+        assert "Appended to: entry.md" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_update_timestamp_format(self, mock_run_async, runner):
+        """Test that --timestamp adds proper header format."""
+        captured_content = []
+
+        def capture_call(coro):
+            # Extract parameters from the coroutine
+            import inspect
+            frame = coro.cr_frame
+            if frame and "content" in frame.f_locals:
+                captured_content.append(frame.f_locals["content"])
+            return {"path": "entry.md"}
+
+        mock_run_async.side_effect = capture_call
+
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--content", "Test note", "--append", "--timestamp"]
+        )
+
+        assert result.exit_code == 0
+        assert len(captured_content) == 1
+        content = captured_content[0]
+        # Verify timestamp format: ## YYYY-MM-DD HH:MM UTC
+        assert content.startswith("## ")
+        assert "UTC" in content
+        assert "Test note" in content
+
+    @patch("memex.cli.run_async")
+    def test_update_stdin_empty(self, mock_run_async, runner):
+        """Test update command with empty stdin."""
+        mock_run_async.return_value = {"path": "entry.md"}
+
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--stdin"],
+            input=""
+        )
+
+        # Empty content should still be passed through (core validates)
+        assert result.exit_code == 0
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Delete Command Tests
