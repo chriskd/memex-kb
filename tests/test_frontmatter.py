@@ -22,9 +22,9 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         assert "---" in result
-        assert 'title: "Test Entry"' in result
+        assert "title: Test Entry" in result
         assert "tags:" in result
-        assert "  - python" in result
+        assert "- python" in result
         assert "created: 2024-01-15" in result
 
     def test_title_with_colon(self):
@@ -37,8 +37,8 @@ class TestBuildFrontmatter:
 
         result = build_frontmatter(metadata)
 
-        # Title must be quoted to be valid YAML
-        assert 'title: "vl-mail: Lightweight Agent Mail CLI"' in result
+        # yaml.safe_dump uses single quotes for strings with colons
+        assert "'vl-mail: Lightweight Agent Mail CLI'" in result
 
     def test_title_with_quotes(self):
         """Titles with quotes are properly escaped."""
@@ -50,8 +50,26 @@ class TestBuildFrontmatter:
 
         result = build_frontmatter(metadata)
 
-        # Internal quotes must be escaped
-        assert 'title: "Entry with \\"quoted\\" text"' in result
+        # yaml.safe_dump handles quote escaping
+        assert "Entry with" in result
+        assert "quoted" in result
+
+    def test_tags_with_colons(self):
+        """Tags containing colons are properly quoted."""
+        metadata = EntryMetadata(
+            title="Entry",
+            tags=["simple", "category: subcategory", "foo:bar"],
+            created=date(2024, 1, 15),
+        )
+
+        result = build_frontmatter(metadata)
+
+        # Simple tags stay unquoted
+        assert "- simple" in result
+        # Tags with ": " are quoted by yaml.safe_dump
+        assert "'category: subcategory'" in result
+        # Tags without space after colon may not need quoting
+        assert "foo:bar" in result
 
     def test_with_updated_date(self):
         """Includes updated date when present."""
@@ -78,8 +96,8 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         assert "contributors:" in result
-        assert "  - Alice" in result
-        assert "  - Bob" in result
+        assert "- Alice" in result
+        assert "- Bob" in result
 
     def test_with_aliases(self):
         """Includes aliases when present."""
@@ -93,8 +111,8 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         assert "aliases:" in result
-        assert "  - old-name" in result
-        assert "  - alternate" in result
+        assert "- old-name" in result
+        assert "- alternate" in result
 
     def test_status_not_published(self):
         """Includes status when not default 'published'."""
@@ -147,21 +165,21 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         assert "edit_sources:" in result
-        assert "  - project-a" in result
-        assert "  - project-b" in result
+        assert "- project-a" in result
+        assert "- project-b" in result
 
     def test_with_model(self):
         """Includes model when present."""
         metadata = EntryMetadata(
-            title="AI Entry",
+            title="Entry",
             tags=["test"],
             created=date(2024, 1, 1),
-            model="claude-3-opus",
+            model="claude-opus-4",
         )
 
         result = build_frontmatter(metadata)
 
-        assert "model: claude-3-opus" in result
+        assert "model: claude-opus-4" in result
 
     def test_with_git_branch(self):
         """Includes git_branch when present."""
@@ -169,12 +187,12 @@ class TestBuildFrontmatter:
             title="Entry",
             tags=["test"],
             created=date(2024, 1, 1),
-            git_branch="feature/new-feature",
+            git_branch="feature/new-thing",
         )
 
         result = build_frontmatter(metadata)
 
-        assert "git_branch: feature/new-feature" in result
+        assert "git_branch: feature/new-thing" in result
 
     def test_with_last_edited_by(self):
         """Includes last_edited_by when present."""
@@ -182,12 +200,12 @@ class TestBuildFrontmatter:
             title="Entry",
             tags=["test"],
             created=date(2024, 1, 1),
-            last_edited_by="claude-agent",
+            last_edited_by="ci-agent",
         )
 
         result = build_frontmatter(metadata)
 
-        assert "last_edited_by: claude-agent" in result
+        assert "last_edited_by: ci-agent" in result
 
     def test_with_beads_issues(self):
         """Includes beads_issues when present."""
@@ -201,8 +219,8 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         assert "beads_issues:" in result
-        assert "  - issue-123" in result
-        assert "  - issue-456" in result
+        assert "- issue-123" in result
+        assert "- issue-456" in result
 
     def test_with_beads_project(self):
         """Includes beads_project when present."""
@@ -239,9 +257,9 @@ class TestBuildFrontmatter:
         result = build_frontmatter(metadata)
 
         # Check all fields are present
-        assert 'title: "Complete Entry"' in result
-        assert "  - python" in result
-        assert "  - testing" in result
+        assert "title: Complete Entry" in result
+        assert "- python" in result
+        assert "- testing" in result
         assert "created: 2024-01-01" in result
         assert "updated: 2024-01-15" in result
         assert "contributors:" in result
@@ -254,6 +272,28 @@ class TestBuildFrontmatter:
         assert "last_edited_by: ci-agent" in result
         assert "beads_issues:" in result
         assert "beads_project: tracker" in result
+
+    def test_roundtrip_valid_yaml(self):
+        """Frontmatter can be parsed back as valid YAML."""
+        import yaml
+
+        metadata = EntryMetadata(
+            title='vl-mail: Test with "quotes" and colons',
+            tags=["simple", "category: subcategory"],
+            created=date(2024, 1, 15),
+            aliases=["old: name"],
+            contributors=['User <email: local>'],
+        )
+
+        fm = build_frontmatter(metadata)
+        # Extract YAML content between --- markers
+        content = fm.split("---")[1]
+        parsed = yaml.safe_load(content)
+
+        assert parsed["title"] == 'vl-mail: Test with "quotes" and colons'
+        assert parsed["tags"] == ["simple", "category: subcategory"]
+        assert parsed["aliases"] == ["old: name"]
+        assert parsed["contributors"] == ['User <email: local>']
 
 
 class TestCreateNewMetadata:
@@ -273,7 +313,7 @@ class TestCreateNewMetadata:
         assert metadata.contributors == []
 
     def test_with_source_project(self):
-        """Sets source_project when provided."""
+        """Creates metadata with source_project."""
         metadata = create_new_metadata(
             title="Entry",
             tags=["test"],
@@ -283,7 +323,7 @@ class TestCreateNewMetadata:
         assert metadata.source_project == "my-project"
 
     def test_with_contributor(self):
-        """Adds contributor to list."""
+        """Creates metadata with contributor."""
         metadata = create_new_metadata(
             title="Entry",
             tags=["test"],
@@ -293,7 +333,7 @@ class TestCreateNewMetadata:
         assert metadata.contributors == ["Alice"]
 
     def test_with_model(self):
-        """Sets model for agent entries."""
+        """Creates metadata with model."""
         metadata = create_new_metadata(
             title="Entry",
             tags=["test"],
@@ -303,134 +343,139 @@ class TestCreateNewMetadata:
         assert metadata.model == "claude-opus-4"
 
     def test_with_git_branch(self):
-        """Sets git_branch for provenance."""
+        """Creates metadata with git_branch."""
         metadata = create_new_metadata(
             title="Entry",
             tags=["test"],
-            git_branch="feature/branch",
+            git_branch="main",
         )
 
-        assert metadata.git_branch == "feature/branch"
+        assert metadata.git_branch == "main"
 
     def test_with_actor(self):
-        """Sets last_edited_by from actor."""
+        """Creates metadata with actor."""
         metadata = create_new_metadata(
             title="Entry",
             tags=["test"],
-            actor="claude-agent",
+            actor="ci-agent",
         )
 
-        assert metadata.last_edited_by == "claude-agent"
+        assert metadata.last_edited_by == "ci-agent"
 
 
 class TestUpdateMetadataForEdit:
     """Tests for update_metadata_for_edit function."""
 
     @pytest.fixture
-    def original_metadata(self):
-        """Create sample original metadata."""
+    def base_metadata(self):
+        """Create base metadata for update tests."""
         return EntryMetadata(
-            title="Original",
+            title="Original Title",
             tags=["original"],
             created=date(2024, 1, 1),
-            contributors=["Alice"],
-            source_project="project-a",
+            source_project="original-project",
         )
 
-    def test_preserves_immutable_fields(self, original_metadata):
+    def test_preserves_immutable_fields(self, base_metadata):
         """Preserves title, created, and source_project."""
-        updated = update_metadata_for_edit(original_metadata)
+        updated = update_metadata_for_edit(base_metadata)
 
-        assert updated.title == "Original"
+        assert updated.title == "Original Title"
         assert updated.created == date(2024, 1, 1)
-        assert updated.source_project == "project-a"
+        assert updated.source_project == "original-project"
 
-    def test_sets_updated_date(self, original_metadata):
-        """Sets updated to today's date."""
-        updated = update_metadata_for_edit(original_metadata)
+    def test_sets_updated_date(self, base_metadata):
+        """Sets updated date to today."""
+        updated = update_metadata_for_edit(base_metadata)
 
         assert updated.updated == date.today()
 
-    def test_updates_tags(self, original_metadata):
-        """Replaces tags when new_tags provided."""
+    def test_updates_tags(self, base_metadata):
+        """Updates tags when provided."""
         updated = update_metadata_for_edit(
-            original_metadata,
+            base_metadata,
             new_tags=["new", "tags"],
         )
 
         assert updated.tags == ["new", "tags"]
 
-    def test_preserves_tags_when_none(self, original_metadata):
+    def test_preserves_tags_when_none(self, base_metadata):
         """Preserves original tags when new_tags is None."""
-        updated = update_metadata_for_edit(original_metadata)
+        updated = update_metadata_for_edit(base_metadata, new_tags=None)
 
         assert updated.tags == ["original"]
 
-    def test_adds_new_contributor(self, original_metadata):
-        """Adds new contributor to existing list."""
+    def test_adds_new_contributor(self, base_metadata):
+        """Adds new contributor to list."""
         updated = update_metadata_for_edit(
-            original_metadata,
-            new_contributor="Bob",
-        )
-
-        assert updated.contributors == ["Alice", "Bob"]
-
-    def test_skips_duplicate_contributor(self, original_metadata):
-        """Doesn't add contributor if already present."""
-        updated = update_metadata_for_edit(
-            original_metadata,
+            base_metadata,
             new_contributor="Alice",
         )
 
-        assert updated.contributors == ["Alice"]
+        assert "Alice" in updated.contributors
 
-    def test_adds_edit_source(self, original_metadata):
-        """Adds edit_source from different project."""
-        updated = update_metadata_for_edit(
-            original_metadata,
-            edit_source="project-b",
-        )
-
-        assert "project-b" in updated.edit_sources
-
-    def test_skips_edit_source_same_as_origin(self, original_metadata):
-        """Doesn't add edit_source if same as source_project."""
-        updated = update_metadata_for_edit(
-            original_metadata,
-            edit_source="project-a",  # Same as source_project
-        )
-
-        assert "project-a" not in updated.edit_sources
-
-    def test_skips_duplicate_edit_source(self):
-        """Doesn't add edit_source if already present."""
+    def test_skips_duplicate_contributor(self):
+        """Doesn't duplicate existing contributors."""
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
             created=date(2024, 1, 1),
-            source_project="project-a",
-            edit_sources=["project-b"],
+            contributors=["Alice"],
         )
 
         updated = update_metadata_for_edit(
             metadata,
-            edit_source="project-b",
+            new_contributor="Alice",
         )
 
-        assert updated.edit_sources.count("project-b") == 1
+        assert updated.contributors.count("Alice") == 1
 
-    def test_sets_breadcrumb_fields(self, original_metadata):
-        """Sets model, git_branch, and actor."""
+    def test_adds_edit_source(self, base_metadata):
+        """Adds edit_source to list."""
         updated = update_metadata_for_edit(
-            original_metadata,
+            base_metadata,
+            edit_source="other-project",
+        )
+
+        assert "other-project" in updated.edit_sources
+
+    def test_skips_edit_source_same_as_origin(self, base_metadata):
+        """Doesn't add edit_source if same as source_project."""
+        updated = update_metadata_for_edit(
+            base_metadata,
+            edit_source="original-project",
+        )
+
+        assert "original-project" not in updated.edit_sources
+
+    def test_skips_duplicate_edit_source(self):
+        """Doesn't duplicate existing edit_sources."""
+        metadata = EntryMetadata(
+            title="Entry",
+            tags=["test"],
+            created=date(2024, 1, 1),
+            edit_sources=["other-project"],
+        )
+
+        updated = update_metadata_for_edit(
+            metadata,
+            edit_source="other-project",
+        )
+
+        assert updated.edit_sources.count("other-project") == 1
+
+    def test_sets_breadcrumb_fields(self, base_metadata):
+        """Sets model, git_branch, and last_edited_by."""
+        updated = update_metadata_for_edit(
+            base_metadata,
             model="claude-opus-4",
-            git_branch="main",
-            actor="agent",
+            git_branch="feature/update",
+            actor="ci-agent",
         )
 
         assert updated.model == "claude-opus-4"
-        assert updated.git_branch == "main"
-        assert updated.last_edited_by == "agent"
+        assert updated.git_branch == "feature/update"
+        assert updated.last_edited_by == "ci-agent"
 
     def test_preserves_beads_fields(self):
         """Preserves beads_issues and beads_project."""
@@ -448,20 +493,20 @@ class TestUpdateMetadataForEdit:
         assert updated.beads_project == "tracker"
 
     def test_preserves_aliases(self):
-        """Preserves existing aliases."""
+        """Preserves aliases list."""
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
             created=date(2024, 1, 1),
-            aliases=["alias-1", "alias-2"],
+            aliases=["alias1", "alias2"],
         )
 
         updated = update_metadata_for_edit(metadata)
 
-        assert updated.aliases == ["alias-1", "alias-2"]
+        assert updated.aliases == ["alias1", "alias2"]
 
     def test_preserves_status(self):
-        """Preserves existing status."""
+        """Preserves status."""
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
