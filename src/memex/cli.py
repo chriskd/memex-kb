@@ -936,10 +936,13 @@ def quick_add(
     "--file", "-f", "file_path",
     type=click.Path(exists=True), help="Read content from file",
 )
+@click.option("--stdin", is_flag=True, help="Read content from stdin")
+@click.option("--append", is_flag=True, help="Append to end instead of replacing")
+@click.option("--timestamp", is_flag=True, help="Prepend timestamp to appended content")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def update(
     path: str, tags: str | None, content: str | None,
-    file_path: str | None, as_json: bool,
+    file_path: str | None, stdin: bool, append: bool, timestamp: bool, as_json: bool,
 ):
     """Update an existing knowledge base entry.
 
@@ -947,16 +950,40 @@ def update(
     Examples:
       mx update path/entry.md --tags="new,tags"
       mx update path/entry.md --file=updated-content.md
+      mx update path/entry.md --stdin --append --timestamp
+      echo "Session notes" | mx update path/entry.md --stdin --append
     """
+    from datetime import datetime, timezone
     from .core import update_entry
 
-    if file_path:
+    # Validate flag combinations
+    if timestamp and not append:
+        click.echo("Error: --timestamp requires --append", err=True)
+        sys.exit(1)
+
+    if stdin and file_path:
+        click.echo("Error: --stdin and --file are mutually exclusive", err=True)
+        sys.exit(1)
+
+    if stdin and content:
+        click.echo("Error: --stdin and --content are mutually exclusive", err=True)
+        sys.exit(1)
+
+    # Resolve content source
+    if stdin:
+        content = sys.stdin.read()
+    elif file_path:
         content = Path(file_path).read_text()
+
+    # Add timestamp header if requested
+    if timestamp and content:
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        content = f"## {ts}\n\n{content}"
 
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
 
     try:
-        result = run_async(update_entry(path=path, content=content, tags=tag_list))
+        result = run_async(update_entry(path=path, content=content, tags=tag_list, append=append))
     except Exception as e:
         click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
         sys.exit(1)
@@ -964,7 +991,8 @@ def update(
     if as_json:
         output(result, as_json=True)
     else:
-        click.echo(f"Updated: {result['path']}")
+        action = "Appended to" if append else "Updated"
+        click.echo(f"{action}: {result['path']}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

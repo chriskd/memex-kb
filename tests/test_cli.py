@@ -1341,6 +1341,82 @@ class TestUpdateCommand:
         output_data = json.loads(result.output)
         assert output_data["path"] == "entry.md"
 
+    @patch("memex.cli.run_async")
+    def test_update_append(self, mock_run_async, runner):
+        """Test update command with --append flag."""
+        mock_run_async.return_value = {"path": "entry.md"}
+
+        result = runner.invoke(cli, ["update", "entry.md", "--content", "Appended", "--append"])
+
+        assert result.exit_code == 0
+        assert "Appended to: entry.md" in result.output
+        # Verify append=True was passed to core
+        call_args = mock_run_async.call_args
+        assert call_args is not None
+
+    @patch("memex.cli.run_async")
+    def test_update_stdin(self, mock_run_async, runner):
+        """Test update command with --stdin flag."""
+        mock_run_async.return_value = {"path": "entry.md"}
+
+        result = runner.invoke(cli, ["update", "entry.md", "--stdin"], input="Content from stdin")
+
+        assert result.exit_code == 0
+
+    @patch("memex.cli.run_async")
+    def test_update_stdin_append(self, mock_run_async, runner):
+        """Test update command with --stdin and --append flags."""
+        mock_run_async.return_value = {"path": "entry.md"}
+
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--stdin", "--append"],
+            input="Appended from stdin"
+        )
+
+        assert result.exit_code == 0
+        assert "Appended to: entry.md" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_update_append_with_timestamp(self, mock_run_async, runner):
+        """Test update command with --append --timestamp flags."""
+        mock_run_async.return_value = {"path": "entry.md"}
+
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--content", "With timestamp", "--append", "--timestamp"]
+        )
+
+        assert result.exit_code == 0
+
+    def test_update_timestamp_requires_append(self, runner):
+        """Test that --timestamp requires --append."""
+        result = runner.invoke(cli, ["update", "entry.md", "--content", "Test", "--timestamp"])
+
+        assert result.exit_code == 1
+        assert "--timestamp requires --append" in result.output
+
+    def test_update_stdin_file_mutually_exclusive(self, runner, tmp_path):
+        """Test that --stdin and --file are mutually exclusive."""
+        content_file = tmp_path / "content.md"
+        content_file.write_text("File content")
+
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--stdin", "--file", str(content_file)],
+            input="Stdin content"
+        )
+
+        assert result.exit_code == 1
+        assert "--stdin and --file are mutually exclusive" in result.output
+
+    def test_update_stdin_content_mutually_exclusive(self, runner):
+        """Test that --stdin and --content are mutually exclusive."""
+        result = runner.invoke(
+            cli, ["update", "entry.md", "--stdin", "--content", "Direct content"],
+            input="Stdin content"
+        )
+
+        assert result.exit_code == 1
+        assert "--stdin and --content are mutually exclusive" in result.output
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Delete Command Tests

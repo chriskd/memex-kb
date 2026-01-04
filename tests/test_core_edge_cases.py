@@ -501,6 +501,79 @@ class TestUpdateEntryEdgeCases:
                 content="This should fail",
             )
 
+    @pytest.mark.asyncio
+    async def test_update_entry_append(self, kb_root, index_root):
+        """Appending content should add to end of existing content."""
+        _create_entry(
+            kb_root / "development" / "test.md",
+            "Test Entry",
+            "Original content",
+        )
+
+        await core.update_entry(
+            path="development/test.md",
+            content="Appended content",
+            append=True,
+        )
+
+        entry = await core.get_entry("development/test.md")
+        assert "Original content" in entry.content
+        assert "Appended content" in entry.content
+        # Appended content should come after original
+        assert entry.content.index("Original") < entry.content.index("Appended")
+
+    @pytest.mark.asyncio
+    async def test_update_entry_append_preserves_formatting(self, kb_root, index_root):
+        """Appending should add proper spacing between sections."""
+        _create_entry(
+            kb_root / "development" / "test.md",
+            "Test Entry",
+            "First section content",
+        )
+
+        await core.update_entry(
+            path="development/test.md",
+            content="## New Section\n\nNew content",
+            append=True,
+        )
+
+        entry = await core.get_entry("development/test.md")
+        # Should have double newline separation
+        assert "First section content\n\n## New Section" in entry.content
+
+    @pytest.mark.asyncio
+    async def test_update_entry_append_requires_content(self, kb_root, index_root):
+        """Append without content should raise ValueError."""
+        _create_entry(
+            kb_root / "development" / "test.md",
+            "Test Entry",
+            "Original content",
+        )
+
+        # When append=True but no content, the general validation fires first
+        with pytest.raises(ValueError, match="Provide new content"):
+            await core.update_entry(
+                path="development/test.md",
+                append=True,
+            )
+
+    @pytest.mark.asyncio
+    async def test_update_entry_append_with_section_updates_error(self, kb_root, index_root):
+        """Append with section_updates should raise ValueError."""
+        _create_entry(
+            kb_root / "development" / "test.md",
+            "Test Entry",
+            "## Section\nContent",
+        )
+
+        with pytest.raises(ValueError, match="cannot be combined with section_updates"):
+            await core.update_entry(
+                path="development/test.md",
+                content="Append this",
+                append=True,
+                section_updates={"Section": "New content"},
+            )
+
 
 class TestDeleteEntryEdgeCases:
     """Edge case tests for delete_entry function."""

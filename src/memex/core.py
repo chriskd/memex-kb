@@ -1149,6 +1149,7 @@ async def update_entry(
     content: str | None = None,
     tags: list[str] | None = None,
     section_updates: dict[str, str] | None = None,
+    append: bool = False,
 ) -> dict:
     """Update an existing KB entry.
 
@@ -1157,6 +1158,7 @@ async def update_entry(
         content: New markdown content (without frontmatter).
         tags: Optional new list of tags. If provided, replaces existing tags.
         section_updates: Optional dict of section heading -> new content.
+        append: If True, append content to end of existing content instead of replacing.
 
     Returns:
         Dict with 'path' of updated file, 'suggested_links' to consider adding,
@@ -1173,6 +1175,9 @@ async def update_entry(
 
     if content is None and not section_updates:
         raise ValueError("Provide new content or section_updates")
+
+    if append and section_updates:
+        raise ValueError("--append cannot be combined with section_updates")
 
     # Parse existing entry to get metadata
     try:
@@ -1203,7 +1208,13 @@ async def update_entry(
     )
     frontmatter = build_frontmatter(updated_metadata)
 
-    new_content = content if content is not None else existing_content
+    if append and content is not None:
+        new_content = existing_content.rstrip() + "\n\n" + content
+    elif content is not None:
+        new_content = content
+    else:
+        new_content = existing_content
+
     if section_updates:
         new_content = apply_section_updates(new_content, section_updates)
 
