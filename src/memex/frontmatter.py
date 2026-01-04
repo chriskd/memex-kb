@@ -25,8 +25,9 @@ def build_frontmatter(metadata: EntryMetadata) -> str:
     """
     parts = ["---"]
 
-    # Required fields
-    parts.append(f"title: {metadata.title}")
+    # Required fields - quote title to handle colons safely, escape internal quotes
+    escaped_title = metadata.title.replace('"', '\\"')
+    parts.append(f'title: "{escaped_title}"')
     parts.append("tags:")
     parts.append(_format_yaml_list(metadata.tags))
     parts.append(f"created: {metadata.created.isoformat()}")
