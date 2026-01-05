@@ -2980,3 +2980,52 @@ async def log_session(
         project=kb_context.get_project_name() if kb_context else None,
         context_source=context_source,
     )
+
+
+async def publish(
+    output_dir: Path | str | None = None,
+    base_url: str = "",
+    include_drafts: bool = False,
+    include_archived: bool = False,
+    clean: bool = True,
+) -> dict:
+    """Generate static HTML site from knowledge base.
+
+    Produces a complete static site suitable for hosting on GitHub Pages,
+    with resolved wikilinks, client-side search, and a minimal theme.
+
+    Args:
+        output_dir: Output directory (default: _site)
+        base_url: Base URL prefix for links (e.g., "/my-kb" for subdirectory hosting)
+        include_drafts: Include entries with status="draft"
+        include_archived: Include entries with status="archived"
+        clean: Remove output directory before build (default True)
+
+    Returns:
+        Dict with:
+        - entries_published: Number of entries written
+        - broken_links: List of {source, target} for unresolved wikilinks
+        - output_dir: Path to output directory
+        - search_index_path: Path to generated search index
+    """
+    from .publisher import PublishConfig, SiteGenerator
+
+    kb_root = get_kb_root()
+
+    config = PublishConfig(
+        output_dir=Path(output_dir) if output_dir else Path("_site"),
+        base_url=base_url,
+        include_drafts=include_drafts,
+        include_archived=include_archived,
+        clean=clean,
+    )
+
+    generator = SiteGenerator(config, kb_root)
+    result = await generator.generate()
+
+    return {
+        "entries_published": result.entries_published,
+        "broken_links": result.broken_links,
+        "output_dir": result.output_dir,
+        "search_index_path": result.search_index_path,
+    }

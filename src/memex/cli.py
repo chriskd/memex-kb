@@ -2986,6 +2986,94 @@ def beads_projects(as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Publishing
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option(
+    "--output", "-o", "output_dir",
+    type=click.Path(),
+    default="_site",
+    help="Output directory (default: _site)",
+)
+@click.option(
+    "--base-url", "-b",
+    default="",
+    help="Base URL for links (e.g., /my-kb for subdirectory hosting)",
+)
+@click.option(
+    "--include-drafts",
+    is_flag=True,
+    help="Include draft entries in output",
+)
+@click.option(
+    "--include-archived",
+    is_flag=True,
+    help="Include archived entries in output",
+)
+@click.option(
+    "--no-clean",
+    is_flag=True,
+    help="Don't remove output directory before build",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def publish(
+    output_dir: str,
+    base_url: str,
+    include_drafts: bool,
+    include_archived: bool,
+    no_clean: bool,
+    as_json: bool,
+):
+    """Generate static HTML site for GitHub Pages.
+
+    Converts the knowledge base to a static site with:
+    - Resolved [[wikilinks]] as HTML links
+    - Client-side search (Lunr.js)
+    - Tag pages and index
+    - Minimal responsive theme with dark mode
+
+    \b
+    Examples:
+      mx publish                           # Build to _site/
+      mx publish -o docs                   # Build to docs/ for GitHub Pages
+      mx publish --base-url /my-kb         # Set base URL for subdirectory hosting
+      mx publish --include-drafts          # Include draft entries
+    """
+    from .core import publish as core_publish
+
+    try:
+        result = run_async(core_publish(
+            output_dir=output_dir,
+            base_url=base_url,
+            include_drafts=include_drafts,
+            include_archived=include_archived,
+            clean=not no_clean,
+        ))
+    except Exception as e:
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
+        sys.exit(1)
+
+    if as_json:
+        output(result, as_json=True)
+    else:
+        click.echo(f"Published {result['entries_published']} entries to {result['output_dir']}")
+
+        broken_links = result.get("broken_links", [])
+        if broken_links:
+            click.echo(f"\n⚠ Broken links ({len(broken_links)}):")
+            for bl in broken_links[:10]:
+                click.echo(f"  - {bl['source']} -> {bl['target']}")
+            if len(broken_links) > 10:
+                click.echo(f"  ... and {len(broken_links) - 10} more")
+
+        click.echo(f"\nSearch index: {result['search_index_path']}")
+        click.echo("\nTo preview locally:")
+        click.echo(f"  cd {result['output_dir']} && python -m http.server")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 
