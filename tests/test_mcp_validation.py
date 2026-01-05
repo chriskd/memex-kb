@@ -356,3 +356,132 @@ class TestValidationHelpers:
         """_validate_section_updates should strip keys."""
         result = server._validate_section_updates({"  Section  ": "content"})
         assert result == {"Section": "content"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Warning propagation tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestWarningPropagation:
+    """Tests that non-critical failures surface as warnings in responses."""
+
+    @pytest.fixture
+    def failing_searcher(self, monkeypatch):
+        """Mock searcher that fails during indexing."""
+        from memex.parser import ParseError
+
+        class FailingSearcher:
+            def __init__(self):
+                self.deleted = []
+                self.indexed = []
+                self.should_fail = True
+
+            def delete_document(self, path: str) -> None:
+                self.deleted.append(path)
+
+            def index_chunks(self, chunks):
+                if self.should_fail:
+                    raise ParseError(Path("/fake/path.md"), "Simulated indexing failure")
+                self.indexed.append(chunks)
+
+            def status(self):
+                class Status:
+                    kb_files = 1
+                    whoosh_docs = 1
+                    chroma_docs = 1
+
+                return Status()
+
+            def preload(self):
+                return None
+
+            def search(self, query, limit=10, mode="hybrid", project_context=None, kb_context=None):
+                return []
+
+        dummy = FailingSearcher()
+        monkeypatch.setattr(core, "get_searcher", lambda: dummy)
+        monkeypatch.setattr(core, "rebuild_backlink_cache", lambda *_args, **_kwargs: None)
+        return dummy
+
+    @pytest.mark.asyncio
+    async def test_add_returns_warnings_on_index_failure(self, kb_root, failing_searcher):
+        """add_tool should return warnings when indexing fails."""
+        result = await _call_tool(
+            server.add_tool,
+            title="Test Entry",
+            content="Some content here.",
+            tags=["test"],
+            category="development",
+        )
+
+        # Entry should still be created
+        assert result.created is True
+        assert result.path == "development/test-entry.md"
+        # But warnings should be populated
+        assert len(result.warnings) > 0
+        assert "indexing failed" in result.warnings[0].lower()
+
+    @pytest.mark.asyncio
+    async def test_add_no_warnings_on_success(self, kb_root, dummy_searcher):
+        """add_tool should return empty warnings list when indexing succeeds."""
+        result = await _call_tool(
+            server.add_tool,
+            title="Test Entry",
+            content="Some content here.",
+            tags=["test"],
+            category="development",
+        )
+
+        assert result.created is True
+        assert result.warnings == []
+
+    @pytest.fixture
+    def existing_entry_for_update(self, kb_root):
+        """Create an existing entry for update warning tests."""
+        entry = kb_root / "development" / "update-test.md"
+        entry.write_text(
+            """---
+title: Update Test Entry
+tags:
+  - test
+created: 2024-01-01
+---
+
+## Overview
+
+Original content here.
+"""
+        )
+        return entry
+
+    @pytest.mark.asyncio
+    async def test_update_returns_warnings_on_index_failure(
+        self, kb_root, failing_searcher, existing_entry_for_update
+    ):
+        """update_tool should return warnings when re-indexing fails."""
+        result = await _call_tool(
+            server.update_tool,
+            path="development/update-test.md",
+            content="Updated content here.",
+        )
+
+        # Entry should still be updated
+        assert result["path"] == "development/update-test.md"
+        # But warnings should be populated
+        assert len(result["warnings"]) > 0
+        assert "re-indexing failed" in result["warnings"][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_update_no_warnings_on_success(
+        self, kb_root, dummy_searcher, existing_entry_for_update
+    ):
+        """update_tool should return empty warnings list when re-indexing succeeds."""
+        result = await _call_tool(
+            server.update_tool,
+            path="development/update-test.md",
+            content="Updated content here.",
+        )
+
+        assert result["path"] == "development/update-test.md"
+        assert result["warnings"] == []

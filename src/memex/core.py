@@ -1003,6 +1003,9 @@ async def add_entry(
     file_path.write_text(frontmatter + final_content, encoding="utf-8")
     rebuild_backlink_cache(kb_root)
 
+    # Collect warnings for non-critical failures
+    warnings: list[str] = []
+
     # Reindex the new file
     try:
         _, _, chunks = parse_entry(file_path)
@@ -1013,6 +1016,7 @@ async def add_entry(
             searcher.index_chunks(normalized_chunks)
     except ParseError as e:
         log.warning("Created entry but failed to index %s: %s", rel_path, e)
+        warnings.append(f"Entry created but indexing failed: {e}. Search may not find this entry.")
 
     # Compute link suggestions for the new entry
     existing_links = set(links) if links else set()
@@ -1055,6 +1059,7 @@ async def add_entry(
         created=True,
         suggested_links=suggested_links,
         suggested_tags=suggested_tags,
+        warnings=warnings,
     )
 
 
@@ -1227,6 +1232,9 @@ async def update_entry(
 
     relative_path = relative_kb_path(kb_root, file_path)
 
+    # Collect warnings for non-critical failures
+    warnings: list[str] = []
+
     # Reindex
     searcher = get_searcher()
     try:
@@ -1239,8 +1247,10 @@ async def update_entry(
             searcher.index_chunks(normalized_chunks)
     except ParseError as e:
         log.warning("Updated entry but failed to re-index %s: %s", relative_path, e)
+        warnings.append(f"Entry updated but re-indexing failed: {e}. Search may return stale results.")
     except Exception as e:
         log.error("Unexpected error re-indexing %s: %s", relative_path, e)
+        warnings.append(f"Entry updated but re-indexing failed unexpectedly: {e}")
 
     # Compute link suggestions based on updated content
     existing_links = set(extract_links(new_content))
@@ -1267,6 +1277,7 @@ async def update_entry(
         "path": relative_path,
         "suggested_links": suggested_links,
         "suggested_tags": suggested_tags,
+        "warnings": warnings,
     }
 
 
@@ -1395,6 +1406,9 @@ async def patch_entry(
     # Rebuild caches
     rebuild_backlink_cache(kb_root)
 
+    # Collect warnings for non-critical failures
+    warnings: list[str] = []
+
     # Reindex for semantic search
     relative_path = relative_kb_path(kb_root, file_path)
     searcher = get_searcher()
@@ -1408,8 +1422,10 @@ async def patch_entry(
             searcher.index_chunks(normalized_chunks)
     except ParseError as e:
         log.warning("Patched entry but failed to re-index %s: %s", relative_path, e)
+        warnings.append(f"Entry patched but re-indexing failed: {e}. Search may return stale results.")
     except Exception as e:
         log.error("Unexpected error re-indexing %s: %s", relative_path, e)
+        warnings.append(f"Entry patched but re-indexing failed unexpectedly: {e}")
 
     return {
         "success": True,
@@ -1417,6 +1433,7 @@ async def patch_entry(
         "message": f"Patched {path} ({result.replacements_made} replacement(s))",
         "replacements": result.replacements_made,
         "path": relative_path,
+        "warnings": warnings,
     }
 
 

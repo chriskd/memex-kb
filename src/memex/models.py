@@ -131,6 +131,7 @@ class AddEntryResponse(BaseModel):
     suggested_tags: list[dict] = Field(default_factory=list)
     potential_duplicates: list[PotentialDuplicate] = Field(default_factory=list)
     warning: str | None = None  # Warning message if duplicates detected
+    warnings: list[str] = Field(default_factory=list)  # All warnings (indexing failures, etc.)
 
 
 class AddEntryPreview(BaseModel):
