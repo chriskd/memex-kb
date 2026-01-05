@@ -583,6 +583,19 @@ def prime(full: bool, mcp: bool, project: str | None, days: int, as_json: bool):
 DEFAULT_KB_CATEGORIES = ["projects", "tooling", "infrastructure"]
 
 
+# Project indicator files for auto-detection
+PROJECT_INDICATORS = [
+    ".git",
+    "package.json",
+    "pyproject.toml",
+    "setup.py",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+]
+
+
 @cli.command("init")
 @click.option(
     "--kb-root",
@@ -595,7 +608,7 @@ DEFAULT_KB_CATEGORIES = ["projects", "tooling", "infrastructure"]
     help="Index root path (defaults to MEMEX_INDEX_ROOT or <kb-root>/../.memex-indices)",
 )
 @click.option("--no-context", is_flag=True, help="Skip .kbcontext creation prompt")
-@click.option("--force", "-f", is_flag=True, help="Reinitialize even if KB exists")
+@click.option("--force", "-f", is_flag=True, help="Recreate directory structure (preserves existing entries)")
 def init_kb(
     kb_root: str | None,
     index_root: str | None,
@@ -615,11 +628,19 @@ def init_kb(
         └── infrastructure/ # Infrastructure and DevOps
 
     \b
+    .kbcontext files (created per-project):
+      When you run 'mx init' from a project directory, it can create a
+      .kbcontext file that provides:
+      - Auto-routing: new entries go to projects/<name> by default
+      - Search boost: project entries rank higher in search results
+      - Default tags: entries are pre-tagged with the project name
+
+    \b
     Examples:
       mx init                           # Use defaults
       mx init --kb-root ~/my-kb         # Custom location
       mx init --no-context              # Skip .kbcontext setup
-      mx init --force                   # Reinitialize existing KB
+      mx init --force                   # Recreate dirs (safe, keeps entries)
     """
     from .config import ConfigurationError, get_index_root, get_kb_root
     from .context import CONTEXT_FILENAME, create_default_context, detect_project_context
@@ -659,8 +680,10 @@ def init_kb(
     # Check if already initialized
     kb_exists = resolved_kb_root.exists() and any(resolved_kb_root.iterdir())
     if kb_exists and not force:
-        click.echo(f"KB already exists at: {resolved_kb_root}")
-        click.echo("Use --force to reinitialize.")
+        click.echo(f"✓ KB already initialized at: {resolved_kb_root}")
+        click.echo("")
+        click.echo("Your KB is ready to use. To recreate directory structure:")
+        click.echo("  mx init --force  (safe - preserves existing entries)")
         sys.exit(0)
 
     # Create KB root
@@ -721,9 +744,9 @@ def init_kb(
             detected = detect_project_context()
             project_name = detected.project_name if detected else Path.cwd().name
 
-            # Check if we're in a git repo or project directory
-            git_dir = Path.cwd() / ".git"
-            is_project = git_dir.exists() or (Path.cwd() / "package.json").exists()
+            # Check if we're in a project directory (any common project indicator)
+            cwd = Path.cwd()
+            is_project = any((cwd / indicator).exists() for indicator in PROJECT_INDICATORS)
 
             if is_project:
                 click.echo(f"Detected project: {project_name}")
