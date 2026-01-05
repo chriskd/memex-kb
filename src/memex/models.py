@@ -152,3 +152,31 @@ class SearchHistoryEntry(BaseModel):
     result_count: int = 0  # Number of results returned
     mode: str = "hybrid"  # Search mode used (hybrid, keyword, semantic)
     tags: list[str] = Field(default_factory=list)  # Tag filters applied
+
+
+class UpsertMatch(BaseModel):
+    """A potential match for upsert title search."""
+
+    path: str  # Path to the entry
+    title: str  # Entry title
+    score: float  # Confidence score (0-1)
+    match_type: str  # How matched: 'exact_title', 'alias', 'fuzzy'
+
+
+class UpsertResult(BaseModel):
+    """Result of upsert operation."""
+
+    path: str  # Path to the entry (created or updated)
+    action: Literal["created", "appended", "no_change"]  # What action was taken
+    title: str  # Title of the entry
+    matched_by: str | None = None  # How matched: 'exact_title', 'alias', 'fuzzy', None if created
+    match_score: float | None = None  # Confidence score if matched
+
+
+class SessionLogResult(BaseModel):
+    """Result of session-log operation."""
+
+    path: str  # Path to the session entry
+    action: Literal["appended", "created"]  # What action was taken
+    project: str | None = None  # Detected project name
+    context_source: str | None = None  # How context was determined

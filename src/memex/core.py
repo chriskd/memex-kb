@@ -45,6 +45,9 @@ from .models import (
     SearchResponse,
     SearchResult,
     SearchSuggestion,
+    SessionLogResult,
+    UpsertMatch,
+    UpsertResult,
 )
 from .parser import ParseError, extract_links, parse_entry, update_links_batch
 from .tags_cache import ensure_tags_cache, get_tag_entries, rebuild_tags_cache
@@ -2510,4 +2513,359 @@ async def suggest_links(
         existing_links=existing_links,
         limit=limit,
         min_score=min_score,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Upsert Operations
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class AmbiguousMatchError(ValueError):
+    """Raised when title matches multiple entries with similar confidence."""
+
+    def __init__(self, matches: list[UpsertMatch]):
+        self.matches = matches
+        titles = ", ".join(f"'{m.title}' ({m.score:.0%})" for m in matches[:3])
+        super().__init__(f"Ambiguous title match. Candidates: {titles}")
+
+
+def resolve_entry_by_title(
+    title: str,
+    kb_root: Path | None = None,
+    min_score: float = 0.6,
+) -> UpsertMatch | None:
+    """Resolve a title to an existing entry path.
+
+    Search order:
+    1. Exact title match (case-insensitive)
+    2. Alias match
+    3. Fuzzy title search (semantic similarity)
+
+    Args:
+        title: Title to search for.
+        kb_root: KB root path (auto-detected if None).
+        min_score: Minimum fuzzy match score (0-1).
+
+    Returns:
+        UpsertMatch if found, None if no match above threshold.
+
+    Raises:
+        AmbiguousMatchError: If multiple matches with similar scores.
+    """
+    from .parser.title_index import TitleIndex, build_title_index
+
+    if kb_root is None:
+        kb_root = get_kb_root()
+
+    # Build title index
+    index = build_title_index(kb_root, include_filename_index=True)
+    if isinstance(index, TitleIndex):
+        title_to_path = index.title_to_path
+    else:
+        title_to_path = index
+
+    title_lower = title.lower().strip()
+
+    # 1. Check exact title match
+    if title_lower in title_to_path:
+        path = title_to_path[title_lower]
+        return UpsertMatch(
+            path=f"{path}.md",
+            title=title,
+            score=1.0,
+            match_type="exact_title",
+        )
+
+    # 2. Check if any title starts with or contains our search
+    # This catches aliases since they're also in title_to_path
+    for indexed_title, path in title_to_path.items():
+        if indexed_title == title_lower:
+            return UpsertMatch(
+                path=f"{path}.md",
+                title=indexed_title,
+                score=1.0,
+                match_type="alias",
+            )
+
+    # 3. Fuzzy search using semantic similarity
+    searcher = get_searcher()
+    results = searcher.search(title, limit=5, mode="semantic")
+
+    if not results:
+        return None
+
+    # Convert to UpsertMatch objects
+    matches: list[UpsertMatch] = []
+    for r in results:
+        if r.score >= min_score:
+            matches.append(UpsertMatch(
+                path=r.path,
+                title=r.title,
+                score=r.score,
+                match_type="fuzzy",
+            ))
+
+    if not matches:
+        return None
+
+    # Check for ambiguous matches (multiple results with similar scores)
+    if len(matches) > 1:
+        score_gap = matches[0].score - matches[1].score
+        if score_gap < 0.2:  # Less than 20% difference - ambiguous
+            raise AmbiguousMatchError(matches)
+
+    return matches[0]
+
+
+async def upsert_entry(
+    title: str,
+    content: str,
+    tags: list[str] | None = None,
+    directory: str | None = None,
+    append: bool = True,
+    timestamp: bool = True,
+    create_if_missing: bool = True,
+    kb_context: KBContext | None = None,
+) -> UpsertResult:
+    """Create or append to an entry by title.
+
+    If an entry with matching title exists, appends content.
+    If no match found and create_if_missing=True, creates new entry.
+
+    Args:
+        title: Entry title to find or create.
+        content: Content to add.
+        tags: Tags for new entry (used when creating).
+        directory: Target directory for new entry (uses context.primary if None).
+        append: If True, append to existing. If False, replace content.
+        timestamp: If True and appending, add timestamp header.
+        create_if_missing: If True, create entry when not found.
+        kb_context: Optional context (auto-discovered if None).
+
+    Returns:
+        UpsertResult with action taken.
+
+    Raises:
+        AmbiguousMatchError: If title matches multiple entries.
+        ValueError: If entry not found and create_if_missing=False.
+        ValueError: If creating and no directory can be determined.
+    """
+    from datetime import datetime, timezone
+
+    kb_root = get_kb_root()
+
+    # Auto-discover KB context if not provided
+    if kb_context is None:
+        kb_context = get_kb_context()
+
+    # Try to resolve existing entry by title
+    match: UpsertMatch | None = None
+    try:
+        match = resolve_entry_by_title(title, kb_root)
+    except AmbiguousMatchError:
+        raise  # Re-raise ambiguous match error
+
+    if match:
+        # Found existing entry - append or replace
+        path = match.path
+
+        # Prepare content with optional timestamp
+        if timestamp and append:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            timestamped_content = f"## {ts}\n\n{content}"
+        else:
+            timestamped_content = content
+
+        # Use existing update_entry function
+        await update_entry(
+            path=path,
+            content=timestamped_content,
+            append=append,
+        )
+
+        return UpsertResult(
+            path=path,
+            action="appended" if append else "no_change",
+            title=match.title,
+            matched_by=match.match_type,
+            match_score=match.score,
+        )
+
+    # No match found - create new entry or error
+    if not create_if_missing:
+        raise ValueError(f"No entry found with title: {title}")
+
+    # Need a directory to create the entry
+    if directory is None:
+        if kb_context and kb_context.primary:
+            directory = kb_context.primary
+        else:
+            raise ValueError(
+                "Cannot determine target directory. "
+                "Provide --directory or set up .kbcontext with 'primary'."
+            )
+
+    # Use default tags if none provided
+    if tags is None:
+        if kb_context and kb_context.default_tags:
+            tags = kb_context.default_tags
+        else:
+            tags = ["session-notes"]
+
+    # Prepare content with optional timestamp for new entries
+    if timestamp:
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        timestamped_content = f"## {ts}\n\n{content}"
+    else:
+        timestamped_content = content
+
+    # Create new entry
+    response = await add_entry(
+        title=title,
+        content=timestamped_content,
+        tags=tags,
+        directory=directory,
+        kb_context=kb_context,
+        check_duplicates=False,  # We already searched by title
+        force=True,
+    )
+
+    return UpsertResult(
+        path=response.path,
+        action="created",
+        title=title,
+        matched_by=None,
+        match_score=None,
+    )
+
+
+async def log_session(
+    message: str,
+    entry_path: str | None = None,
+    tags: list[str] | None = None,
+    links: list[str] | None = None,
+    timestamp: bool = True,
+    kb_context: KBContext | None = None,
+) -> SessionLogResult:
+    """Log a session summary to the appropriate KB entry.
+
+    Resolution order for entry path:
+    1. Explicit entry_path argument
+    2. context.session_entry field
+    3. {context.primary}/sessions.md
+    4. Error if no context and no explicit path
+
+    Args:
+        message: Session summary to log.
+        entry_path: Explicit entry path (overrides context).
+        tags: Additional tags to add to message section.
+        links: Wiki-style links to include in message.
+        timestamp: Add timestamp header (default True).
+        kb_context: Optional context (auto-discovered if None).
+
+    Returns:
+        SessionLogResult with path and action taken.
+
+    Raises:
+        ValueError: If no entry path can be determined.
+    """
+    from datetime import datetime, timezone
+
+    from .context import get_session_entry_path
+
+    kb_root = get_kb_root()
+
+    # Auto-discover KB context if not provided
+    if kb_context is None:
+        kb_context = get_kb_context()
+
+    # Resolve entry path
+    resolved_path: str | None = entry_path
+
+    if resolved_path is None:
+        resolved_path = get_session_entry_path(kb_context)
+
+    if resolved_path is None:
+        raise ValueError(
+            "Cannot determine session entry path. "
+            "Options:\n"
+            "  1. Create .kbcontext: mx context init\n"
+            "  2. Specify entry: mx session-log --entry=path/to/sessions.md"
+        )
+
+    # Prepare content
+    final_content = message
+
+    # Add links if provided
+    if links:
+        link_lines = [f"- [[{link}]]" for link in links]
+        final_content += "\n\nRelated: " + ", ".join(f"[[{link}]]" for link in links)
+
+    # Add tags as inline metadata if provided
+    if tags:
+        tag_str = " ".join(f"#{tag}" for tag in tags)
+        final_content = f"{tag_str}\n\n{final_content}"
+
+    # Check if entry exists
+    file_path = kb_root / resolved_path
+    action: Literal["appended", "created"]
+
+    if file_path.exists():
+        # Append to existing entry
+        if timestamp:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            timestamped_content = f"## {ts}\n\n{final_content}"
+        else:
+            timestamped_content = final_content
+
+        await update_entry(
+            path=resolved_path,
+            content=timestamped_content,
+            append=True,
+        )
+        action = "appended"
+    else:
+        # Create new session entry with template
+        project_name = kb_context.get_project_name() if kb_context else "Unknown"
+        default_tags = ["sessions"]
+        if project_name and project_name != "Unknown":
+            default_tags.insert(0, project_name)
+
+        # Build initial content with template
+        if timestamp:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            initial_content = f"# Session Log\n\nSession notes for {project_name}.\n\n## {ts}\n\n{final_content}"
+        else:
+            initial_content = f"# Session Log\n\nSession notes for {project_name}.\n\n{final_content}"
+
+        # Ensure directory exists
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create the entry
+        await add_entry(
+            title=f"{project_name} Sessions",
+            content=initial_content,
+            tags=default_tags,
+            directory=str(file_path.parent.relative_to(kb_root)),
+            kb_context=kb_context,
+            check_duplicates=False,
+            force=True,
+        )
+        action = "created"
+
+    # Determine context source for reporting
+    context_source: str | None = None
+    if entry_path:
+        context_source = "explicit"
+    elif kb_context and kb_context.session_entry:
+        context_source = ".kbcontext (session_entry)"
+    elif kb_context and kb_context.primary:
+        context_source = ".kbcontext (primary)"
+
+    return SessionLogResult(
+        path=resolved_path,
+        action=action,
+        project=kb_context.get_project_name() if kb_context else None,
+        context_source=context_source,
     )

@@ -999,6 +999,221 @@ def update(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Upsert Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("title")
+@click.option("--content", "-c", help="Content to add")
+@click.option(
+    "--file",
+    "-f",
+    "file_path",
+    type=click.Path(exists=True),
+    help="Read content from file",
+)
+@click.option("--stdin", is_flag=True, help="Read content from stdin")
+@click.option("--tags", help="Tags for new entry (comma-separated)")
+@click.option("--directory", "-d", help="Target directory for new entry")
+@click.option("--no-timestamp", is_flag=True, help="Don't add timestamp header")
+@click.option("--replace", is_flag=True, help="Replace content instead of appending")
+@click.option(
+    "--create/--no-create",
+    default=True,
+    help="Create entry if not found (default: create)",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def upsert(
+    title: str,
+    content: str | None,
+    file_path: str | None,
+    stdin: bool,
+    tags: str | None,
+    directory: str | None,
+    no_timestamp: bool,
+    replace: bool,
+    create: bool,
+    as_json: bool,
+):
+    """Create or append to entry by title.
+
+    Searches for an existing entry with matching title. If found,
+    appends content (with timestamp by default). If not found,
+    creates a new entry.
+
+    \b
+    Examples:
+      mx upsert "Project Notes" --content="Session summary here"
+      mx upsert "Sessions Log" --stdin < notes.md
+      mx upsert "API Docs" --file=api.md --tags="api,docs"
+      mx upsert "Debug Log" --content="..." --no-create  # Error if not found
+
+    \b
+    Title matching:
+      - Exact title match (case-insensitive)
+      - Alias match (from entry frontmatter)
+      - Fuzzy match (with confidence threshold)
+    """
+    from .core import AmbiguousMatchError, upsert_entry
+
+    # Validate content source (mutually exclusive)
+    content_sources = sum([bool(content), bool(file_path), stdin])
+    if content_sources == 0:
+        click.echo("Error: Must provide --content, --file, or --stdin", err=True)
+        sys.exit(1)
+    if content_sources > 1:
+        click.echo("Error: --content, --file, and --stdin are mutually exclusive", err=True)
+        sys.exit(1)
+
+    # Get content from source
+    if stdin:
+        content = sys.stdin.read()
+    elif file_path:
+        content = Path(file_path).read_text(encoding="utf-8")
+
+    # Parse tags
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
+
+    try:
+        result = run_async(
+            upsert_entry(
+                title=title,
+                content=content,
+                tags=tag_list,
+                directory=directory,
+                append=not replace,
+                timestamp=not no_timestamp,
+                create_if_missing=create,
+            )
+        )
+    except AmbiguousMatchError as e:
+        if as_json:
+            output({
+                "error": "ambiguous_match",
+                "message": str(e),
+                "matches": [m.model_dump() for m in e.matches],
+            }, as_json=True)
+        else:
+            click.echo(f"Error: {e}", err=True)
+            click.echo("\nCandidates:", err=True)
+            for m in e.matches[:5]:
+                click.echo(f"  - {m.path} \"{m.title}\" ({m.score:.0%})", err=True)
+            click.echo("\nUse --json for full match list or provide more specific title.", err=True)
+        sys.exit(1)
+    except ValueError as e:
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
+        sys.exit(1)
+
+    if as_json:
+        output(result.model_dump(), as_json=True)
+    else:
+        if result.action == "created":
+            click.echo(f"Created: {result.path}")
+        else:
+            match_info = f" (matched by {result.matched_by})" if result.matched_by else ""
+            click.echo(f"Appended to: {result.path}{match_info}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Log Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command("session-log")
+@click.option("--message", "-m", help="Session summary message")
+@click.option(
+    "--file",
+    "-f",
+    "file_path",
+    type=click.Path(exists=True),
+    help="Read message from file",
+)
+@click.option("--stdin", is_flag=True, help="Read message from stdin")
+@click.option("--entry", "-e", help="Explicit entry path (overrides context)")
+@click.option("--tags", help="Additional tags (comma-separated)")
+@click.option("--links", help="Wiki-style links to include (comma-separated)")
+@click.option("--no-timestamp", is_flag=True, help="Don't add timestamp header")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def session_log(
+    message: str | None,
+    file_path: str | None,
+    stdin: bool,
+    entry: str | None,
+    tags: str | None,
+    links: str | None,
+    no_timestamp: bool,
+    as_json: bool,
+):
+    """Log a session summary to the project's session entry.
+
+    Auto-detects the correct entry from .kbcontext, or uses --entry
+    to specify explicitly. Creates the entry if it doesn't exist.
+
+    \b
+    Examples:
+      mx session-log --message="Fixed auth bug, added tests"
+      mx session-log --stdin < session_notes.md
+      mx session-log -m "Deployed v2.1" --tags="deployment,release"
+      mx session-log -m "..." --entry=projects/myapp/devlog.md
+
+    \b
+    Entry resolution:
+      1. --entry flag (explicit)
+      2. .kbcontext session_entry field
+      3. {.kbcontext primary}/sessions.md
+      4. Error with guidance if no context
+    """
+    from .core import log_session as core_log_session
+
+    # Validate message source (mutually exclusive)
+    content_sources = sum([bool(message), bool(file_path), stdin])
+    if content_sources == 0:
+        click.echo("Error: Must provide --message, --file, or --stdin", err=True)
+        sys.exit(1)
+    if content_sources > 1:
+        click.echo("Error: --message, --file, and --stdin are mutually exclusive", err=True)
+        sys.exit(1)
+
+    # Get message from source
+    if stdin:
+        message = sys.stdin.read()
+    elif file_path:
+        message = Path(file_path).read_text(encoding="utf-8")
+
+    # Parse tags and links
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
+    link_list = [l.strip() for l in links.split(",")] if links else None
+
+    try:
+        result = run_async(
+            core_log_session(
+                message=message,
+                entry_path=entry,
+                tags=tag_list,
+                links=link_list,
+                timestamp=not no_timestamp,
+            )
+        )
+    except ValueError as e:
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
+        sys.exit(1)
+
+    if as_json:
+        output(result.model_dump(), as_json=True)
+    else:
+        click.echo(f"Logged to: {result.path}")
+        if result.project:
+            click.echo(f"Project: {result.project}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Patch Command
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1645,27 +1860,56 @@ def context(ctx):
 
 @context.command("show")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def context_show(as_json: bool):
+@click.option("--suggest", is_flag=True, help="Show bootstrap suggestions if no context found")
+def context_show(as_json: bool, suggest: bool):
     """Show the current project context.
 
     Searches for .kbcontext file starting from current directory.
+    When no context is found, use --suggest to show auto-detected
+    project info and suggested bootstrap command.
 
     \b
     Examples:
       mx context show
+      mx context show --suggest
       mx context show --json
     """
-    from .context import get_kb_context
+    from .context import detect_project_context, get_kb_context, get_session_entry_path
 
     ctx = get_kb_context()
 
     if ctx is None:
+        # No .kbcontext found - show detected context if --suggest
+        detected = detect_project_context() if suggest else None
+
         if as_json:
-            output({"found": False, "message": "No .kbcontext file found"}, as_json=True)
+            result = {"found": False, "message": "No .kbcontext file found"}
+            if detected and detected.project_name:
+                result["detected"] = {
+                    "project_name": detected.project_name,
+                    "git_root": str(detected.git_root) if detected.git_root else None,
+                    "suggested_kb_directory": detected.suggested_kb_directory,
+                    "detection_method": detected.detection_method,
+                }
+                result["suggestion"] = f"mx context init --project={detected.project_name}"
+            output(result, as_json=True)
         else:
             click.echo("No .kbcontext file found.")
-            click.echo("Run 'mx context init' to create one.")
+            if detected and detected.project_name:
+                click.echo()
+                click.echo(f"Detected project: {detected.project_name} (from {detected.detection_method})")
+                if detected.git_root:
+                    click.echo(f"Git root:         {detected.git_root}")
+                click.echo(f"Suggested KB dir: {detected.suggested_kb_directory}")
+                click.echo()
+                click.echo("To set up context:")
+                click.echo(f"  mx context init --project={detected.project_name}")
+            else:
+                click.echo("Run 'mx context init' to create one.")
         return
+
+    # Context found - show it
+    session_entry = get_session_entry_path(ctx)
 
     if as_json:
         output({
@@ -1675,6 +1919,8 @@ def context_show(as_json: bool):
             "paths": ctx.paths,
             "default_tags": ctx.default_tags,
             "project": ctx.project,
+            "session_entry": ctx.session_entry,
+            "session_entry_resolved": session_entry,
         }, as_json=True)
     else:
         click.echo(f"Context file: {ctx.source_file}")
@@ -1683,6 +1929,8 @@ def context_show(as_json: bool):
         click.echo(f"Default tags: {', '.join(ctx.default_tags) if ctx.default_tags else '(none)'}")
         if ctx.project:
             click.echo(f"Project:      {ctx.project}")
+        if session_entry:
+            click.echo(f"Session log:  {session_entry}")
 
 
 # Make 'show' the default command when 'context' is called without subcommand
