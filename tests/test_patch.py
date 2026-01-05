@@ -657,3 +657,356 @@ class TestPatchResult:
         d = result.to_dict()
 
         assert d["diff"] == "--- a/file\n+++ b/file"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Additional Unit Tests (Coverage Gaps)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestFindMatchesEdgeCases:
+    """Additional edge cases for find_matches."""
+
+    def test_content_without_newlines(self):
+        """Content with no newlines has correct line numbers."""
+        matches = find_matches("no newlines here TARGET end", "TARGET")
+        assert len(matches) == 1
+        assert matches[0].line_number == 1
+
+    def test_not_found_truncates_long_old_string(self):
+        """Long old_string is truncated in NOT_FOUND error message."""
+        result = apply_patch("content", "x" * 100, "y")
+        assert result.exit_code == PatchExitCode.NOT_FOUND
+        assert "..." in result.message
+        # Should have at most 53 chars (50 + "...")
+        assert len(result.message) < 70
+
+
+class TestReadFileSafelyEdgeCases:
+    """Additional edge cases for read_file_safely."""
+
+    def test_read_permission_denied(self, tmp_path):
+        """Permission denied returns FILE_ERROR."""
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("Permission test not reliable on Windows")
+
+        path = tmp_path / "test.md"
+        path.write_text("content")
+        os.chmod(path, 0o000)
+
+        try:
+            frontmatter, body, error = read_file_safely(path)
+            assert error is not None
+            assert error.exit_code == PatchExitCode.FILE_ERROR
+            assert "Permission denied" in error.message
+        finally:
+            os.chmod(path, 0o644)  # Restore for cleanup
+
+
+class TestWriteFileAtomicallyEdgeCases:
+    """Additional edge cases for write_file_atomically."""
+
+    def test_backup_to_existing_backup(self, tmp_path):
+        """Creating backup when .bak already exists overwrites it."""
+        path = tmp_path / "test.md"
+        path.write_text("current")
+        backup_path = path.with_suffix(".md.bak")
+        backup_path.write_text("old backup")
+
+        error = write_file_atomically(path, "", "new", backup=True)
+
+        assert error is None
+        assert backup_path.read_text() == "current"  # Overwrote old backup
+
+
+class TestPatchCLIEdgeCases:
+    """Additional edge cases for CLI command."""
+
+    @patch("memex.cli.run_async")
+    def test_exit_code_file_error(self, mock_run_async, runner):
+        """Exit code 3 for file errors from patch_entry."""
+        mock_run_async.return_value = {
+            "success": False,
+            "exit_code": 3,
+            "message": "File is not valid UTF-8",
+        }
+
+        result = runner.invoke(
+            cli, ["patch", "entry.md", "--old", "x", "--new", "y"]
+        )
+
+        assert result.exit_code == 3
+        assert "UTF-8" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_unexpected_exception_exit_code_3(self, mock_run_async, runner):
+        """Unexpected exception exits with code 3."""
+        mock_run_async.side_effect = RuntimeError("Unexpected error")
+
+        result = runner.invoke(
+            cli, ["patch", "entry.md", "--old", "x", "--new", "y"]
+        )
+
+        assert result.exit_code == 3
+        assert "Error" in result.output
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Integration Tests for patch_entry()
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+from datetime import date
+
+from memex import core
+
+
+pytestmark_integration = pytest.mark.semantic
+
+
+@pytest.fixture(autouse=True)
+def reset_searcher_state(monkeypatch):
+    """Ensure cached searcher state does not leak across tests."""
+    monkeypatch.setattr(core, "_searcher", None)
+    monkeypatch.setattr(core, "_searcher_ready", False)
+
+
+@pytest.fixture
+def patch_kb_root(tmp_path, monkeypatch) -> Path:
+    """Create a temporary KB root with standard categories."""
+    root = tmp_path / "kb"
+    root.mkdir()
+    (root / "development").mkdir()
+    (root / "testing").mkdir()
+    monkeypatch.setenv("MEMEX_KB_ROOT", str(root))
+    return root
+
+
+@pytest.fixture
+def patch_index_root(tmp_path, monkeypatch) -> Path:
+    """Create a temporary index root."""
+    root = tmp_path / ".indices"
+    root.mkdir()
+    monkeypatch.setenv("MEMEX_INDEX_ROOT", str(root))
+    return root
+
+
+def _create_patch_entry(path: Path, title: str, content_body: str, tags: list[str] | None = None):
+    """Helper to create a KB entry with frontmatter."""
+    tags = tags or ["test"]
+    tags_yaml = "\n".join(f"  - {tag}" for tag in tags)
+    content = f"""---
+title: {title}
+tags:
+{tags_yaml}
+created: {date.today().isoformat()}
+---
+
+{content_body}
+"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+class TestPatchEntryIntegration:
+    """Integration tests for patch_entry with real file operations."""
+
+    @pytest.mark.asyncio
+    async def test_patch_updates_file_content(self, patch_kb_root, patch_index_root):
+        """Successful patch updates file content correctly."""
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "Test Entry",
+            "Original content with TODO marker here.",
+        )
+
+        result = await core.patch_entry(
+            path="development/test.md",
+            old_string="TODO",
+            new_string="DONE",
+        )
+
+        assert result["success"]
+        assert result["exit_code"] == 0
+        assert result["replacements"] == 1
+
+        # Verify file was actually modified
+        content = (patch_kb_root / "development" / "test.md").read_text()
+        assert "DONE" in content
+        assert "TODO" not in content
+
+    @pytest.mark.asyncio
+    async def test_patch_updates_metadata(self, patch_kb_root, patch_index_root):
+        """Patch sets 'updated' date in frontmatter."""
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "Test Entry",
+            "Content to patch",
+        )
+
+        await core.patch_entry(
+            path="development/test.md",
+            old_string="Content",
+            new_string="Modified",
+        )
+
+        content = (patch_kb_root / "development" / "test.md").read_text()
+        assert "updated:" in content
+
+    @pytest.mark.asyncio
+    async def test_patch_dry_run_no_changes(self, patch_kb_root, patch_index_root):
+        """Dry run returns diff without modifying file."""
+        original_content = "Content with TARGET word here."
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "Test Entry",
+            original_content,
+        )
+
+        result = await core.patch_entry(
+            path="development/test.md",
+            old_string="TARGET",
+            new_string="REPLACED",
+            dry_run=True,
+        )
+
+        assert result["success"]
+        assert "diff" in result
+        assert "---" in result["diff"]
+        assert "REPLACED" in result["diff"]  # New text appears in diff
+
+        # File should NOT be modified
+        content = (patch_kb_root / "development" / "test.md").read_text()
+        assert "TARGET" in content
+        assert "REPLACED" not in content
+
+    @pytest.mark.asyncio
+    async def test_patch_creates_backup(self, patch_kb_root, patch_index_root):
+        """--backup creates .bak file with original content."""
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "Test Entry",
+            "Original content",
+        )
+        original = (patch_kb_root / "development" / "test.md").read_text()
+
+        await core.patch_entry(
+            path="development/test.md",
+            old_string="Original",
+            new_string="Modified",
+            backup=True,
+        )
+
+        backup_path = patch_kb_root / "development" / "test.md.bak"
+        assert backup_path.exists()
+        assert backup_path.read_text() == original
+
+    @pytest.mark.asyncio
+    async def test_patch_replace_all(self, patch_kb_root, patch_index_root):
+        """Replace all occurrences with replace_all=True."""
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "Test Entry",
+            "TODO here and TODO there and TODO everywhere",
+        )
+
+        result = await core.patch_entry(
+            path="development/test.md",
+            old_string="TODO",
+            new_string="DONE",
+            replace_all=True,
+        )
+
+        assert result["success"]
+        assert result["replacements"] == 3
+
+        content = (patch_kb_root / "development" / "test.md").read_text()
+        assert content.count("DONE") == 3
+        assert "TODO" not in content
+
+    @pytest.mark.asyncio
+    async def test_patch_nonexistent_entry(self, patch_kb_root, patch_index_root):
+        """Patching non-existent entry returns FILE_ERROR."""
+        result = await core.patch_entry(
+            path="development/nonexistent.md",
+            old_string="foo",
+            new_string="bar",
+        )
+
+        assert not result["success"]
+        assert result["exit_code"] == 3
+        assert "not found" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_patch_text_not_found(self, patch_kb_root, patch_index_root):
+        """Patching with non-matching text returns NOT_FOUND."""
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "Test Entry",
+            "Some content here",
+        )
+
+        result = await core.patch_entry(
+            path="development/test.md",
+            old_string="nonexistent text",
+            new_string="replacement",
+        )
+
+        assert not result["success"]
+        assert result["exit_code"] == 1
+        assert "not found" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_patch_ambiguous_without_replace_all(self, patch_kb_root, patch_index_root):
+        """Multiple matches without replace_all returns AMBIGUOUS."""
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "Test Entry",
+            "TODO first\nTODO second",
+        )
+
+        result = await core.patch_entry(
+            path="development/test.md",
+            old_string="TODO",
+            new_string="DONE",
+            replace_all=False,
+        )
+
+        assert not result["success"]
+        assert result["exit_code"] == 2
+        assert "match" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_patch_directory_path_returns_error(self, patch_kb_root, patch_index_root):
+        """Attempting to patch a directory returns FILE_ERROR."""
+        result = await core.patch_entry(
+            path="development",
+            old_string="foo",
+            new_string="bar",
+        )
+
+        assert not result["success"]
+        assert result["exit_code"] == 3
+        assert "not a file" in result["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_patch_preserves_frontmatter(self, patch_kb_root, patch_index_root):
+        """Patch preserves frontmatter except updated date."""
+        _create_patch_entry(
+            patch_kb_root / "development" / "test.md",
+            "My Special Title",
+            "Content to patch",
+            tags=["custom-tag", "another-tag"],
+        )
+
+        await core.patch_entry(
+            path="development/test.md",
+            old_string="Content",
+            new_string="Modified",
+        )
+
+        content = (patch_kb_root / "development" / "test.md").read_text()
+        assert "title: My Special Title" in content
+        assert "custom-tag" in content
+        assert "another-tag" in content

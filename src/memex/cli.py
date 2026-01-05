@@ -1018,8 +1018,8 @@ def update(
     help="Read --new text from file (for multi-line)",
 )
 @click.option("--replace-all", is_flag=True, help="Replace all occurrences")
-@click.option("--dry-run", is_flag=True, help="Preview changes without writing")
-@click.option("--backup", is_flag=True, help="Create .bak backup before patching")
+@click.option("--dry-run", is_flag=True, help="Preview changes without modifying the entry")
+@click.option("--backup", is_flag=True, help="Create .bak backup before patching (recommended for large changes)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def patch(
     path: str,
@@ -1032,28 +1032,32 @@ def patch(
     backup: bool,
     as_json: bool,
 ):
-    """Apply surgical find-replace edits to a KB entry.
+    """Apply surgical find-replace edits to a knowledge base entry.
 
     PATH is relative to KB root (e.g., "tooling/my-entry.md").
 
     Finds exact occurrences of --old and replaces with --new.
     Fails if --old is not found or matches multiple times (use --replace-all).
 
-    For multi-line text or special characters, use --old-file and --new-file.
+    For multi-line text or special characters (quotes, newlines, tabs), use
+    --old-file and --new-file to avoid shell quoting issues.
+
+    If multiple matches are found, the command shows match contexts to help
+    you decide whether --replace-all is safe or if you need more specific text.
 
     \b
     Exit codes:
       0: Success
       1: Text not found
       2: Multiple matches (ambiguous, use --replace-all)
-      3: File error (not found, permission, encoding)
+      3: Input error (file not found, permission, encoding, invalid options)
 
     \b
     Examples:
       mx patch tooling/notes.md --old "old text" --new "new text"
       mx patch tooling/notes.md --old "TODO" --new "DONE" --replace-all
       mx patch tooling/notes.md --old-file old.txt --new-file new.txt
-      mx patch tooling/notes.md --old "..." --new "..." --dry-run
+      mx patch tooling/notes.md --old "# TODO" --new "# DONE" --dry-run
     """
     from .core import patch_entry
 
