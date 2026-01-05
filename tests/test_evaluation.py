@@ -1,8 +1,18 @@
 """Tests for search quality evaluation."""
 
+from pathlib import Path
 from unittest.mock import Mock
 
-from memex.evaluation import EVAL_QUERIES, run_quality_checks
+import pytest
+
+from memex.evaluation import (
+    EVAL_QUERIES,
+    EvalQuery,
+    EvalSet,
+    generate_eval_set,
+    run_eval_set,
+    run_quality_checks,
+)
 from memex.models import SearchResult
 
 
@@ -161,3 +171,294 @@ class TestRunQualityChecks:
         assert report.accuracy == 1.0
         assert report.total_queries == 0
         assert report.details == []
+
+
+class TestGenerateEvalSet:
+    """Tests for generate_eval_set function."""
+
+    def test_generates_title_queries(self, tmp_path):
+        """Entries with titles generate title queries."""
+        entry = tmp_path / "test-entry.md"
+        entry.write_text(
+            """---
+title: My Test Entry
+tags: [testing]
+created: 2024-01-01
+---
+Content here.
+"""
+        )
+
+        eval_set = generate_eval_set(tmp_path, include_titles=True, include_aliases=False)
+
+        assert eval_set.title_queries == 1
+        assert len(eval_set.queries) == 1
+        q = eval_set.queries[0]
+        assert q.query == "My Test Entry"
+        assert q.expected == ["test-entry.md"]
+        assert q.query_type == "title"
+        assert q.source_entry == "test-entry.md"
+
+    def test_generates_alias_queries(self, tmp_path):
+        """Entries with aliases generate alias queries."""
+        entry = tmp_path / "entry.md"
+        entry.write_text(
+            """---
+title: Main Title
+tags: [test]
+created: 2024-01-01
+aliases: [Alias One, Alias Two]
+---
+Content.
+"""
+        )
+
+        eval_set = generate_eval_set(tmp_path, include_titles=False, include_aliases=True)
+
+        assert eval_set.alias_queries == 2
+        assert len(eval_set.queries) == 2
+        aliases = {q.query for q in eval_set.queries}
+        assert aliases == {"Alias One", "Alias Two"}
+        for q in eval_set.queries:
+            assert q.query_type == "alias"
+            assert q.expected == ["entry.md"]
+
+    def test_generates_tag_queries(self, tmp_path):
+        """Tag queries expect entries with that tag."""
+        # Create two entries with overlapping tags
+        (tmp_path / "entry1.md").write_text(
+            """---
+title: Entry One
+tags: [python, testing]
+created: 2024-01-01
+---
+Content.
+"""
+        )
+        (tmp_path / "entry2.md").write_text(
+            """---
+title: Entry Two
+tags: [python, deployment]
+created: 2024-01-01
+---
+Content.
+"""
+        )
+
+        eval_set = generate_eval_set(
+            tmp_path, include_titles=False, include_aliases=False, include_tags=True
+        )
+
+        assert eval_set.tag_queries == 3  # python, testing, deployment
+        tag_queries = {q.query: q.expected for q in eval_set.queries}
+        assert "python" in tag_queries
+        assert set(tag_queries["python"]) == {"entry1.md", "entry2.md"}
+        assert set(tag_queries["testing"]) == {"entry1.md"}
+        assert set(tag_queries["deployment"]) == {"entry2.md"}
+
+    def test_skips_hidden_directories(self, tmp_path):
+        """Entries in hidden directories are skipped."""
+        hidden = tmp_path / ".hidden"
+        hidden.mkdir()
+        (hidden / "secret.md").write_text(
+            """---
+title: Secret Entry
+tags: [hidden]
+created: 2024-01-01
+---
+"""
+        )
+        visible = tmp_path / "visible.md"
+        visible.write_text(
+            """---
+title: Visible Entry
+tags: [visible]
+created: 2024-01-01
+---
+"""
+        )
+
+        eval_set = generate_eval_set(tmp_path)
+
+        assert eval_set.title_queries == 1
+        assert eval_set.queries[0].query == "Visible Entry"
+
+    def test_skips_invalid_entries(self, tmp_path):
+        """Invalid entries are skipped and counted."""
+        # Valid entry
+        (tmp_path / "valid.md").write_text(
+            """---
+title: Valid
+tags: [test]
+created: 2024-01-01
+---
+Content.
+"""
+        )
+        # Invalid entry (missing frontmatter)
+        (tmp_path / "invalid.md").write_text("No frontmatter here")
+
+        eval_set = generate_eval_set(tmp_path)
+
+        assert eval_set.title_queries == 1
+        assert eval_set.skipped_entries == 1
+
+    def test_respects_max_entries(self, tmp_path):
+        """max_entries limits the number of processed entries."""
+        for i in range(5):
+            (tmp_path / f"entry{i}.md").write_text(
+                f"""---
+title: Entry {i}
+tags: [test]
+created: 2024-01-01
+---
+"""
+            )
+
+        eval_set = generate_eval_set(tmp_path, max_entries=2)
+
+        # Should have stopped after 2 entries
+        assert eval_set.title_queries == 2
+
+    def test_nested_directories(self, tmp_path):
+        """Entries in nested directories are found."""
+        subdir = tmp_path / "category" / "subcategory"
+        subdir.mkdir(parents=True)
+        (subdir / "nested.md").write_text(
+            """---
+title: Nested Entry
+tags: [nested]
+created: 2024-01-01
+---
+"""
+        )
+
+        eval_set = generate_eval_set(tmp_path)
+
+        assert eval_set.title_queries == 1
+        assert eval_set.queries[0].expected == ["category/subcategory/nested.md"]
+
+    def test_empty_kb_returns_empty_eval_set(self, tmp_path):
+        """Empty KB returns empty eval set."""
+        eval_set = generate_eval_set(tmp_path)
+
+        assert eval_set.queries == []
+        assert eval_set.title_queries == 0
+        assert eval_set.alias_queries == 0
+        assert eval_set.tag_queries == 0
+
+
+class TestRunEvalSet:
+    """Tests for run_eval_set function."""
+
+    def test_calculates_per_type_accuracy(self):
+        """Accuracy is calculated separately for each query type."""
+        searcher = Mock()
+
+        # Make title queries succeed, alias queries fail
+        def mock_search(query, limit, mode):
+            if query.startswith("Title"):
+                return [_make_result("entry.md")]  # Success
+            return [_make_result("wrong.md")]  # Fail
+
+        searcher.search.side_effect = mock_search
+
+        eval_set = EvalSet(
+            queries=[
+                EvalQuery(query="Title Query", expected=["entry.md"], query_type="title"),
+                EvalQuery(query="Alias Query", expected=["entry.md"], query_type="alias"),
+            ],
+            title_queries=1,
+            alias_queries=1,
+        )
+
+        report = run_eval_set(searcher, eval_set)
+
+        assert report.title_accuracy == 1.0
+        assert report.alias_accuracy == 0.0
+        assert report.overall_accuracy == 0.5
+        assert report.title_queries == 1
+        assert report.alias_queries == 1
+
+    def test_tag_query_any_match_succeeds(self):
+        """Tag queries succeed if any expected entry is found."""
+        searcher = Mock()
+        searcher.search.return_value = [_make_result("entry2.md")]
+
+        eval_set = EvalSet(
+            queries=[
+                EvalQuery(
+                    query="python",
+                    expected=["entry1.md", "entry2.md", "entry3.md"],
+                    query_type="tag",
+                ),
+            ],
+            tag_queries=1,
+        )
+
+        report = run_eval_set(searcher, eval_set)
+
+        assert report.tag_accuracy == 1.0
+        assert report.details[0].found is True
+
+    def test_empty_eval_set_returns_perfect_scores(self):
+        """Empty eval set returns 1.0 accuracy (no failures)."""
+        searcher = Mock()
+        eval_set = EvalSet()
+
+        report = run_eval_set(searcher, eval_set)
+
+        assert report.overall_accuracy == 1.0
+        assert report.title_accuracy == 1.0
+        assert report.alias_accuracy == 1.0
+        assert report.tag_accuracy == 1.0
+        assert report.total_queries == 0
+
+    def test_respects_cutoff_threshold(self):
+        """Results beyond cutoff threshold are not counted as found."""
+        searcher = Mock()
+        # Expected at rank 4, cutoff is 3
+        searcher.search.return_value = [
+            _make_result("other1.md"),
+            _make_result("other2.md"),
+            _make_result("other3.md"),
+            _make_result("expected.md"),
+        ]
+
+        eval_set = EvalSet(
+            queries=[
+                EvalQuery(query="test", expected=["expected.md"], query_type="title"),
+            ],
+            title_queries=1,
+        )
+
+        report = run_eval_set(searcher, eval_set, cutoff=3)
+
+        assert report.overall_accuracy == 0.0
+        assert report.details[0].best_rank == 4
+        assert report.details[0].found is False
+
+    def test_uses_hybrid_mode(self):
+        """Searches are performed in hybrid mode."""
+        searcher = Mock()
+        searcher.search.return_value = []
+
+        eval_set = EvalSet(
+            queries=[EvalQuery(query="test", expected=["entry.md"], query_type="title")],
+            title_queries=1,
+        )
+
+        run_eval_set(searcher, eval_set)
+
+        searcher.search.assert_called_with("test", limit=5, mode="hybrid")
+
+    def test_preserves_skipped_entries_count(self):
+        """Skipped entries count is preserved from eval set."""
+        searcher = Mock()
+        searcher.search.return_value = []
+
+        eval_set = EvalSet(skipped_entries=5)
+
+        report = run_eval_set(searcher, eval_set)
+
+        assert report.skipped_entries == 5
