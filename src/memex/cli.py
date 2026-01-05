@@ -576,6 +576,180 @@ def prime(full: bool, mcp: bool, project: str | None, days: int, as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Init Command (KB Bootstrap)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Default categories to create in a new KB
+DEFAULT_KB_CATEGORIES = ["projects", "tooling", "infrastructure"]
+
+
+@cli.command("init")
+@click.option(
+    "--kb-root",
+    type=click.Path(),
+    help="KB root path (defaults to MEMEX_KB_ROOT or ~/.memex/kb)",
+)
+@click.option(
+    "--index-root",
+    type=click.Path(),
+    help="Index root path (defaults to MEMEX_INDEX_ROOT or <kb-root>/../.memex-indices)",
+)
+@click.option("--no-context", is_flag=True, help="Skip .kbcontext creation prompt")
+@click.option("--force", "-f", is_flag=True, help="Reinitialize even if KB exists")
+def init_kb(
+    kb_root: str | None,
+    index_root: str | None,
+    no_context: bool,
+    force: bool,
+):
+    """Initialize a new memex knowledge base.
+
+    Creates the KB directory structure with default categories and optionally
+    sets up a .kbcontext file for the current project.
+
+    \b
+    Default structure created:
+      <kb-root>/
+        ├── projects/       # Project-specific documentation
+        ├── tooling/        # Tools and utilities
+        └── infrastructure/ # Infrastructure and DevOps
+
+    \b
+    Examples:
+      mx init                           # Use defaults
+      mx init --kb-root ~/my-kb         # Custom location
+      mx init --no-context              # Skip .kbcontext setup
+      mx init --force                   # Reinitialize existing KB
+    """
+    from .config import ConfigurationError, get_index_root, get_kb_root
+    from .context import CONTEXT_FILENAME, create_default_context, detect_project_context
+
+    lines = []
+    created_dirs = []
+    env_exports = []
+
+    # Determine KB root
+    resolved_kb_root = None
+    kb_from_env = False
+
+    if kb_root:
+        resolved_kb_root = Path(kb_root).expanduser().resolve()
+    else:
+        try:
+            resolved_kb_root = get_kb_root()
+            kb_from_env = True
+        except ConfigurationError:
+            # Default to ~/.memex/kb
+            resolved_kb_root = Path.home() / ".memex" / "kb"
+
+    # Determine index root
+    resolved_index_root = None
+    index_from_env = False
+
+    if index_root:
+        resolved_index_root = Path(index_root).expanduser().resolve()
+    else:
+        try:
+            resolved_index_root = get_index_root()
+            index_from_env = True
+        except ConfigurationError:
+            # Default to sibling of kb root
+            resolved_index_root = resolved_kb_root.parent / ".memex-indices"
+
+    # Check if already initialized
+    kb_exists = resolved_kb_root.exists() and any(resolved_kb_root.iterdir())
+    if kb_exists and not force:
+        click.echo(f"KB already exists at: {resolved_kb_root}")
+        click.echo("Use --force to reinitialize.")
+        sys.exit(0)
+
+    # Create KB root
+    if not resolved_kb_root.exists():
+        resolved_kb_root.mkdir(parents=True, exist_ok=True)
+        created_dirs.append(str(resolved_kb_root))
+
+    # Create default category directories
+    for category in DEFAULT_KB_CATEGORIES:
+        cat_path = resolved_kb_root / category
+        if not cat_path.exists():
+            cat_path.mkdir(parents=True, exist_ok=True)
+            created_dirs.append(f"  {category}/")
+
+    # Create index root
+    if not resolved_index_root.exists():
+        resolved_index_root.mkdir(parents=True, exist_ok=True)
+        created_dirs.append(str(resolved_index_root))
+
+    # Build environment variable guidance
+    if not kb_from_env:
+        env_exports.append(f'export MEMEX_KB_ROOT="{resolved_kb_root}"')
+    if not index_from_env:
+        env_exports.append(f'export MEMEX_INDEX_ROOT="{resolved_index_root}"')
+
+    # Output what was created
+    lines.append("Memex KB Initialized")
+    lines.append("=" * 40)
+    lines.append("")
+    lines.append(f"KB Root:    {resolved_kb_root}")
+    lines.append(f"Index Root: {resolved_index_root}")
+    lines.append("")
+
+    if created_dirs:
+        lines.append("Created:")
+        for d in created_dirs:
+            lines.append(f"  {d}")
+        lines.append("")
+
+    # Environment variable setup
+    if env_exports:
+        lines.append("Add to your shell profile (~/.bashrc, ~/.zshrc):")
+        lines.append("-" * 40)
+        for exp in env_exports:
+            lines.append(exp)
+        lines.append("")
+
+    click.echo("\n".join(lines))
+
+    # Handle .kbcontext creation
+    if not no_context:
+        context_path = Path.cwd() / CONTEXT_FILENAME
+
+        if context_path.exists():
+            click.echo(f"Note: {CONTEXT_FILENAME} already exists in current directory.")
+        else:
+            # Auto-detect project
+            detected = detect_project_context()
+            project_name = detected.project_name if detected else Path.cwd().name
+
+            # Check if we're in a git repo or project directory
+            git_dir = Path.cwd() / ".git"
+            is_project = git_dir.exists() or (Path.cwd() / "package.json").exists()
+
+            if is_project:
+                click.echo(f"Detected project: {project_name}")
+                if click.confirm("Create .kbcontext for this project?", default=True):
+                    directory = f"projects/{project_name}"
+                    content = create_default_context(project_name, directory)
+                    context_path.write_text(content, encoding="utf-8")
+                    click.echo(f"Created {CONTEXT_FILENAME}")
+                    click.echo(f"  Primary directory: {directory}")
+                    click.echo(f"  Default tags: {project_name}")
+
+    # Next steps
+    click.echo("")
+    click.echo("Next steps:")
+    click.echo("-" * 40)
+    if env_exports:
+        click.echo("  1. Add environment variables to your shell profile")
+        click.echo("  2. Restart your shell or run: source ~/.bashrc")
+        click.echo("  3. Run: mx add --title=\"First Entry\" --tags=\"...\"")
+    else:
+        click.echo("  mx add --title=\"First Entry\" --tags=\"...\"")
+        click.echo("  mx search \"query\"")
+        click.echo("  mx --help")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Search Command
 # ─────────────────────────────────────────────────────────────────────────────
 
