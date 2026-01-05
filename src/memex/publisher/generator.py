@@ -226,6 +226,8 @@ class SiteGenerator:
         """Render all HTML pages."""
         from .templates import render_entry_page, render_index_page, render_tag_page
 
+        all_entries = list(self.entries.values())
+
         # Entry pages
         for path_key, entry in self.entries.items():
             html_path = self.config.output_dir / f"{path_key}.html"
@@ -234,12 +236,14 @@ class SiteGenerator:
             html = render_entry_page(
                 entry=entry,
                 base_url=self.config.base_url,
+                all_entries=all_entries,
+                entries_dict=self.entries,
             )
             html_path.write_text(html, encoding="utf-8")
 
         # Index page
         index_html = render_index_page(
-            entries=list(self.entries.values()),
+            entries=all_entries,
             tags_index=self.tags_index,
             base_url=self.config.base_url,
         )
@@ -255,6 +259,7 @@ class SiteGenerator:
                 tag=tag,
                 entries=tag_entries,
                 base_url=self.config.base_url,
+                all_entries=all_entries,
             )
             (tags_dir / f"{tag}.html").write_text(tag_html, encoding="utf-8")
 
@@ -312,7 +317,10 @@ class SiteGenerator:
         graph_json_path.write_text(json.dumps(graph_data, indent=2), encoding="utf-8")
 
         # Write graph.html
-        graph_html = render_graph_page(base_url=self.config.base_url)
+        graph_html = render_graph_page(
+            base_url=self.config.base_url,
+            all_entries=list(self.entries.values()),
+        )
         (self.config.output_dir / "graph.html").write_text(graph_html, encoding="utf-8")
 
     def _copy_theme_assets(self) -> None:

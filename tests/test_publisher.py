@@ -165,7 +165,7 @@ class TestTemplates:
         """Entry page includes title in heading."""
         html = render_entry_page(mock_entry, base_url="")
         assert "<title>Test Entry - Memex</title>" in html
-        assert "<h1>Test Entry</h1>" in html
+        assert "Test Entry</h1>" in html  # Title in h1 (may have class)
 
     def test_render_entry_page_includes_content(self, mock_entry):
         """Entry page includes rendered HTML content."""
