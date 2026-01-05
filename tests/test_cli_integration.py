@@ -388,6 +388,30 @@ class TestInitCommand:
         assert result.exit_code == 0
         assert index_root.exists()
 
+    def test_init_preserves_existing_kbcontext(self, tmp_path, runner, monkeypatch):
+        """Test init doesn't overwrite existing .kbcontext when present."""
+        kb_root = tmp_path / "kb"
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        # Create existing .kbcontext with custom content
+        existing_content = "# existing context\nprimary: custom/path\n"
+        (project_dir / ".kbcontext").write_text(existing_content)
+
+        # Create a .git dir so it's detected as a project
+        (project_dir / ".git").mkdir()
+
+        monkeypatch.chdir(project_dir)
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root)])
+
+        assert result.exit_code == 0
+        assert ".kbcontext already exists" in result.output
+        # Verify file was NOT overwritten
+        assert (project_dir / ".kbcontext").read_text() == existing_content
+
 
 class TestContextCommands:
     """Test context subcommands with real files."""
