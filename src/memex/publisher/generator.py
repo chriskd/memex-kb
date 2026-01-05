@@ -38,6 +38,7 @@ class EntryData:
     metadata: EntryMetadata
     tags: list[str]
     backlinks: list[str] = field(default_factory=list)
+    outlinks: list[str] = field(default_factory=list)  # Resolved outgoing links
 
 
 @dataclass
@@ -102,7 +103,10 @@ class SiteGenerator:
         # Phase 5: Generate search index
         search_index_path = self._generate_search_index()
 
-        # Phase 6: Copy theme assets
+        # Phase 6: Generate graph data and page
+        self._generate_graph()
+
+        # Phase 7: Copy theme assets
         self._copy_theme_assets()
 
         return PublishResult(
@@ -141,7 +145,8 @@ class SiteGenerator:
 
             # Render markdown with resolved wikilinks
             broken_links: set[str] = set()
-            html_content = self._render_markdown(content, path_key, broken_links)
+            resolved_links: set[str] = set()
+            html_content = self._render_markdown(content, path_key, broken_links, resolved_links)
 
             # Track broken links
             for broken in broken_links:
@@ -155,6 +160,7 @@ class SiteGenerator:
                 metadata=metadata,
                 tags=list(metadata.tags),
                 backlinks=backlinks_index.get(path_key, []),
+                outlinks=list(resolved_links),
             )
 
             # Build tags index
@@ -164,14 +170,19 @@ class SiteGenerator:
                 self.tags_index[tag].append(path_key)
 
     def _render_markdown(
-        self, content: str, source_path: str, broken_links: set[str]
+        self,
+        content: str,
+        source_path: str,
+        broken_links: set[str],
+        resolved_links: set[str],
     ) -> str:
         """Render markdown content with resolved wikilinks.
 
         Args:
             content: Raw markdown content
             source_path: Path of source file (for relative link calculation)
-            broken_links: Set to collect unresolved link targets
+            broken_links: Set to collect unresolved link targets (mutated)
+            resolved_links: Set to collect resolved link targets (mutated)
 
         Returns:
             Rendered HTML string
@@ -183,8 +194,12 @@ class SiteGenerator:
         title_index = self.title_index
         base_url = self.config.base_url
 
+        # Store reference for capturing resolved links after render
+        renderer_instance = None
+
         class ConfiguredRenderer(StaticWikilinkRenderer):
             def __init__(self, parser=None):
+                nonlocal renderer_instance
                 super().__init__(
                     parser,
                     title_index=title_index,
@@ -192,13 +207,20 @@ class SiteGenerator:
                     base_url=base_url,
                     broken_links=broken_links,
                 )
+                renderer_instance = self
 
         # Create parser with our custom renderer class
         md = MarkdownIt(renderer_cls=ConfiguredRenderer)
         md.enable("table")
         md.inline.ruler.push("wikilink", _wikilink_rule)
 
-        return md.render(content)
+        result = md.render(content)
+
+        # Copy resolved links from renderer to caller's set
+        if renderer_instance:
+            resolved_links.update(renderer_instance.resolved_links)
+
+        return result
 
     def _render_all_pages(self) -> None:
         """Render all HTML pages."""
@@ -249,6 +271,49 @@ class SiteGenerator:
         index_path.write_text(index_data, encoding="utf-8")
 
         return str(index_path)
+
+    def _generate_graph(self) -> None:
+        """Generate graph data (JSON) and visualization page (HTML)."""
+        import json
+
+        from .templates import render_graph_page
+
+        # Build nodes and edges for D3.js force graph
+        nodes = []
+        edges = []
+        node_ids = set()
+
+        for path, entry in self.entries.items():
+            # Add node
+            nodes.append({
+                "id": path,
+                "title": entry.title,
+                "tags": entry.tags,
+                "url": f"{path}.html",
+            })
+            node_ids.add(path)
+
+        # Add edges from outlinks (only to nodes that exist)
+        for path, entry in self.entries.items():
+            for target in entry.outlinks:
+                if target in node_ids:
+                    edges.append({
+                        "source": path,
+                        "target": target,
+                    })
+
+        graph_data = {
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        # Write graph.json
+        graph_json_path = self.config.output_dir / "graph.json"
+        graph_json_path.write_text(json.dumps(graph_data, indent=2), encoding="utf-8")
+
+        # Write graph.html
+        graph_html = render_graph_page(base_url=self.config.base_url)
+        (self.config.output_dir / "graph.html").write_text(graph_html, encoding="utf-8")
 
     def _copy_theme_assets(self) -> None:
         """Copy CSS and JS theme assets to output directory."""

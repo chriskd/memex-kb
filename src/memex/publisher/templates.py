@@ -27,11 +27,15 @@ def _base_wrapper(title: str, base_url: str, content: str) -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{_escape_html(title)} - Memex</title>
     <link rel="stylesheet" href="{base_url}/assets/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body>
     <nav class="nav">
         <a href="{base_url}/" class="nav-brand">Memex</a>
+        <a href="{base_url}/graph.html" class="nav-link">Graph</a>
         <div class="search-container">
             <input type="text" id="search-input" placeholder="Search..." autocomplete="off">
             <div id="search-results"></div>
@@ -42,6 +46,7 @@ def _base_wrapper(title: str, base_url: str, content: str) -> str:
     </main>
     <script>window.BASE_URL = "{base_url}";</script>
     <script src="{base_url}/assets/search.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({{startOnLoad: true, theme: 'dark'}});</script>
 </body>
 </html>
 """
@@ -248,3 +253,127 @@ def render_tag_page(
     )
 
     return _base_wrapper(f"Tag: {tag}", base_url, content)
+
+
+def render_graph_page(base_url: str) -> str:
+    """Render the graph visualization page.
+
+    Args:
+        base_url: Base URL for links
+
+    Returns:
+        Complete HTML page string with D3.js graph visualization
+    """
+    # Full-page graph with D3.js force simulation
+    # Graph data is loaded from graph.json
+    content = """
+<div class="graph-container">
+    <div id="graph"></div>
+    <div id="graph-tooltip" class="graph-tooltip"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script>
+(function() {
+    const baseUrl = window.BASE_URL || '';
+
+    fetch(baseUrl + '/graph.json')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('graph');
+            const tooltip = document.getElementById('graph-tooltip');
+            const width = container.clientWidth || 960;
+            const height = container.clientHeight || 600;
+
+            const svg = d3.select('#graph')
+                .append('svg')
+                .attr('width', '100%')
+                .attr('height', '100%')
+                .attr('viewBox', [0, 0, width, height]);
+
+            // Zoom behavior
+            const g = svg.append('g');
+            svg.call(d3.zoom()
+                .extent([[0, 0], [width, height]])
+                .scaleExtent([0.1, 4])
+                .on('zoom', (event) => g.attr('transform', event.transform)));
+
+            // Force simulation
+            const simulation = d3.forceSimulation(data.nodes)
+                .force('link', d3.forceLink(data.edges).id(d => d.id).distance(80))
+                .force('charge', d3.forceManyBody().strength(-200))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(20));
+
+            // Links
+            const link = g.append('g')
+                .attr('class', 'links')
+                .selectAll('line')
+                .data(data.edges)
+                .join('line')
+                .attr('stroke', '#666')
+                .attr('stroke-opacity', 0.6)
+                .attr('stroke-width', 1);
+
+            // Nodes
+            const node = g.append('g')
+                .attr('class', 'nodes')
+                .selectAll('g')
+                .data(data.nodes)
+                .join('g')
+                .call(d3.drag()
+                    .on('start', (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                    })
+                    .on('drag', (event, d) => {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    })
+                    .on('end', (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0);
+                        d.fx = null;
+                        d.fy = null;
+                    }));
+
+            node.append('circle')
+                .attr('r', 8)
+                .attr('fill', '#4dabf7')
+                .attr('stroke', '#228be6')
+                .attr('stroke-width', 2);
+
+            node.append('text')
+                .text(d => d.title)
+                .attr('x', 12)
+                .attr('y', 4)
+                .attr('font-size', '12px')
+                .attr('fill', '#e9ecef');
+
+            // Hover effects
+            node.on('mouseover', (event, d) => {
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = '<strong>' + d.title + '</strong>' +
+                        (d.tags.length ? '<br>Tags: ' + d.tags.join(', ') : '');
+                    tooltip.style.left = (event.pageX + 10) + 'px';
+                    tooltip.style.top = (event.pageY + 10) + 'px';
+                })
+                .on('mouseout', () => {
+                    tooltip.style.display = 'none';
+                })
+                .on('click', (event, d) => {
+                    window.location.href = baseUrl + '/' + d.url;
+                });
+
+            // Simulation tick
+            simulation.on('tick', () => {
+                link.attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            });
+        });
+})();
+</script>
+"""
+    return _base_wrapper("Graph", base_url, content)

@@ -47,6 +47,7 @@ class StaticWikilinkRenderer(RendererHTML):
         self.source_path = source_path
         self.base_url = base_url.rstrip("/") if base_url else ""
         self.broken_links = broken_links if broken_links is not None else set()
+        self.resolved_links: set[str] = set()  # Track successfully resolved links
 
     def wikilink(self, tokens, idx, options, env):
         """Render wikilink to HTML anchor with resolved href."""
@@ -60,6 +61,7 @@ class StaticWikilinkRenderer(RendererHTML):
         if resolved:
             href = self._build_href(resolved)
             css_class = "wikilink"
+            self.resolved_links.add(resolved)  # Track for graph
         else:
             # Broken link - mark but don't fail
             href = "#"

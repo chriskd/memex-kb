@@ -386,3 +386,67 @@ body {
 .tags-cloud .tags {
     margin-top: 0.5rem;
 }
+
+/* Nav link */
+.nav-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.nav-link:hover {
+    color: var(--accent);
+}
+
+/* Graph page */
+.graph-container {
+    width: 100%;
+    height: calc(100vh - 150px);
+    position: relative;
+}
+
+#graph {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#graph svg {
+    cursor: grab;
+}
+
+#graph svg:active {
+    cursor: grabbing;
+}
+
+.graph-tooltip {
+    position: fixed;
+    display: none;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    max-width: 300px;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Mermaid diagrams */
+.mermaid {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+/* Code highlighting overrides */
+.hljs {
+    background: var(--code-bg) !important;
+    padding: 1rem;
+    border-radius: 4px;
+}
