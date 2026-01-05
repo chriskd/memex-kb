@@ -296,6 +296,99 @@ class TestHealthCommand:
         assert isinstance(data, dict)
 
 
+class TestInitCommand:
+    """Test init command for KB bootstrapping."""
+
+    def test_init_creates_kb_structure(self, tmp_path, runner, monkeypatch):
+        """Test init creates KB root and default directories."""
+        kb_root = tmp_path / "new-kb"
+
+        # Clear environment to simulate fresh setup
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root), "--no-context"])
+
+        assert result.exit_code == 0
+        assert "Memex KB Initialized" in result.output
+        assert kb_root.exists()
+        assert (kb_root / "projects").exists()
+        assert (kb_root / "tooling").exists()
+        assert (kb_root / "infrastructure").exists()
+
+    def test_init_with_existing_kb_no_force(self, tmp_path, runner, monkeypatch):
+        """Test init exits cleanly when KB already exists."""
+        kb_root = tmp_path / "existing-kb"
+        kb_root.mkdir()
+        (kb_root / "projects").mkdir()  # Make it non-empty
+
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root), "--no-context"])
+
+        assert result.exit_code == 0
+        assert "already exists" in result.output
+
+    def test_init_with_force_reinitializes(self, tmp_path, runner, monkeypatch):
+        """Test init --force reinitializes existing KB."""
+        kb_root = tmp_path / "existing-kb"
+        kb_root.mkdir()
+        (kb_root / "projects").mkdir()
+
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root), "--force", "--no-context"])
+
+        assert result.exit_code == 0
+        assert "Memex KB Initialized" in result.output
+        assert (kb_root / "tooling").exists()
+        assert (kb_root / "infrastructure").exists()
+
+    def test_init_uses_env_var_when_set(self, tmp_path, runner, monkeypatch):
+        """Test init uses MEMEX_KB_ROOT when set."""
+        kb_root = tmp_path / "env-kb"
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(kb_root))
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--no-context"])
+
+        assert result.exit_code == 0
+        assert kb_root.exists()
+        # When MEMEX_KB_ROOT is set, no export instruction needed
+        assert 'export MEMEX_KB_ROOT' not in result.output
+
+    def test_init_shows_env_export_instructions(self, tmp_path, runner, monkeypatch):
+        """Test init shows environment variable instructions when not set."""
+        kb_root = tmp_path / "new-kb"
+
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root), "--no-context"])
+
+        assert result.exit_code == 0
+        assert "export MEMEX_KB_ROOT" in result.output
+        assert "shell profile" in result.output
+
+    def test_init_creates_index_root(self, tmp_path, runner, monkeypatch):
+        """Test init creates index root directory."""
+        kb_root = tmp_path / "kb"
+        index_root = tmp_path / "indices"
+
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(
+            cli,
+            ["init", "--kb-root", str(kb_root), "--index-root", str(index_root), "--no-context"],
+        )
+
+        assert result.exit_code == 0
+        assert index_root.exists()
+
+
 class TestContextCommands:
     """Test context subcommands with real files."""
 
