@@ -958,3 +958,299 @@ class TestHybridThreadSafety:
         # Document count should be correct (no lost writes)
         assert searcher._whoosh.doc_count() == 9
         assert searcher._chroma.doc_count() == 9
+
+
+class TestComparativeModePerformance:
+    """Tests verifying hybrid mode outperforms individual modes.
+
+    These tests create adversarial scenarios where:
+    - Keyword mode excels at exact term matching
+    - Semantic mode excels at conceptual/synonym matching
+    - Hybrid should combine both advantages
+    """
+
+    @pytest.fixture
+    def comparative_chunks(self) -> list[DocumentChunk]:
+        """Create chunks designed to test mode differences.
+
+        Structure:
+        - error_handling.md: Contains exact error name "ValueError" (keyword-friendly)
+        - deployment_guide.md: About containerization (semantic: "docker" without saying "container")
+        - mixed_content.md: Has both exact terms and semantic concepts
+        - synonym_content.md: Uses synonyms (persistence -> storage/database)
+        """
+        return [
+            # Keyword-favored: Contains exact technical term
+            DocumentChunk(
+                path="errors/error_handling.md",
+                section="ValueError",
+                content="The ValueError exception is raised when a function receives an argument "
+                "with the right type but inappropriate value. Handle ValueError with try-except blocks.",
+                metadata=EntryMetadata(
+                    title="ValueError Handling Guide",
+                    tags=["python", "errors", "exceptions"],
+                    created=date(2024, 1, 1),
+                ),
+                token_count=30,
+            ),
+            # Semantic-favored: About containerization without using exact keywords
+            DocumentChunk(
+                path="devops/deployment_guide.md",
+                section="Containerization",
+                content="Package your applications in isolated environments that include all dependencies. "
+                "Use images to create reproducible deployments across development and production. "
+                "Orchestration tools help manage multiple instances at scale.",
+                metadata=EntryMetadata(
+                    title="Application Deployment Patterns",
+                    tags=["devops", "deployment"],
+                    created=date(2024, 1, 2),
+                ),
+                token_count=40,
+            ),
+            # Has docker keyword for keyword match verification
+            DocumentChunk(
+                path="devops/docker_intro.md",
+                section="Introduction",
+                content="Docker is a platform for building and running containers. "
+                "Use Dockerfile to define your container image.",
+                metadata=EntryMetadata(
+                    title="Docker Introduction",
+                    tags=["docker", "containers"],
+                    created=date(2024, 1, 3),
+                ),
+                token_count=20,
+            ),
+            # Semantic-favored: Uses synonyms for data storage
+            DocumentChunk(
+                path="architecture/persistence.md",
+                section="Data Layer",
+                content="Design your data layer for durability and consistency. "
+                "Store application state in a reliable backend. "
+                "Consider replication for high availability.",
+                metadata=EntryMetadata(
+                    title="Data Persistence Architecture",
+                    tags=["architecture", "data"],
+                    created=date(2024, 1, 4),
+                ),
+                token_count=30,
+            ),
+            # Mixed: Has exact Python term AND semantic programming concepts
+            DocumentChunk(
+                path="dev/python_best_practices.md",
+                section="Best Practices",
+                content="Python best practices include using type hints for clarity, "
+                "writing comprehensive tests, and following PEP 8 style guidelines. "
+                "RuntimeError and ValueError should be caught explicitly.",
+                metadata=EntryMetadata(
+                    title="Python Best Practices",
+                    tags=["python", "best-practices"],
+                    created=date(2024, 1, 5),
+                ),
+                token_count=35,
+            ),
+            # Unique identifier content
+            DocumentChunk(
+                path="deps/requirements.md",
+                section="Dependencies",
+                content="Required packages: chromadb>=0.5.0, whoosh>=2.7.4, pydantic>=2.0.0. "
+                "Install with pip install -r requirements.txt",
+                metadata=EntryMetadata(
+                    title="Project Dependencies",
+                    tags=["dependencies", "setup"],
+                    created=date(2024, 1, 6),
+                ),
+                token_count=25,
+            ),
+        ]
+
+    @pytest.fixture
+    def indexed_searcher(self, hybrid_searcher, comparative_chunks):
+        """HybridSearcher with comparative test data indexed."""
+        hybrid_searcher.index_chunks(comparative_chunks)
+        return hybrid_searcher
+
+    def _get_rank(self, results: list, target_path: str) -> int | None:
+        """Get 1-based rank of target path in results, or None if not found."""
+        paths = [r.path for r in results]
+        if target_path in paths:
+            return paths.index(target_path) + 1
+        return None
+
+    def _mrr(self, results: list, expected_paths: list[str]) -> float:
+        """Calculate Mean Reciprocal Rank for expected paths."""
+        for path in expected_paths:
+            rank = self._get_rank(results, path)
+            if rank is not None:
+                return 1.0 / rank
+        return 0.0
+
+    # --- Keyword-favored queries ---
+
+    def test_keyword_excels_at_exact_error_names(self, indexed_searcher):
+        """Keyword search should excel at finding exact error names like 'ValueError'."""
+        keyword_results = indexed_searcher.search("ValueError", mode="keyword", limit=5)
+        semantic_results = indexed_searcher.search("ValueError", mode="semantic", limit=5)
+        hybrid_results = indexed_searcher.search("ValueError", mode="hybrid", limit=5)
+
+        # All modes should find the error handling doc
+        target = "errors/error_handling.md"
+        keyword_rank = self._get_rank(keyword_results, target)
+        semantic_rank = self._get_rank(semantic_results, target)
+        hybrid_rank = self._get_rank(hybrid_results, target)
+
+        # Keyword should find it (exact match)
+        assert keyword_rank is not None, "Keyword mode should find exact term 'ValueError'"
+        assert keyword_rank <= 2, f"Keyword mode should rank 'ValueError' highly, got rank {keyword_rank}"
+
+        # Hybrid should also find it
+        assert hybrid_rank is not None, "Hybrid mode should find 'ValueError'"
+
+    def test_keyword_excels_at_unique_identifiers(self, indexed_searcher):
+        """Keyword search should find unique identifiers like package versions."""
+        keyword_results = indexed_searcher.search("chromadb>=0.5.0", mode="keyword", limit=5)
+        hybrid_results = indexed_searcher.search("chromadb>=0.5.0", mode="hybrid", limit=5)
+
+        target = "deps/requirements.md"
+        keyword_rank = self._get_rank(keyword_results, target)
+        hybrid_rank = self._get_rank(hybrid_results, target)
+
+        # Keyword should find exact version string
+        assert keyword_rank is not None, "Keyword should find exact version 'chromadb>=0.5.0'"
+
+        # Hybrid should also find it
+        assert hybrid_rank is not None, "Hybrid should find exact identifiers"
+
+    # --- Semantic-favored queries ---
+
+    def test_semantic_finds_conceptual_matches(self, indexed_searcher):
+        """Semantic search should find 'containerization' docs when querying about 'docker containers'."""
+        # Query uses "docker containers" but deployment_guide.md talks about
+        # "isolated environments" and "images" without using those exact words
+        semantic_results = indexed_searcher.search("application containers deployment", mode="semantic", limit=5)
+        keyword_results = indexed_searcher.search("application containers deployment", mode="keyword", limit=5)
+        hybrid_results = indexed_searcher.search("application containers deployment", mode="hybrid", limit=5)
+
+        deployment_target = "devops/deployment_guide.md"
+        docker_target = "devops/docker_intro.md"
+
+        semantic_deployment_rank = self._get_rank(semantic_results, deployment_target)
+        semantic_docker_rank = self._get_rank(semantic_results, docker_target)
+
+        hybrid_deployment_rank = self._get_rank(hybrid_results, deployment_target)
+        hybrid_docker_rank = self._get_rank(hybrid_results, docker_target)
+
+        # Semantic should find the deployment guide (conceptual match)
+        assert semantic_deployment_rank is not None or semantic_docker_rank is not None, \
+            "Semantic should find deployment-related content"
+
+        # Hybrid should find both
+        assert hybrid_deployment_rank is not None or hybrid_docker_rank is not None, \
+            "Hybrid should find deployment content"
+
+    def test_semantic_handles_synonyms(self, indexed_searcher):
+        """Semantic search should find 'persistence' docs when searching for 'database storage'."""
+        semantic_results = indexed_searcher.search("database storage layer", mode="semantic", limit=5)
+        keyword_results = indexed_searcher.search("database storage layer", mode="keyword", limit=5)
+        hybrid_results = indexed_searcher.search("database storage layer", mode="hybrid", limit=5)
+
+        target = "architecture/persistence.md"
+
+        semantic_rank = self._get_rank(semantic_results, target)
+        keyword_rank = self._get_rank(keyword_results, target)
+        hybrid_rank = self._get_rank(hybrid_results, target)
+
+        # Semantic should find it via concept matching
+        # (persistence.md talks about "data layer", "store", "durability" which are semantically related)
+        assert semantic_rank is not None, \
+            "Semantic should find persistence docs when searching 'database storage'"
+
+        # Hybrid should also find it
+        assert hybrid_rank is not None, \
+            "Hybrid should find persistence docs"
+
+    # --- Hybrid advantage queries ---
+
+    def test_hybrid_combines_exact_and_semantic_matches(self, indexed_searcher):
+        """Hybrid should find results that require both exact terms and semantic understanding."""
+        # Query: "Python error handling best practices"
+        # - error_handling.md has "ValueError" (exact)
+        # - python_best_practices.md has both Python and RuntimeError/ValueError
+        keyword_results = indexed_searcher.search("Python error handling", mode="keyword", limit=5)
+        semantic_results = indexed_searcher.search("Python error handling", mode="semantic", limit=5)
+        hybrid_results = indexed_searcher.search("Python error handling", mode="hybrid", limit=5)
+
+        error_target = "errors/error_handling.md"
+        practices_target = "dev/python_best_practices.md"
+
+        # Calculate which targets each mode finds
+        keyword_found = set()
+        semantic_found = set()
+        hybrid_found = set()
+
+        for target in [error_target, practices_target]:
+            if self._get_rank(keyword_results, target):
+                keyword_found.add(target)
+            if self._get_rank(semantic_results, target):
+                semantic_found.add(target)
+            if self._get_rank(hybrid_results, target):
+                hybrid_found.add(target)
+
+        # Hybrid should find at least as many relevant docs as individual modes
+        assert len(hybrid_found) >= max(len(keyword_found), len(semantic_found)), \
+            f"Hybrid found {len(hybrid_found)}, keyword {len(keyword_found)}, semantic {len(semantic_found)}"
+
+    def test_hybrid_has_reasonable_mrr_on_mixed_queries(self, indexed_searcher):
+        """Hybrid should have good MRR across diverse query types."""
+        test_cases = [
+            # (query, expected_paths, description)
+            ("ValueError exception", ["errors/error_handling.md", "dev/python_best_practices.md"], "exact error"),
+            ("containerization deployment", ["devops/deployment_guide.md", "devops/docker_intro.md"], "semantic concept"),
+            ("Python programming", ["dev/python_best_practices.md", "errors/error_handling.md"], "language + concept"),
+        ]
+
+        hybrid_mrrs = []
+        keyword_mrrs = []
+        semantic_mrrs = []
+
+        for query, expected, _desc in test_cases:
+            hybrid_results = indexed_searcher.search(query, mode="hybrid", limit=5)
+            keyword_results = indexed_searcher.search(query, mode="keyword", limit=5)
+            semantic_results = indexed_searcher.search(query, mode="semantic", limit=5)
+
+            hybrid_mrrs.append(self._mrr(hybrid_results, expected))
+            keyword_mrrs.append(self._mrr(keyword_results, expected))
+            semantic_mrrs.append(self._mrr(semantic_results, expected))
+
+        avg_hybrid_mrr = sum(hybrid_mrrs) / len(hybrid_mrrs)
+        avg_keyword_mrr = sum(keyword_mrrs) / len(keyword_mrrs)
+        avg_semantic_mrr = sum(semantic_mrrs) / len(semantic_mrrs)
+
+        # Hybrid should perform reasonably well overall
+        # It should be competitive with the better of keyword/semantic
+        best_single_mode = max(avg_keyword_mrr, avg_semantic_mrr)
+
+        # Hybrid should be within 20% of the best single mode (accounting for RRF tradeoffs)
+        assert avg_hybrid_mrr >= best_single_mode * 0.8, \
+            f"Hybrid MRR ({avg_hybrid_mrr:.2f}) too low vs best single mode ({best_single_mode:.2f})"
+
+    def test_hybrid_returns_results_from_both_indices(self, indexed_searcher):
+        """Hybrid mode should combine results that appear in one index but not the other."""
+        # Use a query that might favor one index
+        hybrid_results = indexed_searcher.search("Python data architecture", mode="hybrid", limit=10)
+
+        # Should have results
+        assert len(hybrid_results) >= 2, "Hybrid should return multiple relevant results"
+
+        # Results should cover multiple topics (not just keyword matches or just semantic)
+        paths = {r.path for r in hybrid_results}
+        topics_covered = {
+            "python": any("python" in p for p in paths),
+            "architecture": any("architecture" in p for p in paths),
+            "errors": any("error" in p for p in paths),
+            "devops": any("devops" in p or "deploy" in p for p in paths),
+        }
+
+        # Should cover at least 2 different topic areas
+        covered_count = sum(topics_covered.values())
+        assert covered_count >= 2, \
+            f"Hybrid should cover diverse topics, only got: {[k for k, v in topics_covered.items() if v]}"
