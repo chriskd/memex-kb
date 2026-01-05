@@ -26,10 +26,13 @@ def _base_wrapper(title: str, base_url: str, content: str) -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{_escape_html(title)} - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{base_url}/assets/style.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body>
@@ -310,8 +313,8 @@ def render_graph_page(base_url: str) -> str:
                 .selectAll('line')
                 .data(data.edges)
                 .join('line')
-                .attr('stroke', '#666')
-                .attr('stroke-opacity', 0.6)
+                .attr('stroke', '#262b3a')
+                .attr('stroke-opacity', 0.4)
                 .attr('stroke-width', 1);
 
             // Nodes
@@ -336,18 +339,39 @@ def render_graph_page(base_url: str) -> str:
                         d.fy = null;
                     }));
 
+            // Category colors matching webapp
+            const categoryColors = {
+                'devops': '#f59e0b',
+                'infrastructure': '#22d3ee',
+                'projects': '#10b981',
+                'tooling': '#f43f5e',
+                'development': '#a78bfa',
+                'best-practices': '#f472b6',
+                'default': '#8b5cf6'
+            };
+
+            function getNodeColor(d) {
+                const path = d.id || '';
+                const category = path.split('/')[0];
+                return categoryColors[category] || categoryColors['default'];
+            }
+
             node.append('circle')
                 .attr('r', 8)
-                .attr('fill', '#4dabf7')
-                .attr('stroke', '#228be6')
-                .attr('stroke-width', 2);
+                .attr('fill', d => getNodeColor(d))
+                .attr('stroke', d => getNodeColor(d))
+                .attr('stroke-opacity', 0.3)
+                .attr('stroke-width', 8)
+                .style('filter', 'drop-shadow(0 0 4px currentColor)');
 
             node.append('text')
                 .text(d => d.title)
-                .attr('x', 12)
+                .attr('x', 14)
                 .attr('y', 4)
-                .attr('font-size', '12px')
-                .attr('fill', '#e9ecef');
+                .attr('font-family', "'JetBrains Mono', monospace")
+                .attr('font-size', '10px')
+                .attr('fill', '#9ca3af')
+                .attr('opacity', 0.8);
 
             // Hover effects
             node.on('mouseover', (event, d) => {
