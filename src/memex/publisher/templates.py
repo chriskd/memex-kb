@@ -1,7 +1,7 @@
 """HTML templates for static site generation.
 
 Uses Jinja2 for templating with inline template definitions.
-Templates include: base layout, entry page, index page, and tag pages.
+Templates include: base layout with 3-column grid, entry page, index page, and tag pages.
 """
 
 from __future__ import annotations
@@ -14,13 +14,177 @@ if TYPE_CHECKING:
     from .generator import EntryData
 
 
-def _base_wrapper(title: str, base_url: str, content: str) -> str:
-    """Wrap content in the base HTML template.
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
-    This is a simple string formatting approach that avoids Jinja
-    parsing issues with user content that might contain {{ }} syntax.
+
+def _safe(html: str) -> str:
+    """Mark HTML as safe for Jinja2 (won't be escaped)."""
+    from markupsafe import Markup
+    return Markup(html)
+
+
+def _build_file_tree(entries: list["EntryData"], current_path: str = "") -> str:
+    """Build HTML for the sidebar file tree navigation.
+
+    Args:
+        entries: All entry data
+        current_path: Currently viewed entry path (for highlighting)
+
+    Returns:
+        HTML string for the tree structure
     """
-    return f"""<!DOCTYPE html>
+    # Group entries by their top-level folder
+    folders: dict[str, list["EntryData"]] = {}
+    root_entries: list["EntryData"] = []
+
+    for entry in sorted(entries, key=lambda e: e.path.lower()):
+        parts = entry.path.split("/")
+        if len(parts) > 1:
+            folder = parts[0]
+            if folder not in folders:
+                folders[folder] = []
+            folders[folder].append(entry)
+        else:
+            root_entries.append(entry)
+
+    html_parts = ['<div class="tree">']
+
+    # Render folders
+    for folder in sorted(folders.keys()):
+        html_parts.append(f'''
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">{_escape_html(folder)}</span>
+                </div>
+                <div class="tree-children">''')
+
+        for entry in folders[folder]:
+            active_class = ' active' if entry.path == current_path else ''
+            # Get just the filename part for display
+            filename = entry.path.split("/")[-1]
+            html_parts.append(f'''
+                    <a href="/{entry.path}.html" class="tree-item{active_class}">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">{_escape_html(filename)}</span>
+                    </a>''')
+
+        html_parts.append('''
+                </div>
+            </div>''')
+
+    # Render root entries
+    for entry in root_entries:
+        active_class = ' active' if entry.path == current_path else ''
+        html_parts.append(f'''
+            <a href="/{entry.path}.html" class="tree-item{active_class}">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">{_escape_html(entry.path)}</span>
+            </a>''')
+
+    html_parts.append('</div>')
+    return ''.join(html_parts)
+
+
+def _build_link_panel(
+    outlinks: list[str],
+    backlinks: list[str],
+    entries_dict: dict[str, "EntryData"],
+    base_url: str,
+) -> str:
+    """Build HTML for the right panel with outlinks and backlinks.
+
+    Args:
+        outlinks: List of outgoing link paths
+        backlinks: List of incoming link paths
+        entries_dict: Dict mapping path to EntryData for title lookup
+        base_url: Base URL for links
+
+    Returns:
+        HTML string for the panel content
+    """
+    html_parts = []
+
+    # Outgoing links section
+    html_parts.append('''
+        <div class="panel-section">
+            <div class="panel-header">Outgoing Links</div>
+            <ul class="link-list">''')
+
+    if outlinks:
+        for path in sorted(outlinks):
+            title = entries_dict.get(path, None)
+            title_text = title.title if title else path.split("/")[-1]
+            html_parts.append(f'''
+                <li class="link-item">
+                    <a href="{base_url}/{path}.html">
+                        <div class="link-title">{_escape_html(title_text)}</div>
+                        <div class="link-path">{_escape_html(path)}</div>
+                    </a>
+                </li>''')
+    else:
+        html_parts.append('<li class="empty-state">No outgoing links</li>')
+
+    html_parts.append('''
+            </ul>
+        </div>''')
+
+    # Backlinks section
+    html_parts.append('''
+        <div class="panel-section">
+            <div class="panel-header">Backlinks</div>
+            <ul class="link-list">''')
+
+    if backlinks:
+        for path in sorted(backlinks):
+            title = entries_dict.get(path, None)
+            title_text = title.title if title else path.split("/")[-1]
+            html_parts.append(f'''
+                <li class="link-item">
+                    <a href="{base_url}/{path}.html">
+                        <div class="link-title">{_escape_html(title_text)}</div>
+                        <div class="link-path">{_escape_html(path)}</div>
+                    </a>
+                </li>''')
+    else:
+        html_parts.append('<li class="empty-state">No backlinks</li>')
+
+    html_parts.append('''
+            </ul>
+        </div>''')
+
+    return ''.join(html_parts)
+
+
+def _base_layout(
+    title: str,
+    base_url: str,
+    sidebar_html: str,
+    main_html: str,
+    panel_html: str,
+    current_view: str = "reader",
+) -> str:
+    """Generate complete HTML page with 3-column layout.
+
+    Args:
+        title: Page title
+        base_url: Base URL for assets
+        sidebar_html: HTML for left sidebar content
+        main_html: HTML for main content area
+        panel_html: HTML for right panel content
+        current_view: Current view for nav highlighting ("reader" or "graph")
+    """
+    reader_active = ' active' if current_view == 'reader' else ''
+    graph_active = ' active' if current_view == 'graph' else ''
+
+    return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -36,44 +200,66 @@ def _base_wrapper(title: str, base_url: str, content: str) -> str:
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 </head>
 <body>
-    <nav class="nav">
-        <a href="{base_url}/" class="nav-brand">Memex</a>
-        <a href="{base_url}/graph.html" class="nav-link">Graph</a>
-        <div class="search-container">
-            <input type="text" id="search-input" placeholder="Search..." autocomplete="off">
-            <div id="search-results"></div>
-        </div>
-    </nav>
-    <main class="main">
-        {content}
-    </main>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="{base_url}/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="{base_url}/" class="nav-link{reader_active}">Reader</a>
+                <a href="{base_url}/graph.html" class="nav-link{graph_active}">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">Categories</div>
+            {sidebar_html}
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            {main_html}
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            {panel_html}
+        </aside>
+    </div>
+
     <script>window.BASE_URL = "{base_url}";</script>
     <script src="{base_url}/assets/search.js"></script>
     <script>hljs.highlightAll(); mermaid.initialize({{startOnLoad: true, theme: 'dark'}});</script>
 </body>
 </html>
-"""
+'''
 
 
-def _escape_html(text: str) -> str:
-    """Escape HTML special characters."""
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
-
-
-# Entry page template - shows a single KB entry with metadata and backlinks
+# Entry page template content (inside reader-container)
 ENTRY_TEMPLATE = """
-<article class="entry">
-    <header class="entry-header">
-        <h1>{{ entry.title }}</h1>
-        <div class="entry-meta">
-            {% if entry.metadata.created %}
-            <span class="entry-date">{{ entry.metadata.created }}</span>
-            {% endif %}
+<div class="reader-container">
+    <article class="entry">
+        <header class="entry-header">
+            <div class="entry-path">{{ entry.path }}</div>
+            <h1 class="entry-title">{{ entry.title }}</h1>
+            <div class="entry-meta">
+                {% if entry.metadata.created %}
+                <div class="entry-meta-item">Created: <span>{{ entry.metadata.created }}</span></div>
+                {% endif %}
+            </div>
             {% if entry.tags %}
             <div class="entry-tags">
                 {% for tag in entry.tags %}
@@ -81,29 +267,19 @@ ENTRY_TEMPLATE = """
                 {% endfor %}
             </div>
             {% endif %}
+        </header>
+        <div class="entry-content">
+            {{ html_content }}
         </div>
-    </header>
-    <div class="entry-content">
-        {{ html_content }}
-    </div>
-    {% if entry.backlinks %}
-    <footer class="entry-backlinks">
-        <h2>Backlinks</h2>
-        <ul>
-            {% for bl in entry.backlinks %}
-            <li><a href="{{ base_url }}/{{ bl }}.html">{{ bl }}</a></li>
-            {% endfor %}
-        </ul>
-    </footer>
-    {% endif %}
-</article>
+    </article>
+</div>
 """
 
-# Index page template - homepage with recent entries and tag cloud
+# Index page template content
 INDEX_TEMPLATE = """
-<div class="index">
+<div class="index-container">
     <h1>Knowledge Base</h1>
-    <section class="recent-entries">
+    <section class="index-section">
         <h2>Recent Entries</h2>
         <ul class="entry-list">
             {% for entry in recent_entries %}
@@ -116,9 +292,9 @@ INDEX_TEMPLATE = """
             {% endfor %}
         </ul>
     </section>
-    <section class="tags-cloud">
+    <section class="index-section">
         <h2>Tags</h2>
-        <div class="tags">
+        <div class="tags-cloud">
             {% for tag, count in tags_with_counts %}
             <a href="{{ base_url }}/tags/{{ tag }}.html" class="tag">
                 {{ tag }} ({{ count }})
@@ -129,9 +305,9 @@ INDEX_TEMPLATE = """
 </div>
 """
 
-# Tag page template - lists all entries with a specific tag
+# Tag page template content
 TAG_TEMPLATE = """
-<div class="tag-page">
+<div class="tag-page-container">
     <h1>Tag: {{ tag }}</h1>
     <p class="tag-count">{{ entries | length }} entries</p>
     <ul class="entry-list">
@@ -144,7 +320,7 @@ TAG_TEMPLATE = """
         </li>
         {% endfor %}
     </ul>
-    <p><a href="{{ base_url }}/">Back to index</a></p>
+    <p class="back-link"><a href="{{ base_url }}/">← Back to index</a></p>
 </div>
 """
 
@@ -157,35 +333,54 @@ def _get_env() -> Environment:
     )
 
 
-def _safe(html: str) -> str:
-    """Mark HTML as safe for Jinja2 (won't be escaped)."""
-    from markupsafe import Markup
-    return Markup(html)
-
-
-def render_entry_page(entry: "EntryData", base_url: str) -> str:
-    """Render a single entry page.
+def render_entry_page(
+    entry: "EntryData",
+    base_url: str,
+    all_entries: list["EntryData"] | None = None,
+    entries_dict: dict[str, "EntryData"] | None = None,
+) -> str:
+    """Render a single entry page with full 3-column layout.
 
     Args:
         entry: Entry data including content and metadata
         base_url: Base URL for links
+        all_entries: All entries for sidebar navigation
+        entries_dict: Dict mapping path to EntryData for title lookup
 
     Returns:
         Complete HTML page string
     """
     env = _get_env()
+    all_entries = all_entries or []
+    entries_dict = entries_dict or {}
 
-    # Render the entry template (but NOT the html_content - it's already HTML)
+    # Build sidebar
+    sidebar_html = _build_file_tree(all_entries, entry.path)
+
+    # Build main content
     tmpl = env.from_string(ENTRY_TEMPLATE)
-    # Pass html_content separately and mark it safe to avoid double-escaping
-    content = tmpl.render(
+    main_html = tmpl.render(
         entry=entry,
         base_url=base_url,
-        # html_content is already rendered HTML, mark as safe to prevent escaping
         html_content=_safe(entry.html_content),
     )
 
-    return _base_wrapper(entry.title, base_url, content)
+    # Build right panel
+    panel_html = _build_link_panel(
+        entry.outlinks,
+        entry.backlinks,
+        entries_dict,
+        base_url,
+    )
+
+    return _base_layout(
+        title=entry.title,
+        base_url=base_url,
+        sidebar_html=sidebar_html,
+        main_html=main_html,
+        panel_html=panel_html,
+        current_view="reader",
+    )
 
 
 def render_index_page(
@@ -193,7 +388,7 @@ def render_index_page(
     tags_index: dict[str, list[str]],
     base_url: str,
 ) -> str:
-    """Render the main index page.
+    """Render the main index page with full 3-column layout.
 
     Args:
         entries: All entry data
@@ -205,71 +400,115 @@ def render_index_page(
     """
     env = _get_env()
 
-    # Sort entries by created date (newest first), handling None dates
+    # Build sidebar
+    sidebar_html = _build_file_tree(entries)
+
+    # Sort entries by created date (newest first)
     recent_entries = sorted(
         entries,
         key=lambda e: str(e.metadata.created) if e.metadata.created else "",
         reverse=True
     )[:20]
 
-    # Build tags with counts, sorted by count then name
+    # Build tags with counts
     tags_with_counts = sorted(
         [(tag, len(paths)) for tag, paths in tags_index.items()],
         key=lambda x: (-x[1], x[0])
     )
 
     tmpl = env.from_string(INDEX_TEMPLATE)
-    content = tmpl.render(
+    main_html = tmpl.render(
         base_url=base_url,
         recent_entries=recent_entries,
         tags_with_counts=tags_with_counts,
     )
 
-    return _base_wrapper("Home", base_url, content)
+    # Empty panel for index page
+    panel_html = '''
+        <div class="panel-section">
+            <div class="panel-header">Welcome</div>
+            <p class="empty-state">Select an entry to view its connections</p>
+        </div>
+    '''
+
+    return _base_layout(
+        title="Home",
+        base_url=base_url,
+        sidebar_html=sidebar_html,
+        main_html=main_html,
+        panel_html=panel_html,
+        current_view="reader",
+    )
 
 
 def render_tag_page(
     tag: str,
     entries: list["EntryData"],
     base_url: str,
+    all_entries: list["EntryData"] | None = None,
 ) -> str:
-    """Render a tag listing page.
+    """Render a tag listing page with full 3-column layout.
 
     Args:
         tag: The tag name
         entries: Entries with this tag
         base_url: Base URL for links
+        all_entries: All entries for sidebar navigation
 
     Returns:
         Complete HTML page string
     """
     env = _get_env()
+    all_entries = all_entries or entries
+
+    # Build sidebar
+    sidebar_html = _build_file_tree(all_entries)
 
     # Sort entries alphabetically by title
     sorted_entries = sorted(entries, key=lambda e: e.title.lower())
 
     tmpl = env.from_string(TAG_TEMPLATE)
-    content = tmpl.render(
+    main_html = tmpl.render(
         tag=tag,
         base_url=base_url,
         entries=sorted_entries,
     )
 
-    return _base_wrapper(f"Tag: {tag}", base_url, content)
+    # Empty panel for tag page
+    panel_html = '''
+        <div class="panel-section">
+            <div class="panel-header">Tag Info</div>
+            <p class="empty-state">Entries tagged with this topic</p>
+        </div>
+    '''
+
+    return _base_layout(
+        title=f"Tag: {tag}",
+        base_url=base_url,
+        sidebar_html=sidebar_html,
+        main_html=main_html,
+        panel_html=panel_html,
+        current_view="reader",
+    )
 
 
-def render_graph_page(base_url: str) -> str:
-    """Render the graph visualization page.
+def render_graph_page(base_url: str, all_entries: list["EntryData"] | None = None) -> str:
+    """Render the graph visualization page with full 3-column layout.
 
     Args:
         base_url: Base URL for links
+        all_entries: All entries for sidebar navigation
 
     Returns:
         Complete HTML page string with D3.js graph visualization
     """
+    all_entries = all_entries or []
+
+    # Build sidebar
+    sidebar_html = _build_file_tree(all_entries)
+
     # Full-page graph with D3.js force simulation
-    # Graph data is loaded from graph.json
-    content = """
+    main_html = """
 <div class="graph-container">
     <div id="graph"></div>
     <div id="graph-tooltip" class="graph-tooltip"></div>
@@ -400,4 +639,20 @@ def render_graph_page(base_url: str) -> str:
 })();
 </script>
 """
-    return _base_wrapper("Graph", base_url, content)
+
+    # Empty panel for graph page
+    panel_html = '''
+        <div class="panel-section">
+            <div class="panel-header">Graph View</div>
+            <p class="empty-state">Click a node to navigate to that entry</p>
+        </div>
+    '''
+
+    return _base_layout(
+        title="Graph",
+        base_url=base_url,
+        sidebar_html=sidebar_html,
+        main_html=main_html,
+        panel_html=panel_html,
+        current_view="graph",
+    )
