@@ -6,6 +6,7 @@ to verify end-to-end CLI functionality.
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -328,7 +329,8 @@ class TestInitCommand:
         result = runner.invoke(cli, ["init", "--kb-root", str(kb_root), "--no-context"])
 
         assert result.exit_code == 0
-        assert "already exists" in result.output
+        assert "already initialized" in result.output
+        assert "preserves existing entries" in result.output  # Verify safety message
 
     def test_init_with_force_reinitializes(self, tmp_path, runner, monkeypatch):
         """Test init --force reinitializes existing KB."""
@@ -411,6 +413,152 @@ class TestInitCommand:
         assert ".kbcontext already exists" in result.output
         # Verify file was NOT overwritten
         assert (project_dir / ".kbcontext").read_text() == existing_content
+
+    def test_init_prompts_for_kbcontext_accepts(self, tmp_path, runner, monkeypatch):
+        """Test init prompts to create .kbcontext and user accepts."""
+        kb_root = tmp_path / "kb"
+        project_dir = tmp_path / "myproject"
+        project_dir.mkdir()
+
+        # Create a .git dir so it's detected as a project
+        (project_dir / ".git").mkdir()
+
+        monkeypatch.chdir(project_dir)
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        # User accepts .kbcontext creation
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root)], input="y\n")
+
+        assert result.exit_code == 0
+        assert "Create .kbcontext" in result.output
+        assert (project_dir / ".kbcontext").exists()
+        content = (project_dir / ".kbcontext").read_text()
+        assert "projects/myproject" in content
+
+    def test_init_prompts_for_kbcontext_declines(self, tmp_path, runner, monkeypatch):
+        """Test init prompts to create .kbcontext and user declines."""
+        kb_root = tmp_path / "kb"
+        project_dir = tmp_path / "myproject"
+        project_dir.mkdir()
+
+        # Create a .git dir so it's detected as a project
+        (project_dir / ".git").mkdir()
+
+        monkeypatch.chdir(project_dir)
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        # User declines .kbcontext creation
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root)], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Create .kbcontext" in result.output
+        assert not (project_dir / ".kbcontext").exists()
+
+    def test_init_with_git_remote_detects_project_name(self, tmp_path, runner, monkeypatch):
+        """Test init auto-detects project name from git remote."""
+        kb_root = tmp_path / "kb"
+        git_repo = tmp_path / "local-dir-name"
+        git_repo.mkdir()
+
+        # Initialize git repo with remote
+        subprocess.run(["git", "init"], cwd=git_repo, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "remote", "add", "origin", "git@github.com:user/remote-project-name.git"],
+            cwd=git_repo,
+            capture_output=True,
+            check=True,
+        )
+
+        monkeypatch.chdir(git_repo)
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        # Accept .kbcontext creation
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root)], input="y\n")
+
+        assert result.exit_code == 0
+        # Should detect from remote, not directory name
+        assert "Detected project: remote-project-name" in result.output
+        assert (git_repo / ".kbcontext").exists()
+        content = (git_repo / ".kbcontext").read_text()
+        assert "projects/remote-project-name" in content
+
+    def test_init_no_prompt_outside_project(self, tmp_path, runner, monkeypatch):
+        """Test init doesn't prompt for .kbcontext outside a project directory."""
+        kb_root = tmp_path / "kb"
+        regular_dir = tmp_path / "not-a-project"
+        regular_dir.mkdir()
+
+        # No .git or package.json - not detected as project
+        monkeypatch.chdir(regular_dir)
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root)])
+
+        assert result.exit_code == 0
+        # Should not prompt for .kbcontext
+        assert "Create .kbcontext" not in result.output
+        assert not (regular_dir / ".kbcontext").exists()
+
+    def test_init_handles_permission_error(self, tmp_path, runner, monkeypatch):
+        """Test init fails gracefully on permission denied."""
+        readonly_parent = tmp_path / "readonly"
+        readonly_parent.mkdir()
+        kb_root = readonly_parent / "kb"
+
+        # Make parent read-only so we can't create kb_root
+        readonly_parent.chmod(0o444)
+
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        try:
+            result = runner.invoke(cli, ["init", "--kb-root", str(kb_root), "--no-context"])
+
+            # Should fail with error
+            assert result.exit_code != 0
+            # Should have some error output (exact message may vary by OS)
+            assert result.output or result.exception
+        finally:
+            # Restore permissions for cleanup
+            readonly_parent.chmod(0o755)
+
+    def test_init_handles_nonexistent_parent_path(self, tmp_path, runner, monkeypatch):
+        """Test init creates parent directories when needed."""
+        # Nested path where parents don't exist
+        kb_root = tmp_path / "deeply" / "nested" / "kb"
+
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root), "--no-context"])
+
+        assert result.exit_code == 0
+        assert kb_root.exists()
+        assert (kb_root / "projects").exists()
+
+    def test_init_detects_python_project(self, tmp_path, runner, monkeypatch):
+        """Test init detects Python projects via pyproject.toml."""
+        kb_root = tmp_path / "kb"
+        project_dir = tmp_path / "my-python-project"
+        project_dir.mkdir()
+
+        # Create pyproject.toml (Python project indicator)
+        (project_dir / "pyproject.toml").write_text('[project]\nname = "myapp"\n')
+
+        monkeypatch.chdir(project_dir)
+        monkeypatch.delenv("MEMEX_KB_ROOT", raising=False)
+        monkeypatch.delenv("MEMEX_INDEX_ROOT", raising=False)
+
+        # Accept .kbcontext creation
+        result = runner.invoke(cli, ["init", "--kb-root", str(kb_root)], input="y\n")
+
+        assert result.exit_code == 0
+        assert "Detected project" in result.output
+        assert (project_dir / ".kbcontext").exists()
 
 
 class TestContextCommands:
