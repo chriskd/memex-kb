@@ -118,13 +118,185 @@ def _format_missing_category_error(tags: list[str], message: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Status Output (default when no subcommand)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _show_status() -> None:
+    """Show KB status with context, recent entries, and suggested commands.
+
+    Displayed when running `mx` with no arguments. Provides quick orientation
+    for agents and humans about the current KB state.
+    """
+    from .config import ConfigurationError, get_kb_root
+    from .context import get_kb_context, detect_project_context
+
+    # Track what we successfully loaded
+    kb_root = None
+    context = None
+    detected = None
+    entries = []
+    project_name = None
+
+    # Try to get KB configuration
+    try:
+        kb_root = get_kb_root()
+    except ConfigurationError:
+        pass
+
+    # Try to get context
+    context = get_kb_context()
+    if context:
+        project_name = context.get_project_name()
+    else:
+        detected = detect_project_context()
+        project_name = detected.project_name if detected else None
+
+    # Get recent entries if KB is available
+    if kb_root and kb_root.exists():
+        entries = _get_recent_entries_for_status(kb_root, project_name, limit=5)
+
+    # Build output
+    _output_status(kb_root, context, detected, entries, project_name)
+
+
+def _get_recent_entries_for_status(
+    kb_root: Path, project: str | None, limit: int = 5
+) -> list[dict]:
+    """Get recent entries for status display.
+
+    Tries to get project-specific entries first, falls back to all entries.
+
+    Args:
+        kb_root: Knowledge base root directory.
+        project: Optional project name to filter by.
+        limit: Maximum entries to return.
+
+    Returns:
+        List of entry dicts with path, title, date, activity_type.
+    """
+    from .core import whats_new as core_whats_new
+
+    try:
+        # Try project-specific first
+        if project:
+            entries = run_async(core_whats_new(days=14, limit=limit, project=project))
+            if entries:
+                return entries
+
+        # Fall back to all recent entries
+        return run_async(core_whats_new(days=14, limit=limit))
+    except Exception:
+        # Fail silently - status output should be resilient
+        return []
+
+
+def _output_status(
+    kb_root: Path | None,
+    context,  # KBContext | None
+    detected,  # DetectedContext | None
+    entries: list[dict],
+    project_name: str | None,
+) -> None:
+    """Output the status display.
+
+    Args:
+        kb_root: KB root path (None if not configured).
+        context: Loaded KBContext (None if no .kbcontext).
+        detected: Auto-detected context (None if context exists).
+        entries: Recent entries to display.
+        project_name: Current project name.
+    """
+    lines = []
+
+    # Header
+    lines.append("Memex Knowledge Base")
+    lines.append("=" * 40)
+
+    # Context section
+    if kb_root:
+        lines.append(f"KB Root: {kb_root}")
+
+        if context:
+            lines.append(f"Context: {context.source_file}")
+            if context.primary:
+                lines.append(f"Primary: {context.primary}")
+            if context.default_tags:
+                lines.append(f"Tags:    {', '.join(context.default_tags)}")
+        elif detected and detected.project_name:
+            lines.append(f"Project: {detected.project_name} (auto-detected)")
+            lines.append("         Run 'mx context init' to configure")
+        else:
+            lines.append("Context: (none)")
+    else:
+        lines.append("KB Root: NOT CONFIGURED")
+        lines.append("")
+        lines.append("Set MEMEX_KB_ROOT and MEMEX_INDEX_ROOT environment variables")
+        lines.append("to point to your knowledge base directory.")
+
+    # Recent entries section
+    if entries:
+        lines.append("")
+        header = f"Recent Entries"
+        if project_name and any(
+            e.get("path", "").startswith(f"projects/{project_name}")
+            or project_name in e.get("tags", [])
+            for e in entries
+        ):
+            header = f"Recent Entries ({project_name})"
+        lines.append(header)
+        lines.append("-" * 40)
+
+        for e in entries[:5]:
+            activity = "NEW" if e.get("activity_type") == "created" else "UPD"
+            date_str = str(e.get("activity_date", ""))[:10]
+            path = e.get("path", "")
+            title = e.get("title", "Untitled")
+
+            # Truncate path if too long
+            if len(path) > 35:
+                path = "..." + path[-32:]
+
+            lines.append(f"  {activity} {date_str}  {path}")
+            if title and title != path:
+                lines.append(f"                      {title[:40]}")
+
+    # Suggested commands section
+    lines.append("")
+    lines.append("Commands")
+    lines.append("-" * 40)
+
+    if not kb_root:
+        lines.append("  mx --help           Show all commands")
+    else:
+        if entries:
+            # KB has content
+            lines.append("  mx search \"query\"   Search the knowledge base")
+            lines.append("  mx whats-new        Recent changes")
+            lines.append("  mx tree             Browse structure")
+        else:
+            # Empty KB
+            lines.append("  mx add --title=\"...\" --tags=\"...\"  Add first entry")
+            lines.append("  mx tree             Browse structure")
+
+        if not context:
+            lines.append("  mx context init     Set up project context")
+
+        lines.append("  mx --help           Show all commands")
+
+    # Output
+    click.echo("\n".join(lines))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main CLI Group
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.version_option(version="0.1.0", prog_name="mx")
-def cli():
+@click.pass_context
+def cli(ctx: click.Context):
     """mx: Token-efficient CLI for memex knowledge base.
 
     Search, browse, and manage KB entries without MCP context overhead.
@@ -137,7 +309,8 @@ def cli():
       mx tree                    # Browse structure
       mx health                  # Check KB health
     """
-    pass
+    if ctx.invoked_subcommand is None:
+        _show_status()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
