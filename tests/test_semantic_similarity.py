@@ -418,3 +418,334 @@ class TestSemanticSearchQuality:
 
         assert len(results) >= 1
         assert results[0].path == "patterns/mvc.md"
+
+
+class TestEdgeCasesAndBoundaries:
+    """Test edge cases, boundary conditions, and error scenarios."""
+
+    def test_empty_index_returns_empty_results(self, chroma_index):
+        """Searching an empty index should return empty results, not error."""
+        results = chroma_index.search("any query at all", limit=10)
+
+        assert results == [], "Empty index should return empty list"
+
+    def test_empty_query_string(self, chroma_index):
+        """Empty query should not crash, should return empty or all results."""
+        doc = _make_chunk(
+            path="test.md",
+            content="Some test content",
+            title="Test",
+        )
+        chroma_index.index_document(doc)
+
+        # Empty string query
+        results = chroma_index.search("", limit=10)
+
+        # Should not crash - either returns empty or returns all docs
+        assert isinstance(results, list)
+
+    def test_very_long_query(self, chroma_index):
+        """Very long queries should work without crashing."""
+        doc = _make_chunk(
+            path="ai/nlp.md",
+            content="Natural language processing and machine learning",
+            title="NLP",
+        )
+        chroma_index.index_document(doc)
+
+        # Create a very long query
+        long_query = " ".join(
+            [
+                "natural language processing machine learning",
+                "artificial intelligence deep learning neural networks",
+                "transformer models attention mechanisms contextual embeddings",
+                "semantic understanding word vectors sentence representations",
+            ]
+            * 10  # Repeat to make it very long
+        )
+
+        results = chroma_index.search(long_query, limit=5)
+
+        # Should find the NLP doc despite query length
+        assert len(results) >= 1
+        assert results[0].path == "ai/nlp.md"
+
+    def test_very_short_query_vs_long_document(self, chroma_index):
+        """Short queries should still match long documents."""
+        long_content = (
+            "This is a comprehensive guide to web development. "
+            "It covers HTML, CSS, JavaScript, React, Node.js, "
+            "databases, authentication, deployment, and best practices. " * 50
+        )
+        doc = _make_chunk(
+            path="web/comprehensive.md",
+            content=long_content,
+            title="Web Development Guide",
+        )
+        chroma_index.index_document(doc)
+
+        # Very short query
+        results = chroma_index.search("React", limit=5)
+
+        assert len(results) >= 1
+        assert results[0].path == "web/comprehensive.md"
+
+    def test_special_characters_in_content(self, chroma_index):
+        """Content with special characters should be searchable."""
+        doc = _make_chunk(
+            path="code/regex.md",
+            content="Regular expressions: ^[a-zA-Z0-9]+$ matches alphanumeric strings. Use \\d+ for digits.",
+            title="Regex Guide",
+        )
+        chroma_index.index_document(doc)
+
+        results = chroma_index.search("pattern matching alphanumeric", limit=5)
+
+        assert len(results) >= 1
+        assert results[0].path == "code/regex.md"
+
+    def test_unicode_content_and_query(self, chroma_index):
+        """Unicode content should be searchable with Unicode queries."""
+        doc = _make_chunk(
+            path="languages/unicode.md",
+            content="机器学习和人工智能 (Machine learning and artificial intelligence) 日本語 Español",
+            title="Unicode Test",
+        )
+        chroma_index.index_document(doc)
+
+        # Search with English term that appears in the content
+        results = chroma_index.search("artificial intelligence", limit=5)
+
+        assert len(results) >= 1
+        assert results[0].path == "languages/unicode.md"
+
+    def test_limit_parameter_respected(self, chroma_index):
+        """Search should respect the limit parameter."""
+        # Index many documents
+        chunks = [
+            _make_chunk(
+                path=f"doc{i}.md",
+                content=f"Python programming tutorial number {i}",
+                title=f"Tutorial {i}",
+            )
+            for i in range(20)
+        ]
+        chroma_index.index_documents(chunks)
+
+        # Request only 5 results
+        results = chroma_index.search("Python programming", limit=5)
+
+        assert len(results) == 5, f"Should return exactly 5 results, got {len(results)}"
+
+    def test_search_with_limit_one(self, chroma_index):
+        """Limit=1 should return only the best match."""
+        chunks = [
+            _make_chunk(
+                path="best.md",
+                content="Python is a high-level programming language",
+                title="Python",
+            ),
+            _make_chunk(
+                path="okay.md",
+                content="Programming languages are important",
+                title="Languages",
+            ),
+        ]
+        chroma_index.index_documents(chunks)
+
+        results = chroma_index.search("Python programming language", limit=1)
+
+        assert len(results) == 1
+        assert results[0].path == "best.md"
+
+    def test_duplicate_content_different_paths(self, chroma_index):
+        """Duplicate content at different paths should both be findable."""
+        chunks = [
+            _make_chunk(
+                path="copy1/guide.md",
+                content="Complete guide to Docker containerization",
+                title="Docker Guide",
+            ),
+            _make_chunk(
+                path="copy2/guide.md",
+                content="Complete guide to Docker containerization",
+                title="Docker Guide Copy",
+            ),
+        ]
+        chroma_index.index_documents(chunks)
+
+        results = chroma_index.search("Docker containerization", limit=5)
+
+        # Both should be found
+        assert len(results) >= 2
+        paths = {r.path for r in results}
+        assert "copy1/guide.md" in paths
+        assert "copy2/guide.md" in paths
+        # Scores should be nearly identical for identical content
+        scores = [r.score for r in results[:2]]
+        assert abs(scores[0] - scores[1]) < 0.01
+
+
+class TestSemanticRobustness:
+    """Test semantic search handles challenging scenarios robustly."""
+
+    def test_query_with_typos_still_matches(self, chroma_index):
+        """Minor typos in query should still find relevant content.
+
+        This tests the robustness of embeddings to minor spelling variations.
+        """
+        doc = _make_chunk(
+            path="db/postgresql.md",
+            content="PostgreSQL is a powerful relational database system",
+            title="PostgreSQL",
+        )
+        chroma_index.index_document(doc)
+
+        # Query with minor typo
+        results = chroma_index.search("powerfull relational databse", limit=5)
+
+        assert len(results) >= 1
+        # Should still find it despite typos
+        assert results[0].path == "db/postgresql.md"
+
+    def test_semantic_search_with_acronyms(self, chroma_index):
+        """Acronyms should match their full forms semantically."""
+        doc = _make_chunk(
+            path="arch/soa.md",
+            content="Service-Oriented Architecture enables modular system design",
+            title="SOA",
+        )
+        chroma_index.index_document(doc)
+
+        # Query with acronym
+        results = chroma_index.search("SOA modular systems", limit=5)
+
+        assert len(results) >= 1
+        assert results[0].path == "arch/soa.md"
+
+    def test_question_query_matches_statement_content(self, chroma_index):
+        """Questions should match relevant declarative content."""
+        doc = _make_chunk(
+            path="faq/testing.md",
+            content="Unit tests verify individual functions work correctly in isolation",
+            title="Testing FAQ",
+        )
+        chroma_index.index_document(doc)
+
+        # Query as a question
+        results = chroma_index.search("How do unit tests work?", limit=5)
+
+        assert len(results) >= 1
+        assert results[0].path == "faq/testing.md"
+
+    def test_negation_handling(self, chroma_index):
+        """Test that semantic search understands context including negations.
+
+        Note: This is a challenging case for embeddings.
+        """
+        chunks = [
+            _make_chunk(
+                path="security/good.md",
+                content="Always use HTTPS for secure communication and encrypt sensitive data",
+                title="Security Best Practices",
+            ),
+            _make_chunk(
+                path="security/bad.md",
+                content="Never use HTTP for sensitive data transmission without encryption",
+                title="Security Anti-patterns",
+            ),
+        ]
+        chroma_index.index_documents(chunks)
+
+        # Query for best practices
+        results = chroma_index.search("how to secure data transmission", limit=5)
+
+        assert len(results) >= 2
+        # Both should be relevant, but we can't easily test that "good" ranks higher
+        # since both documents are about the same security topic
+
+    def test_multi_word_technical_terms(self, chroma_index):
+        """Multi-word technical terms should be understood as units."""
+        doc = _make_chunk(
+            path="arch/microservices.md",
+            content="Event-driven microservices architecture with asynchronous message passing",
+            title="Microservices",
+        )
+        chroma_index.index_document(doc)
+
+        results = chroma_index.search("event driven architecture", limit=5)
+
+        assert len(results) >= 1
+        assert results[0].path == "arch/microservices.md"
+
+
+class TestIndexingBehavior:
+    """Test document indexing behavior and optimizations."""
+
+    def test_reindexing_same_content_is_idempotent(self, chroma_index):
+        """Re-indexing unchanged content should not affect search results."""
+        doc = _make_chunk(
+            path="test.md",
+            content="Test content for idempotency check",
+            title="Test",
+        )
+
+        # Index the same document twice
+        chroma_index.index_document(doc)
+        chroma_index.index_document(doc)
+
+        results = chroma_index.search("idempotency check", limit=5)
+
+        # Should appear only once, not duplicated
+        assert len(results) == 1
+        assert results[0].path == "test.md"
+
+    def test_updating_document_content(self, chroma_index):
+        """Updating document content should reflect in search results."""
+        # Index initial version
+        doc_v1 = _make_chunk(
+            path="evolving.md",
+            content="This document is about cooking recipes and baking",
+            title="Evolving Doc",
+        )
+        chroma_index.index_document(doc_v1)
+
+        # Search finds cooking content
+        results_v1 = chroma_index.search("programming", limit=5)
+        cooking_score_v1 = results_v1[0].score if results_v1 else 0.0
+
+        # Update to programming content
+        doc_v2 = _make_chunk(
+            path="evolving.md",
+            content="This document is about Python programming and software development",
+            title="Evolving Doc",
+        )
+        chroma_index.index_document(doc_v2)
+
+        # Now programming query should match much better
+        results_v2 = chroma_index.search("programming", limit=5)
+
+        assert len(results_v2) >= 1
+        assert results_v2[0].path == "evolving.md"
+        # Score should be higher after update
+        assert results_v2[0].score > cooking_score_v1
+
+    def test_batch_indexing_multiple_documents(self, chroma_index):
+        """Batch indexing should index all documents correctly."""
+        chunks = [
+            _make_chunk(
+                path=f"batch/doc{i}.md",
+                content=f"Document {i} about topic {i % 3}",
+                title=f"Doc {i}",
+            )
+            for i in range(10)
+        ]
+
+        chroma_index.index_documents(chunks)
+
+        # Verify all documents are indexed
+        assert chroma_index.doc_count() == 10
+
+        # Search should find relevant docs
+        results = chroma_index.search("topic 1", limit=5)
+        assert len(results) > 0
