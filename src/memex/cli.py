@@ -999,6 +999,126 @@ def update(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Patch Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("path", metavar="PATH")
+@click.option("--old", help="Exact text to find and replace")
+@click.option("--new", help="Replacement text")
+@click.option(
+    "--old-file",
+    type=click.Path(exists=True),
+    help="Read --old text from file (for multi-line)",
+)
+@click.option(
+    "--new-file",
+    type=click.Path(exists=True),
+    help="Read --new text from file (for multi-line)",
+)
+@click.option("--replace-all", is_flag=True, help="Replace all occurrences")
+@click.option("--dry-run", is_flag=True, help="Preview changes without writing")
+@click.option("--backup", is_flag=True, help="Create .bak backup before patching")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def patch(
+    path: str,
+    old: str | None,
+    new: str | None,
+    old_file: str | None,
+    new_file: str | None,
+    replace_all: bool,
+    dry_run: bool,
+    backup: bool,
+    as_json: bool,
+):
+    """Apply surgical find-replace edits to a KB entry.
+
+    PATH is relative to KB root (e.g., "tooling/my-entry.md").
+
+    Finds exact occurrences of --old and replaces with --new.
+    Fails if --old is not found or matches multiple times (use --replace-all).
+
+    For multi-line text or special characters, use --old-file and --new-file.
+
+    \b
+    Exit codes:
+      0: Success
+      1: Text not found
+      2: Multiple matches (ambiguous, use --replace-all)
+      3: File error (not found, permission, encoding)
+
+    \b
+    Examples:
+      mx patch tooling/notes.md --old "old text" --new "new text"
+      mx patch tooling/notes.md --old "TODO" --new "DONE" --replace-all
+      mx patch tooling/notes.md --old-file old.txt --new-file new.txt
+      mx patch tooling/notes.md --old "..." --new "..." --dry-run
+    """
+    from .core import patch_entry
+
+    # Resolve --old input source
+    if old_file and old:
+        click.echo("Error: --old and --old-file are mutually exclusive", err=True)
+        sys.exit(3)
+    if old_file:
+        old_text = Path(old_file).read_text(encoding="utf-8")
+    elif old is not None:
+        old_text = old
+    else:
+        click.echo("Error: Must provide --old or --old-file", err=True)
+        sys.exit(3)
+
+    # Resolve --new input source
+    if new_file and new:
+        click.echo("Error: --new and --new-file are mutually exclusive", err=True)
+        sys.exit(3)
+    if new_file:
+        new_text = Path(new_file).read_text(encoding="utf-8")
+    elif new is not None:
+        new_text = new
+    else:
+        click.echo("Error: Must provide --new or --new-file", err=True)
+        sys.exit(3)
+
+    try:
+        result = run_async(
+            patch_entry(
+                path=path,
+                old_string=old_text,
+                new_string=new_text,
+                replace_all=replace_all,
+                dry_run=dry_run,
+                backup=backup,
+            )
+        )
+    except Exception as e:
+        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
+        sys.exit(3)
+
+    exit_code = result.get("exit_code", 0)
+
+    if as_json:
+        output(result, as_json=True)
+    else:
+        if result.get("success"):
+            if dry_run:
+                click.echo("Dry run - no changes made:")
+                click.echo(result.get("diff", ""))
+            else:
+                click.echo(f"Patched: {result['path']} ({result['replacements']} replacement(s))")
+        else:
+            click.echo(f"Error: {result['message']}", err=True)
+            # Show match contexts for ambiguous case
+            if result.get("match_contexts"):
+                click.echo("\nMatches found:", err=True)
+                for ctx in result["match_contexts"]:
+                    click.echo(f"  {ctx['preview']}", err=True)
+
+    sys.exit(exit_code)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tree Command
 # ─────────────────────────────────────────────────────────────────────────────
 

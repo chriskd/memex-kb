@@ -1267,6 +1267,156 @@ async def update_entry(
     }
 
 
+async def patch_entry(
+    path: str,
+    old_string: str,
+    new_string: str,
+    replace_all: bool = False,
+    dry_run: bool = False,
+    backup: bool = False,
+) -> dict:
+    """Apply surgical find-replace patch to a KB entry.
+
+    Operates on body content only; frontmatter is preserved unchanged.
+    After successful patch, triggers re-indexing for semantic search.
+
+    Args:
+        path: Path to entry relative to KB root (e.g., "tooling/notes.md").
+        old_string: Exact text to find and replace.
+        new_string: Replacement text.
+        replace_all: If True, replace all occurrences.
+        dry_run: If True, preview changes without writing.
+        backup: If True, create .bak backup before patching.
+
+    Returns:
+        Dict with:
+            - success: bool
+            - exit_code: int (0=success, 1=not found, 2=ambiguous, 3=file error)
+            - message: str
+            - replacements: int (number of replacements made)
+            - diff: str | None (unified diff if dry_run=True)
+            - match_contexts: list | None (for ambiguous errors)
+            - path: str (relative path, on success)
+    """
+    from .patch import (
+        PatchExitCode,
+        apply_patch,
+        generate_diff,
+        read_file_safely,
+        write_file_atomically,
+    )
+
+    kb_root = get_kb_root()
+    file_path = kb_root / path
+
+    if not file_path.exists():
+        return {
+            "success": False,
+            "exit_code": int(PatchExitCode.FILE_ERROR),
+            "message": f"Entry not found: {path}",
+        }
+
+    if not file_path.is_file():
+        return {
+            "success": False,
+            "exit_code": int(PatchExitCode.FILE_ERROR),
+            "message": f"Path is not a file: {path}",
+        }
+
+    # Read file, separating frontmatter from body
+    frontmatter, body, read_error = read_file_safely(file_path)
+    if read_error:
+        return read_error.to_dict()
+
+    # Apply patch to body only
+    result = apply_patch(
+        content=body,
+        old_string=old_string,
+        new_string=new_string,
+        replace_all=replace_all,
+    )
+
+    if not result.success:
+        return result.to_dict()
+
+    # Handle dry-run: return diff without writing
+    if dry_run:
+        diff = generate_diff(body, result.new_content, filename=path)
+        return {
+            "success": True,
+            "exit_code": 0,
+            "message": "Dry run - no changes made",
+            "replacements": result.replacements_made,
+            "diff": diff,
+            "path": path,
+        }
+
+    # Parse existing metadata for update
+    try:
+        metadata, _, _ = parse_entry(file_path)
+    except ParseError as e:
+        return {
+            "success": False,
+            "exit_code": int(PatchExitCode.FILE_ERROR),
+            "message": f"Failed to parse entry metadata: {e}",
+        }
+
+    # Update metadata (updated date, contributor info)
+    contributor, edit_source, git_branch = await asyncio.gather(
+        get_current_contributor_async(),
+        get_current_project_async(),
+        get_git_branch_async(),
+    )
+
+    updated_metadata = update_metadata_for_edit(
+        metadata,
+        new_tags=list(metadata.tags),  # Preserve tags
+        new_contributor=contributor,
+        edit_source=edit_source,
+        model=get_llm_model(),
+        git_branch=git_branch,
+        actor=get_actor_identity(),
+    )
+    new_frontmatter = build_frontmatter(updated_metadata)
+
+    # Write atomically
+    write_error = write_file_atomically(
+        path=file_path,
+        frontmatter=new_frontmatter,
+        content=result.new_content,
+        backup=backup,
+    )
+    if write_error:
+        return write_error.to_dict()
+
+    # Rebuild caches
+    rebuild_backlink_cache(kb_root)
+
+    # Reindex for semantic search
+    relative_path = relative_kb_path(kb_root, file_path)
+    searcher = get_searcher()
+    try:
+        # Remove old index entries
+        searcher.delete_document(relative_path)
+        # Parse and index new content
+        _, _, chunks = parse_entry(file_path)
+        if chunks:
+            normalized_chunks = normalize_chunks(chunks, relative_path)
+            searcher.index_chunks(normalized_chunks)
+    except ParseError as e:
+        log.warning("Patched entry but failed to re-index %s: %s", relative_path, e)
+    except Exception as e:
+        log.error("Unexpected error re-indexing %s: %s", relative_path, e)
+
+    return {
+        "success": True,
+        "exit_code": 0,
+        "message": f"Patched {path} ({result.replacements_made} replacement(s))",
+        "replacements": result.replacements_made,
+        "path": relative_path,
+    }
+
+
 async def get_entry(path: str) -> KBEntry:
     """Read a KB entry.
 
