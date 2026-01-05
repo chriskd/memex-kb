@@ -13,6 +13,7 @@ Example .kbcontext file:
       - memex
 """
 
+import logging
 import os
 import subprocess
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ from typing import Any
 import yaml
 
 from .config import MAX_CONTEXT_SEARCH_DEPTH
+
+log = logging.getLogger(__name__)
 
 # Context filename
 CONTEXT_FILENAME = ".kbcontext"
@@ -193,11 +196,20 @@ def _load_context_file(context_path: Path) -> KBContext | None:
         data = yaml.safe_load(content)
 
         if not isinstance(data, dict):
+            log.warning(
+                "Invalid .kbcontext file %s: expected YAML dict, got %s",
+                context_path,
+                type(data).__name__,
+            )
             return None
 
         return KBContext.from_dict(data, source_file=context_path)
 
-    except (OSError, yaml.YAMLError):
+    except OSError as e:
+        log.warning("Could not read .kbcontext file %s: %s", context_path, e)
+        return None
+    except yaml.YAMLError as e:
+        log.warning("Invalid YAML in .kbcontext file %s: %s", context_path, e)
         return None
 
 
