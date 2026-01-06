@@ -15,7 +15,7 @@ import os
 import re
 import shutil
 import subprocess
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -1689,7 +1689,8 @@ async def whats_new(
     else:
         search_path = kb_root
 
-    cutoff_date = date.today() - timedelta(days=days)
+    # Use datetime for comparison (start of day in UTC)
+    cutoff_datetime = datetime.combine(date.today() - timedelta(days=days), datetime.min.time())
     candidates: list[dict] = []
 
     for md_file in search_path.rglob("*.md"):
@@ -1725,17 +1726,17 @@ async def whats_new(
             if not matches_project:
                 continue
 
-        # Determine activity type and date
+        # Determine activity type and datetime
         activity_type: str | None = None
-        activity_date: date | None = None
+        activity_datetime: datetime | None = None
 
         # Check updated first (takes precedence if both qualify)
-        if include_updated and metadata.updated and metadata.updated >= cutoff_date:
+        if include_updated and metadata.updated and metadata.updated >= cutoff_datetime:
             activity_type = "updated"
-            activity_date = metadata.updated
-        elif include_created and metadata.created >= cutoff_date:
+            activity_datetime = metadata.updated
+        elif include_created and metadata.created >= cutoff_datetime:
             activity_type = "created"
-            activity_date = metadata.created
+            activity_datetime = metadata.created
 
         if activity_type is None:
             continue
@@ -1748,12 +1749,12 @@ async def whats_new(
                 "created": metadata.created.isoformat() if metadata.created else None,
                 "updated": metadata.updated.isoformat() if metadata.updated else None,
                 "activity_type": activity_type,
-                "activity_date": activity_date.isoformat(),
+                "activity_date": activity_datetime.isoformat(),
                 "source_project": metadata.source_project,
             }
         )
 
-    # Sort by activity_date descending
+    # Sort by activity_datetime descending
     candidates.sort(key=lambda x: x["activity_date"], reverse=True)
 
     return candidates[:limit]
@@ -2376,7 +2377,8 @@ async def health(
 
     # Get parse errors from health cache
     results["parse_errors"] = get_parse_errors()
-    cutoff_date = date.today() - timedelta(days=stale_days)
+    # Use datetime for comparison (start of day)
+    cutoff_datetime = datetime.combine(date.today() - timedelta(days=stale_days), datetime.min.time())
 
     # Get backlink index
     all_backlinks = get_backlink_index(kb_root)
@@ -2424,8 +2426,9 @@ async def health(
     if check_stale:
         for path_key, entry in all_entries.items():
             last_activity = entry["updated"] or entry["created"]
-            if last_activity and last_activity < cutoff_date:
-                days_old = (date.today() - last_activity).days
+            if last_activity and last_activity < cutoff_datetime:
+                # Calculate days old from date portion
+                days_old = (date.today() - last_activity.date()).days
                 results["stale"].append({
                     "path": entry["path"],
                     "title": entry["title"],

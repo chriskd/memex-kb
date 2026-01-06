@@ -232,8 +232,9 @@ class TestEntryEndpoint:
         response = client_no_lifespan.get("/api/entries/guides/setup.md")
         entry = response.json()
 
-        assert entry["created"] == "2024-01-02"
-        assert entry["updated"] == "2024-01-15"
+        # Full ISO datetime format
+        assert entry["created"] == "2024-01-02T00:00:00"
+        assert entry["updated"] == "2024-01-15T00:00:00"
 
     def test_entry_not_found(self, client_no_lifespan):
         """Returns 404 for missing entry."""

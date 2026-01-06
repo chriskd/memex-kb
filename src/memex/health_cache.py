@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -79,14 +79,31 @@ def _get_file_mtime(file_path: Path) -> float:
         return 0.0
 
 
-def _date_to_str(d: date | None) -> str | None:
-    """Convert date to ISO string for JSON serialization."""
-    return d.isoformat() if d else None
+def _datetime_to_str(d: date | datetime | None) -> str | None:
+    """Convert datetime to ISO string for JSON serialization."""
+    if d is None:
+        return None
+    if isinstance(d, datetime):
+        return d.replace(microsecond=0).isoformat()
+    return d.isoformat()  # date object
 
 
-def _str_to_date(s: str | None) -> date | None:
-    """Convert ISO string back to date."""
-    return date.fromisoformat(s) if s else None
+def _str_to_datetime(s: str | None) -> datetime | None:
+    """Convert ISO string back to datetime.
+
+    Handles both date-only and full datetime strings for backwards compatibility.
+    """
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        # Fall back to date-only parsing
+        try:
+            d = date.fromisoformat(s)
+            return datetime(d.year, d.month, d.day, 0, 0, 0)
+        except ValueError:
+            return None
 
 
 def _parse_file_metadata(md_file: Path) -> tuple[dict[str, Any] | None, str | None]:
@@ -103,8 +120,8 @@ def _parse_file_metadata(md_file: Path) -> tuple[dict[str, Any] | None, str | No
         return {
             "title": metadata.title,
             "description": metadata.description,
-            "created": _date_to_str(metadata.created),
-            "updated": _date_to_str(metadata.updated),
+            "created": _datetime_to_str(metadata.created),
+            "updated": _datetime_to_str(metadata.updated),
             "links": links,
         }, None
     except ParseError as e:
@@ -280,26 +297,26 @@ def get_entry_metadata(
     """Get entry metadata suitable for health checks.
 
     Convenience wrapper that ensures cache is up to date and converts
-    date strings back to date objects.
+    datetime strings back to datetime objects.
 
     Args:
         kb_root: Path to the knowledge base root.
         index_root: Optional override for cache storage location.
 
     Returns:
-        Dict mapping path_key to metadata with date objects (not strings).
+        Dict mapping path_key to metadata with datetime objects (not strings).
     """
     cached = ensure_health_cache(kb_root, index_root)
 
-    # Convert date strings to date objects
+    # Convert datetime strings to datetime objects
     result: dict[str, dict[str, Any]] = {}
     for path_key, meta in cached.items():
         result[path_key] = {
             "path": meta.get("rel_path", f"{path_key}.md"),
             "title": meta.get("title", ""),
             "description": meta.get("description"),
-            "created": _str_to_date(meta.get("created")),
-            "updated": _str_to_date(meta.get("updated")),
+            "created": _str_to_datetime(meta.get("created")),
+            "updated": _str_to_datetime(meta.get("updated")),
             "links": meta.get("links", []),
         }
 

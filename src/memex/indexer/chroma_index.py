@@ -2,7 +2,7 @@
 
 import hashlib
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,6 +10,28 @@ from ..config import EMBEDDING_MODEL, get_index_root
 from ..models import DocumentChunk, SearchResult
 
 log = logging.getLogger(__name__)
+
+
+def _parse_datetime_str(s: str) -> datetime | None:
+    """Parse ISO datetime string, handling both full datetime and date-only formats.
+
+    Args:
+        s: ISO format string (e.g., "2025-01-06T14:30:45" or "2025-01-06")
+
+    Returns:
+        datetime object or None if string is empty/invalid
+    """
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        # Try date-only format
+        try:
+            d = date.fromisoformat(s)
+            return datetime(d.year, d.month, d.day, 0, 0, 0)
+        except ValueError:
+            return None
 
 if TYPE_CHECKING:
     import chromadb
@@ -344,11 +366,12 @@ class ChromaIndex:
             tags = meta.get("tags", "")
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
-            # Parse dates from stored ISO strings
+            # Parse datetimes from stored ISO strings
+            # Handles both full datetimes and legacy date-only formats
             created_str = meta.get("created", "")
             updated_str = meta.get("updated", "")
-            created_date = date.fromisoformat(created_str) if created_str else None
-            updated_date = date.fromisoformat(updated_str) if updated_str else None
+            created_datetime = _parse_datetime_str(created_str)
+            updated_datetime = _parse_datetime_str(updated_str)
 
             search_results.append(
                 SearchResult(
@@ -358,8 +381,8 @@ class ChromaIndex:
                     score=score,
                     tags=tag_list,
                     section=meta.get("section") or None,
-                    created=created_date,
-                    updated=updated_date,
+                    created=created_datetime,
+                    updated=updated_datetime,
                     token_count=meta.get("token_count") or 0,
                     source_project=meta.get("source_project") or None,
                 )
