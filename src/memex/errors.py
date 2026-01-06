@@ -72,6 +72,11 @@ class ErrorCode(IntEnum):
     FILE_WRITE_ERROR = 1402
     PERMISSION_DENIED = 1403
 
+    # Batch operation errors (1501-1599)
+    BATCH_PARSE_ERROR = 1501
+    BATCH_UNKNOWN_COMMAND = 1502
+    BATCH_MISSING_ARGUMENT = 1503
+
 
 # Human-readable names for error codes
 ERROR_NAMES: dict[ErrorCode, str] = {
@@ -94,6 +99,9 @@ ERROR_NAMES: dict[ErrorCode, str] = {
     ErrorCode.FILE_READ_ERROR: "FILE_READ_ERROR",
     ErrorCode.FILE_WRITE_ERROR: "FILE_WRITE_ERROR",
     ErrorCode.PERMISSION_DENIED: "PERMISSION_DENIED",
+    ErrorCode.BATCH_PARSE_ERROR: "BATCH_PARSE_ERROR",
+    ErrorCode.BATCH_UNKNOWN_COMMAND: "BATCH_UNKNOWN_COMMAND",
+    ErrorCode.BATCH_MISSING_ARGUMENT: "BATCH_MISSING_ARGUMENT",
 }
 
 
