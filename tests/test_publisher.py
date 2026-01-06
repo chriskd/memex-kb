@@ -254,7 +254,7 @@ class TestTemplates:
         """Powered by memex footer appears in sidebar."""
         html = render_entry_page(mock_entry, base_url="")
         assert "Powered by memex" in html
-        assert "github.com/aaronsb/memex" in html
+        assert "github.com/chriskd/memex" in html
 
     def test_powered_by_footer_in_index(self, mock_entry):
         """Powered by footer appears on index page."""
