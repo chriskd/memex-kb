@@ -45,6 +45,7 @@ semantic = [
     "chromadb>=0.5.0,<1.0.0",  # Cap for arm64 onnxruntime compatibility
     "sentence-transformers>=3.0.0",
     "posthog<5.0.0",  # Chroma telemetry expects positional capture() args
+    "torch>=2.0.0",  # Explicit dep so uv.sources applies (CPU-only build)
 ]
 
 [project.scripts]
@@ -69,6 +70,21 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.8.0",
 ]
+
+# =============================================================================
+# uv Configuration - CPU-only PyTorch
+# =============================================================================
+# sentence-transformers pulls in torch, which by default includes NVIDIA CUDA
+# libraries (~3.6GB) and triton (~257MB). Using CPU-only torch saves ~4GB.
+# GPU users can override with: uv sync --index pytorch-gpu=https://download.pytorch.org/whl/cu124
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
 
 [tool.ruff]
 line-length = 100
