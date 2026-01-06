@@ -71,6 +71,8 @@ mx search "hello"
 mx get example/my-first-note.md
 ```
 
+**New to Memex?** See the [First 5 Minutes Tutorial](TUTORIAL.md) for a complete walkthrough.
+
 ## CLI Reference
 
 The `mx` CLI is designed for token-efficient access from AI agents and humans alike.
