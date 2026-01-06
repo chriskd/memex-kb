@@ -3724,13 +3724,24 @@ def publish(
       3. --global flag required to use MEMEX_KB_ROOT
 
     \b
+    Base URL resolution:
+      1. --base-url flag (explicit)
+      2. publish_base_url in .kbcontext (auto-applied)
+
+    Use --base-url when hosting at a subdirectory (e.g., user.github.io/repo).
+    Without it, links will 404. Configure in .kbcontext to avoid repeating:
+
+    \b
+      # .kbcontext
+      project_kb: ./kb
+      publish_base_url: /repo-name
+
+    \b
     Examples:
-      mx publish --kb-root ./kb -o docs    # Publish from local kb/
-      mx publish -o docs                   # Uses .kbcontext project_kb
-      mx publish --global -o docs          # Explicitly use MEMEX_KB_ROOT
-      mx publish --base-url /my-kb         # Set base URL for subdirectory hosting
-      mx publish --title "My Docs"         # Custom site title
-      mx publish --index guides/welcome    # Use entry as landing page
+      mx publish -o docs                   # Uses .kbcontext settings
+      mx publish --kb-root ./kb -o docs    # Explicit KB source
+      mx publish --global -o docs          # Use MEMEX_KB_ROOT
+      mx publish --base-url /my-kb         # Subdirectory hosting
     """
     from .config import get_kb_root
     from .context import get_kb_context

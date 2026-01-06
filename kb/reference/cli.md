@@ -222,14 +222,52 @@ mx context validate         # Validate context paths
 
 ### mx publish
 
-Generate static HTML site.
+Generate static HTML site for GitHub Pages or other static hosting.
+
+**KB Source Resolution:**
+
+The publish command resolves which KB to publish in this order:
+1. `--kb-root ./path` - explicit CLI override
+2. `project_kb` in `.kbcontext` - project-local KB
+3. Requires `--global` flag to use `MEMEX_KB_ROOT`
+
+This prevents accidentally publishing your organizational KB when you meant to publish project docs.
 
 ```bash
-mx publish                           # Build to _site/
-mx publish -o docs                   # Build to docs/
-mx publish --base-url /my-kb         # For subdirectory hosting
-mx publish --include-drafts          # Include draft entries
+# Using .kbcontext (recommended)
+mx publish -o docs                   # Uses project_kb from .kbcontext
+
+# Explicit KB source
+mx publish --kb-root ./kb -o docs    # Specify KB directory
+mx publish --global -o docs          # Use global MEMEX_KB_ROOT
+
+# Base URL for subdirectory hosting
+mx publish -o docs --base-url /repo-name   # For username.github.io/repo-name
 ```
+
+**When to use --base-url:**
+
+If your site is hosted at a subdirectory (e.g., `username.github.io/my-repo`), you need `--base-url /my-repo` so all links work correctly. Without it, links will point to the root domain and 404.
+
+**Recommended: Configure in .kbcontext:**
+
+```yaml
+# .kbcontext
+project_kb: ./kb              # Project's documentation folder
+publish_base_url: /my-repo    # Auto-applied to mx publish
+```
+
+Then just run `mx publish -o docs` - both settings are applied automatically.
+
+**Options:**
+- `--kb-root, -k`: KB source directory
+- `--global`: Use global MEMEX_KB_ROOT
+- `--output, -o`: Output directory (default: _site)
+- `--base-url, -b`: URL prefix for links
+- `--title, -t`: Site title
+- `--index, -i`: Entry to use as landing page
+- `--include-drafts`: Include draft entries
+- `--include-archived`: Include archived entries
 
 ## Maintenance
 
@@ -243,12 +281,13 @@ mx reindex
 
 ### mx prime
 
-Output agent workflow context (for hooks).
+Output agent workflow context (for Claude Code hooks).
 
 ```bash
 mx prime                    # Auto-detect mode
 mx prime --full             # Force full output
-mx prime --mcp              # Force minimal output
+mx prime --compact          # Force minimal output (for PreCompact hooks)
+mx prime --project=myapp    # Include recent entries for project
 ```
 
 ## Global Options
