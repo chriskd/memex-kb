@@ -3667,6 +3667,11 @@ def beads_projects(as_json: bool):
     help="Site title for header and page titles (default: Memex)",
 )
 @click.option(
+    "--index", "-i", "index_entry",
+    default=None,
+    help="Path to entry to use as landing page (e.g., guides/welcome)",
+)
+@click.option(
     "--include-drafts",
     is_flag=True,
     help="Include draft entries in output",
@@ -3686,6 +3691,7 @@ def publish(
     output_dir: str,
     base_url: str,
     title: str,
+    index_entry: str | None,
     include_drafts: bool,
     include_archived: bool,
     no_clean: bool,
@@ -3705,6 +3711,7 @@ def publish(
       mx publish -o docs                   # Build to docs/ for GitHub Pages
       mx publish --base-url /my-kb         # Set base URL for subdirectory hosting
       mx publish --title "My Docs"         # Custom site title
+      mx publish --index guides/welcome    # Use entry as landing page
       mx publish --include-drafts          # Include draft entries
     """
     from .core import publish as core_publish
@@ -3714,6 +3721,7 @@ def publish(
             output_dir=output_dir,
             base_url=base_url,
             site_title=title,
+            index_entry=index_entry,
             include_drafts=include_drafts,
             include_archived=include_archived,
             clean=not no_clean,
