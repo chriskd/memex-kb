@@ -182,6 +182,37 @@ class TestTemplates:
         html = render_entry_page(mock_entry, base_url="/my-kb")
         assert 'href="/my-kb/assets/style.css"' in html
 
+    def test_render_entry_page_sidebar_base_url(self, mock_entry):
+        """Base URL is applied to sidebar entry links."""
+        # Create a second entry for the sidebar
+        sidebar_entry = MagicMock()
+        sidebar_entry.title = "Sidebar Entry"
+        sidebar_entry.path = "folder/sidebar-entry"
+        sidebar_entry.tags = ["test"]
+        sidebar_entry.metadata = MagicMock()
+        sidebar_entry.metadata.created = date(2024, 1, 14)
+
+        html = render_entry_page(
+            mock_entry,
+            base_url="/focusgroup",
+            all_entries=[mock_entry, sidebar_entry],
+        )
+
+        # Sidebar links should include base_url
+        assert 'href="/focusgroup/folder/sidebar-entry.html"' in html
+        assert 'href="/focusgroup/test/entry.html"' in html
+
+    def test_render_index_page_sidebar_base_url(self, mock_entry):
+        """Index page sidebar links include base URL."""
+        html = render_index_page(
+            [mock_entry],
+            {"test": ["test/entry"]},
+            base_url="/my-kb",
+        )
+
+        # Sidebar links should include base_url
+        assert 'href="/my-kb/test/entry.html"' in html
+
     def test_render_index_page_structure(self, mock_entry):
         """Index page has expected sections."""
         html = render_index_page([mock_entry], {"test": ["test/entry"]}, base_url="")

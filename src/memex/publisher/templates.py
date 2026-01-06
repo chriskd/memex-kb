@@ -30,12 +30,13 @@ def _safe(html: str) -> str:
     return Markup(html)
 
 
-def _build_file_tree(entries: list["EntryData"], current_path: str = "") -> str:
+def _build_file_tree(entries: list["EntryData"], current_path: str = "", base_url: str = "") -> str:
     """Build HTML for the sidebar file tree navigation.
 
     Args:
         entries: All entry data
         current_path: Currently viewed entry path (for highlighting)
+        base_url: Base URL prefix for links (e.g., "/my-kb")
 
     Returns:
         HTML string for the tree structure
@@ -71,7 +72,7 @@ def _build_file_tree(entries: list["EntryData"], current_path: str = "") -> str:
             # Get just the filename part for display
             filename = entry.path.split("/")[-1]
             html_parts.append(f'''
-                    <a href="/{entry.path}.html" class="tree-item{active_class}">
+                    <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
                         <span class="tree-icon file">◇</span>
                         <span class="tree-label">{_escape_html(filename)}</span>
                     </a>''')
@@ -84,7 +85,7 @@ def _build_file_tree(entries: list["EntryData"], current_path: str = "") -> str:
     for entry in root_entries:
         active_class = ' active' if entry.path == current_path else ''
         html_parts.append(f'''
-            <a href="/{entry.path}.html" class="tree-item{active_class}">
+            <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
                 <span class="tree-icon file">◇</span>
                 <span class="tree-label">{_escape_html(entry.path)}</span>
             </a>''')
@@ -355,7 +356,7 @@ def render_entry_page(
     entries_dict = entries_dict or {}
 
     # Build sidebar
-    sidebar_html = _build_file_tree(all_entries, entry.path)
+    sidebar_html = _build_file_tree(all_entries, entry.path, base_url)
 
     # Build main content
     tmpl = env.from_string(ENTRY_TEMPLATE)
@@ -401,7 +402,7 @@ def render_index_page(
     env = _get_env()
 
     # Build sidebar
-    sidebar_html = _build_file_tree(entries)
+    sidebar_html = _build_file_tree(entries, base_url=base_url)
 
     # Sort entries by created date (newest first)
     recent_entries = sorted(
@@ -462,7 +463,7 @@ def render_tag_page(
     all_entries = all_entries or entries
 
     # Build sidebar
-    sidebar_html = _build_file_tree(all_entries)
+    sidebar_html = _build_file_tree(all_entries, base_url=base_url)
 
     # Sort entries alphabetically by title
     sorted_entries = sorted(entries, key=lambda e: e.title.lower())
@@ -505,7 +506,7 @@ def render_graph_page(base_url: str, all_entries: list["EntryData"] | None = Non
     all_entries = all_entries or []
 
     # Build sidebar
-    sidebar_html = _build_file_tree(all_entries)
+    sidebar_html = _build_file_tree(all_entries, base_url=base_url)
 
     # Full-page graph with D3.js force simulation
     main_html = """
