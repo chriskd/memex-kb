@@ -921,14 +921,21 @@ def init_kb(
 @click.option("--strict", is_flag=True, help="Return empty results instead of semantic fallbacks")
 @click.option("--terse", is_flag=True, help="Output paths only (one per line)")
 @click.option("--compact", is_flag=True, help="Output minimal JSON (short keys: p, t, s)")
+@click.option("--no-session", is_flag=True, help="Ignore session context for this search")
 @click.pass_context
 def search(
     ctx: click.Context,
     query: str, tags: str | None, mode: str, limit: int,
     content: bool, no_history: bool, as_json: bool, strict: bool,
-    terse: bool, compact: bool,
+    terse: bool, compact: bool, no_session: bool,
 ):
     """Search the knowledge base.
+
+    Session context (from 'mx session start') is applied automatically:
+    - Session tags are merged with --tags (union)
+    - Session project boosts matching entries
+
+    Use --no-session to ignore session context for a single search.
 
     \b
     Examples:
@@ -938,6 +945,7 @@ def search(
       mx search "config" --strict          # No semantic fallbacks
       mx search "deploy" --terse           # Paths only
       mx search "api" --compact            # Minimal JSON
+      mx search "api" --no-session         # Ignore session context
     """
     from .core import search as core_search
     from .errors import MemexError
@@ -947,7 +955,19 @@ def search(
     if mode == "semantic" and not semantic_deps_available():
         _handle_error(ctx, MemexError.semantic_search_unavailable())
 
+    # Parse CLI tags
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
+
+    # Apply session context (unless --no-session)
+    session_project = None
+    if not no_session:
+        from .session import get_session
+
+        session_ctx = get_session()
+        if not session_ctx.is_empty():
+            # Merge session tags with CLI tags (union)
+            tag_list = session_ctx.merge_tags(tag_list)
+            session_project = session_ctx.project
 
     result = run_async(core_search(
         query=query,
@@ -956,6 +976,7 @@ def search(
         tags=tag_list,
         include_content=content,
         strict=strict,
+        session_project=session_project,
     ))
 
     # Record search in history (unless --no-history flag is set)
@@ -2759,6 +2780,186 @@ def context_validate(as_json: bool):
                 click.echo(f"  ⚠ {warning}")
         else:
             click.echo("✓ All paths are valid")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Command Group
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def session(ctx):
+    """Manage session search context.
+
+    Session context persists until explicitly cleared:
+    - tags: Filter all searches to entries with these tags
+    - project: Boost entries from this project in results
+
+    Unlike .kbcontext (per-directory), session is global and explicit.
+
+    \b
+    Examples:
+      mx session                    # Show current session
+      mx session start --tags=infra # Start filtering by tags
+      mx session set --project=api  # Set project boost
+      mx session clear              # Clear session context
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(session_show)
+
+
+@session.command("show")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def session_show(as_json: bool):
+    """Show the current session context.
+
+    \b
+    Examples:
+      mx session show
+      mx session show --json
+    """
+    from .session import get_session
+
+    session_ctx = get_session()
+
+    if as_json:
+        output(
+            {
+                "active": not session_ctx.is_empty(),
+                "tags": session_ctx.tags,
+                "project": session_ctx.project,
+            },
+            as_json=True,
+        )
+    else:
+        if session_ctx.is_empty():
+            click.echo("No active session context.")
+            click.echo("Use 'mx session start' to set filters.")
+        else:
+            click.echo("Session context:")
+            if session_ctx.tags:
+                click.echo(f"  Tags:    {', '.join(session_ctx.tags)}")
+            if session_ctx.project:
+                click.echo(f"  Project: {session_ctx.project}")
+
+
+@session.command("start")
+@click.option("--tags", "-t", help="Tags to filter by (comma-separated)")
+@click.option("--project", "-p", help="Project to boost in results")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def session_start(tags: str | None, project: str | None, as_json: bool):
+    """Start a new session with the given context.
+
+    Replaces any existing session context.
+
+    \b
+    Examples:
+      mx session start --tags=infra,docker
+      mx session start --project=api-service
+      mx session start --tags=python --project=memex
+    """
+    from .session import SessionContext, save_session
+
+    if not tags and not project:
+        click.echo("Error: At least one of --tags or --project required", err=True)
+        sys.exit(1)
+
+    tag_list = [t.strip() for t in tags.split(",")] if tags else []
+    session_ctx = SessionContext(tags=tag_list, project=project)
+    save_session(session_ctx)
+
+    if as_json:
+        output(
+            {
+                "action": "started",
+                "tags": session_ctx.tags,
+                "project": session_ctx.project,
+            },
+            as_json=True,
+        )
+    else:
+        click.echo("Session started:")
+        if session_ctx.tags:
+            click.echo(f"  Tags:    {', '.join(session_ctx.tags)}")
+        if session_ctx.project:
+            click.echo(f"  Project: {session_ctx.project}")
+
+
+@session.command("set")
+@click.option(
+    "--tags", "-t", help="Tags to filter by (comma-separated, replaces existing)"
+)
+@click.option("--add-tags", help="Tags to add (comma-separated)")
+@click.option("--project", "-p", help="Project to boost")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def session_set(
+    tags: str | None, add_tags: str | None, project: str | None, as_json: bool
+):
+    """Update the current session context.
+
+    Use --tags to replace all tags, --add-tags to append.
+    Use --project to set/change project.
+
+    \b
+    Examples:
+      mx session set --tags=docker          # Replace tags
+      mx session set --add-tags=kubernetes  # Add tag
+      mx session set --project=new-project  # Change project
+    """
+    from .session import get_session, save_session
+
+    session_ctx = get_session()
+
+    if tags is not None:
+        session_ctx.tags = [t.strip() for t in tags.split(",") if t.strip()]
+    if add_tags:
+        new_tags = [t.strip() for t in add_tags.split(",") if t.strip()]
+        session_ctx.tags = list(set(session_ctx.tags) | set(new_tags))
+    if project is not None:
+        session_ctx.project = project if project else None
+
+    save_session(session_ctx)
+
+    if as_json:
+        output(
+            {
+                "action": "updated",
+                "tags": session_ctx.tags,
+                "project": session_ctx.project,
+            },
+            as_json=True,
+        )
+    else:
+        click.echo("Session updated:")
+        if session_ctx.tags:
+            click.echo(f"  Tags:    {', '.join(session_ctx.tags)}")
+        if session_ctx.project:
+            click.echo(f"  Project: {session_ctx.project}")
+        if session_ctx.is_empty():
+            click.echo("  (no active context)")
+
+
+@session.command("clear")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def session_clear(as_json: bool):
+    """Clear the session context.
+
+    \b
+    Examples:
+      mx session clear
+    """
+    from .session import clear_session
+
+    cleared = clear_session()
+
+    if as_json:
+        output({"action": "cleared", "had_session": cleared}, as_json=True)
+    else:
+        if cleared:
+            click.echo("Session context cleared.")
+        else:
+            click.echo("No active session to clear.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

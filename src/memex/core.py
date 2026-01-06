@@ -837,6 +837,7 @@ async def search(
     include_content: bool = False,
     kb_context: KBContext | None = None,
     strict: bool = False,
+    session_project: str | None = None,
 ) -> SearchResponse:
     """Search the knowledge base.
 
@@ -851,6 +852,8 @@ async def search(
                     If not provided, auto-discovered from cwd.
         strict: If True, return empty results instead of semantic fallbacks.
                 Default False (show fallbacks with warning).
+        session_project: Optional session project for boosting (from session context).
+                         If provided, overrides auto-detected project context.
 
     Returns:
         SearchResponse with results and optional warnings.
@@ -858,6 +861,9 @@ async def search(
     searcher = get_searcher()
     # Auto-detect project context for boosting entries from current project
     project_context = await get_current_project_async()
+    # Session project overrides auto-detected project if set
+    if session_project:
+        project_context = session_project
     # Auto-discover KB context if not provided
     if kb_context is None:
         kb_context = get_kb_context()
