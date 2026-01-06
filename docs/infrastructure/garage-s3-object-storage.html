@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Garage S3 Object Storage - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/memex/assets/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="/memex/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="/memex/" class="nav-link active">Reader</a>
+                <a href="/memex/graph.html" class="nav-link">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="tree">Browse</button>
+                <button class="nav-tab" data-tab="recent">Recent</button>
+            </div>
+
+            <div class="sidebar-section" id="tree-section">
+                <div class="sidebar-header">Categories</div>
+                <div class="tree" id="tree">
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">best-practices</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/best-practices/ai-slop-antipatterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ai-slop-antipatterns</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">development</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/development/memex/markdown-it-py-ast-parser.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">markdown-it-py-ast-parser</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">devops</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/devops/voidlabs-cicd-automation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-cicd-automation</span>
+                    </a>
+                    <a href="/memex/devops/voidlabs-provisioning-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-provisioning-workflow</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">infrastructure</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/infrastructure/ansible-inventory-split-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ansible-inventory-split-guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/common-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">common-patterns</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/deployment-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">deployment-guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docker-cp-permission-patterns-in-dokploy</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-compose-deployment-lessons</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-container-management.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-container-management</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-network-recovery-after-vm-restart</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-python-cli-reference</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-service-naming-and-database-url</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-vm-crash-recovery-and-traefik-troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/garage-s3-object-storage.html" class="tree-item active">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">garage-s3-object-storage</span>
+                    </a>
+                    <a href="/memex/infrastructure/hyperion-proxmox-boot-failure-postmortem.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">hyperion-proxmox-boot-failure-postmortem</span>
+                    </a>
+                    <a href="/memex/infrastructure/memex-knowledge-base.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">memex-knowledge-base</span>
+                    </a>
+                    <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">omarchy-vm-setup-on-proxmox-with-gpu-passthrough</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-subscription-nag-removal.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-subscription-nag-removal</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-vm-filesystem-recovery-with-fsck</span>
+                    </a>
+                    <a href="/memex/infrastructure/sunshine-appsjson-presets-for-multi-device-resolution.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sunshine-appsjson-presets-for-multi-device-resolution</span>
+                    </a>
+                    <a href="/memex/infrastructure/sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough</span>
+                    </a>
+                    <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">virtiofs-limitations-and-troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-infrastructure-overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-infrastructure-overview</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-networking-and-dns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-networking-and-dns</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-storage-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-storage-architecture</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">projects</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/projects/cli-tool-path-lookup-behavior.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">cli-tool-path-lookup-behavior</span>
+                    </a>
+                    <a href="/memex/projects/concordance-datopt-import-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">concordance-datopt-import-patterns</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-app-ios-and-macos-voice-categorization-app</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-implementation-progress.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-implementation-progress</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-inbox-pattern-feature-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-inbox-pattern-feature-plan</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-5-core-ui-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-5-core-ui-implementation</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-6-cloud-providers-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-6-cloud-providers-implementation</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-7-8-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-7-8-implementation</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-deployment-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-deployment-architecture</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-local-development-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-local-development-workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-naming-conventions.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-naming-conventions</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/dataset-ingestion-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dataset-ingestion-workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-production-database-access.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-production-database-access</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-project</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">overview</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/status-and-recovery-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">status-and-recovery-plan</span>
+                    </a>
+                    <a href="/memex/projects/focusgroup-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">focusgroup-project</span>
+                    </a>
+                    <a href="/memex/projects/sightline-5ightline.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sightline-5ightline</span>
+                    </a>
+                    <a href="/memex/projects/test-beads-full-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">test-beads-full-project</span>
+                    </a>
+                    <a href="/memex/projects/test-beads-single-issue.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">test-beads-single-issue</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape-social-media-astroturfing-analysis-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">tg-scrape-social-media-astroturfing-analysis-project</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">tg-scrape-social-media-astroturfing-analysis</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">tooling</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/tooling/beads-issue-tracker.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">beads-issue-tracker</span>
+                    </a>
+                    <a href="/memex/tooling/claude-code-local-plugin-hooks-bug.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">claude-code-local-plugin-hooks-bug</span>
+                    </a>
+                    <a href="/memex/tooling/project-template-sync-pbs.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">project-template-sync-pbs</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-agent-messaging.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail-agent-messaging</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-lightweight-agent-mail-cli.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail-lightweight-agent-mail-cli</span>
+                    </a>
+                    <a href="/memex/tooling/voidlabs-devtools.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-devtools</span>
+                    </a>
+                </div>
+            </div></div>
+            </div>
+
+            <div class="sidebar-section" id="recent-section" style="display: none;">
+                <div class="sidebar-header">Recent Updates</div>
+                <div class="tree" id="recent-list">
+            <a href="/memex/projects/cli-tool-path-lookup-behavior.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">CLI Tool PATH Lookup Behavior</span>
+            </a>
+            <a href="/memex/projects/dictaphone-inbox-pattern-feature-plan.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Inbox Pattern Feature Plan</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-7-8-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 7-8 Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-5-core-ui-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 5 - Core UI Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-6-cloud-providers-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 6 - Cloud Providers Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone App - iOS and macOS Voice Categorization App</span>
+            </a>
+            <a href="/memex/projects/dictaphone-implementation-progress.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone - Implementation Progress</span>
+            </a>
+            <a href="/memex/projects/focusgroup-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Focusgroup Project</span>
+            </a>
+            <a href="/memex/infrastructure/sunshine-appsjson-presets-for-multi-device-resolution.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Sunshine Apps.json Presets for Multi-Device Resolution</span>
+            </a>
+            <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Omarchy VM Setup on Proxmox with GPU Passthrough</span>
+            </a>
+            <a href="/memex/infrastructure/sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Sunshine Streaming Setup on Omarchy VM with NVIDIA GPU Passthrough</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-subscription-nag-removal.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox Subscription Nag Removal</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox GPU Passthrough on AMD - Kernel 6.8+ IOMMU Issue</span>
+            </a>
+            <a href="/memex/infrastructure/hyperion-proxmox-boot-failure-postmortem.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Hyperion Proxmox Installation Boot Failure Postmortem</span>
+            </a>
+            <a href="/memex/projects/test-beads-full-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Test Beads Integration - Full Project</span>
+            </a>
+            <a href="/memex/projects/test-beads-single-issue.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Test Beads Integration - Single Issue</span>
+            </a>
+            <a href="/memex/infrastructure/ansible-inventory-split-guide.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Ansible Inventory Split Guide</span>
+            </a>
+            <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">TG Scrape - Social Media Astroturfing Analysis</span>
+            </a>
+            <a href="/memex/best-practices/ai-slop-antipatterns.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">AI Slop Antipatterns</span>
+            </a>
+            <a href="/memex/tooling/claude-code-local-plugin-hooks-bug.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Claude Code Local Plugin Hooks Bug</span>
+            </a></div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="https://github.com/aaronsb/memex" target="_blank" rel="noopener">Powered by memex</a>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            
+<div class="reader-container">
+    <article class="entry">
+        <header class="entry-header">
+            <div class="entry-path">infrastructure/garage-s3-object-storage</div>
+            <h1 class="entry-title">Garage S3 Object Storage</h1>
+            <div class="entry-meta">
+                
+                <div class="entry-meta-item">Created: <span>2025-12-22 00:00:00</span></div>
+                
+            </div>
+            
+            <div class="entry-tags">
+                
+                <a href="/memex/tags/infrastructure.html" class="tag">infrastructure</a>
+                
+                <a href="/memex/tags/s3.html" class="tag">s3</a>
+                
+                <a href="/memex/tags/garage.html" class="tag">garage</a>
+                
+                <a href="/memex/tags/object-storage.html" class="tag">object-storage</a>
+                
+                <a href="/memex/tags/dokploy.html" class="tag">dokploy</a>
+                
+            </div>
+            
+        </header>
+        <div class="entry-content">
+            <h1>Garage S3 Object Storage</h1>
+<p>Garage is a self-hosted, S3-compatible distributed object storage system running on dokploy.voidlabs.cc.</p>
+<h2>Instances</h2>
+<table>
+<thead>
+<tr>
+<th>Instance</th>
+<th>Endpoint</th>
+<th>Storage</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>garage-fast</td>
+<td><code>https://garage-fast.voidlabs.cc</code></td>
+<td>NVMe pool</td>
+<td>High-performance workloads</td>
+</tr>
+<tr>
+<td>garage-slow</td>
+<td><code>https://garage-slow.voidlabs.cc</code></td>
+<td>HDD pool</td>
+<td>Archival/cold storage</td>
+</tr>
+</tbody>
+</table>
+<p>Both are managed via Dokploy with WebUI access available.</p>
+<h2>Architecture</h2>
+<p>Garage separates concerns into two API layers:</p>
+<ol>
+<li><strong>Admin API</strong> - Bucket/key management (requires admin token or CLI access)</li>
+<li><strong>S3 API</strong> - Object operations (uses standard S3 access keys)</li>
+</ol>
+<h3>Storage Backend Requirements</h3>
+<p>Garage requires <strong>full POSIX filesystem semantics</strong> for its data directory:</p>
+<ul>
+<li>Extended attributes (xattrs) support</li>
+<li>Proper file locking</li>
+<li>Complete ioctl support</li>
+</ul>
+<p><strong>Important:</strong> VirtioFS does not support these features and will fail with <code>IO error: Not supported (os error 95)</code>. Use NFS mounts instead.</p>
+<p>See <a href="virtiofs-limitations-and-troubleshooting.html" class="wikilink">VirtioFS Limitations and Troubleshooting</a> for details.</p>
+<h2>AWS CLI Configuration</h2>
+<pre><code class="language-bash"># Configure a profile for Garage
+aws configure set aws_access_key_id &quot;YOUR_ACCESS_KEY&quot; --profile garage
+aws configure set aws_secret_access_key &quot;YOUR_SECRET_KEY&quot; --profile garage
+aws configure set region &quot;garage&quot; --profile garage
+
+# Use with --endpoint-url
+aws --profile garage --endpoint-url https://garage-fast.voidlabs.cc s3 ls
+</code></pre>
+<h2>Bucket Management (Admin Operations)</h2>
+<p>Access keys cannot create buckets. Use the Garage CLI inside the container:</p>
+<pre><code class="language-bash"># Create bucket
+ssh dokploy.voidlabs.cc &quot;docker exec voidlabssharedservices-garagewithui-vo0uq2-garage-fast-1 \
+  /garage bucket create my-bucket&quot;
+
+# Grant access to a key
+ssh dokploy.voidlabs.cc &quot;docker exec voidlabssharedservices-garagewithui-vo0uq2-garage-fast-1 \
+  /garage bucket allow --read --write my-bucket --key GK...&quot;
+
+# List buckets
+ssh dokploy.voidlabs.cc &quot;docker exec voidlabssharedservices-garagewithui-vo0uq2-garage-fast-1 \
+  /garage bucket list&quot;
+
+# Show bucket info
+ssh dokploy.voidlabs.cc &quot;docker exec voidlabssharedservices-garagewithui-vo0uq2-garage-fast-1 \
+  /garage bucket info my-bucket&quot;
+</code></pre>
+<h2>Object Operations (S3 API)</h2>
+<p>Standard S3 operations work with the endpoint URL:</p>
+<pre><code class="language-bash"># Upload file
+aws --profile garage --endpoint-url https://garage-fast.voidlabs.cc \
+  s3 cp myfile.pdf s3://my-bucket/
+
+# Sync directory
+aws --profile garage --endpoint-url https://garage-fast.voidlabs.cc \
+  s3 sync ./local-dir s3://my-bucket/prefix/
+
+# List objects
+aws --profile garage --endpoint-url https://garage-fast.voidlabs.cc \
+  s3 ls s3://my-bucket/
+</code></pre>
+<h2>Python/boto3 Usage</h2>
+<pre><code class="language-python">import boto3
+
+s3 = boto3.client(
+    &quot;s3&quot;,
+    endpoint_url=&quot;https://garage-fast.voidlabs.cc&quot;,
+    aws_access_key_id=&quot;GK...&quot;,
+    aws_secret_access_key=&quot;...&quot;,
+    region_name=&quot;garage&quot;
+)
+
+# Upload
+s3.upload_file(&quot;local.pdf&quot;, &quot;my-bucket&quot;, &quot;remote.pdf&quot;)
+
+# Download
+s3.download_file(&quot;my-bucket&quot;, &quot;remote.pdf&quot;, &quot;local.pdf&quot;)
+
+# Generate presigned URL (for web access)
+url = s3.generate_presigned_url(
+    &quot;get_object&quot;,
+    Params={&quot;Bucket&quot;: &quot;my-bucket&quot;, &quot;Key&quot;: &quot;file.pdf&quot;},
+    ExpiresIn=3600
+)
+</code></pre>
+<h2>Container Names</h2>
+<p>For admin operations, the relevant containers on dokploy are:</p>
+<ul>
+<li><code>voidlabssharedservices-garagewithui-vo0uq2-garage-fast-1</code> - Fast tier Garage</li>
+<li><code>voidlabssharedservices-garagewithui-vo0uq2-garage-slow-1</code> - Slow tier Garage</li>
+<li><code>voidlabssharedservices-garagewithui-vo0uq2-garage-webui-fast-1</code> - Fast WebUI</li>
+<li><code>voidlabssharedservices-garagewithui-vo0uq2-garage-webui-slow-1</code> - Slow WebUI</li>
+</ul>
+<h3>Volume Configuration</h3>
+<p>Garage data directories must be on <strong>NFS mounts</strong>, not virtiofs:</p>
+<pre><code class="language-yaml"># docker-compose.yml
+services:
+  garage-fast:
+    volumes:
+      # Use NFS mount path
+      - /mnt/fast-nfs/garage/data:/data
+      # NOT virtiofs path like /srv/fast/garage/data
+</code></pre>
+<p><strong>Setup NFS mount on dokploy VM:</strong></p>
+<pre><code class="language-bash"># Mount fast tier storage
+sudo mount -t nfs 192.168.50.2:/srv/fast-nfs /mnt/fast-nfs \
+  -o rw,soft,intr,timeo=30
+
+# Mount slow tier storage
+sudo mount -t nfs 192.168.50.2:/srv/slow-nfs /mnt/slow-nfs \
+  -o rw,soft,intr,timeo=30
+</code></pre>
+<p>Make permanent by adding to <code>/etc/fstab</code> or configuring via <code>infrastructure.yml</code>.</p>
+<h2>Existing Buckets</h2>
+<table>
+<thead>
+<tr>
+<th>Bucket</th>
+<th>Purpose</th>
+<th>Access Key</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>efta-images</code></td>
+<td>EFTA case document images</td>
+<td>docviewer key</td>
+</tr>
+</tbody>
+</table>
+<h2>See Also</h2>
+<ul>
+<li><a href="voidlabs-infrastructure-overview.html" class="wikilink">Voidlabs Infrastructure Overview</a></li>
+<li><a href="voidlabs-storage-architecture.html" class="wikilink">Voidlabs Storage Architecture</a></li>
+<li><a href="virtiofs-limitations-and-troubleshooting.html" class="wikilink">VirtioFS Limitations and Troubleshooting</a></li>
+<li><a href="dokploy/dokploy-container-management.html" class="wikilink">Dokploy Container Management</a></li>
+</ul>
+<h2>### Storage Backend Requirements</h2>
+<h3>Storage Backend Requirements</h3>
+<p>Garage requires <strong>full POSIX filesystem semantics</strong> for its data directory:</p>
+<ul>
+<li>Extended attributes (xattrs) support</li>
+<li>Proper file locking</li>
+<li>Complete ioctl support</li>
+</ul>
+<p><strong>CRITICAL:</strong> VirtioFS does not support these features and will fail with:</p>
+<ul>
+<li><code>IO error: Not supported (os error 95)</code> on xattr operations</li>
+<li><code>Could not find expected marker file 'garage-marker'</code> after container restart</li>
+</ul>
+<p><strong>Always use NFS mounts</strong>, not virtiofs:</p>
+<table>
+<thead>
+<tr>
+<th>Mount Type</th>
+<th>Path Pattern</th>
+<th>Works?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NFS</td>
+<td><code>/mnt/fast-nfs/...</code></td>
+<td>✅ Yes</td>
+</tr>
+<tr>
+<td>VirtioFS</td>
+<td><code>/mnt/fast/...</code></td>
+<td>❌ No</td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="virtiofs-limitations-and-troubleshooting.html" class="wikilink">VirtioFS Limitations and Troubleshooting</a> for details.</p>
+<h2>### Volume Configuration</h2>
+<h3>Volume Configuration</h3>
+<p>Garage data directories <strong>MUST</strong> be on NFS mounts, not virtiofs:</p>
+<pre><code class="language-yaml"># docker-compose.yml
+services:
+  garage-fast:
+    volumes:
+      # ✅ CORRECT: Use NFS mount path
+      - /mnt/fast-nfs/dokploy.voidlabs.cc/voidlabs-shared-services/garage/data:/var/lib/garage/data
+      # ❌ WRONG: VirtioFS path will fail
+      # - /mnt/fast/dokploy.voidlabs.cc/.../garage/data:/var/lib/garage/data
+</code></pre>
+<p><strong>Verify NFS is mounted on dokploy VM:</strong></p>
+<pre><code class="language-bash"># Check if NFS mounts exist
+ssh -i ~/.ssh/id_ed25519-ansible chris@dokploy.voidlabs.cc &quot;mount | grep nfs&quot;
+
+# Mount if missing
+ssh -i ~/.ssh/id_ed25519-ansible chris@dokploy.voidlabs.cc &quot;
+  sudo mount -t nfs 192.168.50.2:/srv/fast-nfs /mnt/fast-nfs -o rw,soft,intr,timeo=30
+  sudo mount -t nfs 192.168.50.2:/srv/slow-nfs /mnt/slow-nfs -o rw,soft,intr,timeo=30
+&quot;
+</code></pre>
+<p>NFS mounts should be persistent in <code>/etc/fstab</code>:</p>
+<pre><code>192.168.50.2:/srv/fast-nfs /mnt/fast-nfs nfs rw,soft,intr,timeo=30 0 0
+192.168.50.2:/srv/slow-nfs /mnt/slow-nfs nfs rw,soft,intr,timeo=30 0 0
+</code></pre>
+<h2>## Existing Buckets</h2>
+<h2>Existing Buckets</h2>
+<table>
+<thead>
+<tr>
+<th>Bucket</th>
+<th>Purpose</th>
+<th>Access Keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>efta-images</code></td>
+<td>EFTA/DOJ document images</td>
+<td><code>docviewer</code> (dev), <code>docviewer-prod</code> (production)</td>
+</tr>
+</tbody>
+</table>
+<h3>Key Details</h3>
+<table>
+<thead>
+<tr>
+<th>Key Name</th>
+<th>Key ID</th>
+<th>Buckets</th>
+<th>Environment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docviewer</code></td>
+<td><code>GKfdbcb1fcd0f2f1e7c36479e8</code></td>
+<td>efta-images, docviewer-images</td>
+<td>Development</td>
+</tr>
+<tr>
+<td><code>docviewer-prod</code></td>
+<td><code>GK812ac25f8b505735494080f2</code></td>
+<td>efta-images</td>
+<td>Production (Dokploy)</td>
+</tr>
+</tbody>
+</table>
+
+        </div>
+    </article>
+</div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            
+        <div class="panel-section">
+            <div class="panel-header">Outgoing Links</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/memex/infrastructure/dokploy/dokploy-container-management.html">
+                        <div class="link-title">Dokploy Container Management</div>
+                        <div class="link-path">infrastructure/dokploy/dokploy-container-management</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html">
+                        <div class="link-title">VirtioFS Limitations and Troubleshooting</div>
+                        <div class="link-path">infrastructure/virtiofs-limitations-and-troubleshooting</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/infrastructure/voidlabs-infrastructure-overview.html">
+                        <div class="link-title">Voidlabs Infrastructure Overview</div>
+                        <div class="link-path">infrastructure/voidlabs-infrastructure-overview</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/infrastructure/voidlabs-storage-architecture.html">
+                        <div class="link-title">Voidlabs Storage Architecture</div>
+                        <div class="link-path">infrastructure/voidlabs-storage-architecture</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="panel-section">
+            <div class="panel-header">Backlinks</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/memex/infrastructure/dokploy/dokploy-container-management.html">
+                        <div class="link-title">Dokploy Container Management</div>
+                        <div class="link-path">infrastructure/dokploy/dokploy-container-management</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html">
+                        <div class="link-title">VirtioFS Limitations and Troubleshooting</div>
+                        <div class="link-path">infrastructure/virtiofs-limitations-and-troubleshooting</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/infrastructure/voidlabs-storage-architecture.html">
+                        <div class="link-title">Voidlabs Storage Architecture</div>
+                        <div class="link-path">infrastructure/voidlabs-storage-architecture</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/projects/docviewer-deployment-architecture.html">
+                        <div class="link-title">DocViewer Deployment Architecture</div>
+                        <div class="link-path">projects/docviewer-deployment-architecture</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/projects/docviewer/dataset-ingestion-workflow.html">
+                        <div class="link-title">DocViewer Dataset Ingestion Workflow</div>
+                        <div class="link-path">projects/docviewer/dataset-ingestion-workflow</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/projects/docviewer/docviewer-project.html">
+                        <div class="link-title">DocViewer Project</div>
+                        <div class="link-path">projects/docviewer/docviewer-project</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/projects/docviewer/status-and-recovery-plan.html">
+                        <div class="link-title">DocViewer Project Status &amp; Recovery Plan</div>
+                        <div class="link-path">projects/docviewer/status-and-recovery-plan</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        </aside>
+    </div>
+
+    <script>window.BASE_URL = "/memex";</script>
+    <script src="/memex/assets/search.js"></script>
+    <script src="/memex/assets/sidebar.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+</body>
+</html>

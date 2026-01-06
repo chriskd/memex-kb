@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sunshine Streaming Setup on Omarchy VM with NVIDIA GPU Passthrough - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/memex/assets/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="/memex/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="/memex/" class="nav-link active">Reader</a>
+                <a href="/memex/graph.html" class="nav-link">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="tree">Browse</button>
+                <button class="nav-tab" data-tab="recent">Recent</button>
+            </div>
+
+            <div class="sidebar-section" id="tree-section">
+                <div class="sidebar-header">Categories</div>
+                <div class="tree" id="tree">
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">best-practices</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/best-practices/ai-slop-antipatterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ai-slop-antipatterns</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">development</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/development/memex/markdown-it-py-ast-parser.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">markdown-it-py-ast-parser</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">devops</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/devops/voidlabs-cicd-automation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-cicd-automation</span>
+                    </a>
+                    <a href="/memex/devops/voidlabs-provisioning-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-provisioning-workflow</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">infrastructure</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/infrastructure/ansible-inventory-split-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ansible-inventory-split-guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/common-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">common-patterns</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/deployment-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">deployment-guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docker-cp-permission-patterns-in-dokploy</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-compose-deployment-lessons</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-container-management.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-container-management</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-network-recovery-after-vm-restart</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-python-cli-reference</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-service-naming-and-database-url</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-vm-crash-recovery-and-traefik-troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/garage-s3-object-storage.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">garage-s3-object-storage</span>
+                    </a>
+                    <a href="/memex/infrastructure/hyperion-proxmox-boot-failure-postmortem.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">hyperion-proxmox-boot-failure-postmortem</span>
+                    </a>
+                    <a href="/memex/infrastructure/memex-knowledge-base.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">memex-knowledge-base</span>
+                    </a>
+                    <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">omarchy-vm-setup-on-proxmox-with-gpu-passthrough</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-subscription-nag-removal.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-subscription-nag-removal</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-vm-filesystem-recovery-with-fsck</span>
+                    </a>
+                    <a href="/memex/infrastructure/sunshine-appsjson-presets-for-multi-device-resolution.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sunshine-appsjson-presets-for-multi-device-resolution</span>
+                    </a>
+                    <a href="/memex/infrastructure/sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough.html" class="tree-item active">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough</span>
+                    </a>
+                    <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">virtiofs-limitations-and-troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-infrastructure-overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-infrastructure-overview</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-networking-and-dns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-networking-and-dns</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-storage-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-storage-architecture</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">projects</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/projects/cli-tool-path-lookup-behavior.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">cli-tool-path-lookup-behavior</span>
+                    </a>
+                    <a href="/memex/projects/concordance-datopt-import-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">concordance-datopt-import-patterns</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-app-ios-and-macos-voice-categorization-app</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-implementation-progress.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-implementation-progress</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-inbox-pattern-feature-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-inbox-pattern-feature-plan</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-5-core-ui-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-5-core-ui-implementation</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-6-cloud-providers-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-6-cloud-providers-implementation</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-7-8-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-7-8-implementation</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-deployment-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-deployment-architecture</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-local-development-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-local-development-workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-naming-conventions.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-naming-conventions</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/dataset-ingestion-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dataset-ingestion-workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-production-database-access.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-production-database-access</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-project</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">overview</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/status-and-recovery-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">status-and-recovery-plan</span>
+                    </a>
+                    <a href="/memex/projects/focusgroup-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">focusgroup-project</span>
+                    </a>
+                    <a href="/memex/projects/sightline-5ightline.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sightline-5ightline</span>
+                    </a>
+                    <a href="/memex/projects/test-beads-full-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">test-beads-full-project</span>
+                    </a>
+                    <a href="/memex/projects/test-beads-single-issue.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">test-beads-single-issue</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape-social-media-astroturfing-analysis-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">tg-scrape-social-media-astroturfing-analysis-project</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">tg-scrape-social-media-astroturfing-analysis</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">tooling</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/tooling/beads-issue-tracker.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">beads-issue-tracker</span>
+                    </a>
+                    <a href="/memex/tooling/claude-code-local-plugin-hooks-bug.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">claude-code-local-plugin-hooks-bug</span>
+                    </a>
+                    <a href="/memex/tooling/project-template-sync-pbs.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">project-template-sync-pbs</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-agent-messaging.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail-agent-messaging</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-lightweight-agent-mail-cli.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail-lightweight-agent-mail-cli</span>
+                    </a>
+                    <a href="/memex/tooling/voidlabs-devtools.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-devtools</span>
+                    </a>
+                </div>
+            </div></div>
+            </div>
+
+            <div class="sidebar-section" id="recent-section" style="display: none;">
+                <div class="sidebar-header">Recent Updates</div>
+                <div class="tree" id="recent-list">
+            <a href="/memex/projects/cli-tool-path-lookup-behavior.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">CLI Tool PATH Lookup Behavior</span>
+            </a>
+            <a href="/memex/projects/dictaphone-inbox-pattern-feature-plan.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Inbox Pattern Feature Plan</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-7-8-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 7-8 Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-5-core-ui-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 5 - Core UI Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-6-cloud-providers-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 6 - Cloud Providers Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone App - iOS and macOS Voice Categorization App</span>
+            </a>
+            <a href="/memex/projects/dictaphone-implementation-progress.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone - Implementation Progress</span>
+            </a>
+            <a href="/memex/projects/focusgroup-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Focusgroup Project</span>
+            </a>
+            <a href="/memex/infrastructure/sunshine-appsjson-presets-for-multi-device-resolution.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Sunshine Apps.json Presets for Multi-Device Resolution</span>
+            </a>
+            <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Omarchy VM Setup on Proxmox with GPU Passthrough</span>
+            </a>
+            <a href="/memex/infrastructure/sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough.html" class="tree-item active">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Sunshine Streaming Setup on Omarchy VM with NVIDIA GPU Passthrough</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-subscription-nag-removal.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox Subscription Nag Removal</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox GPU Passthrough on AMD - Kernel 6.8+ IOMMU Issue</span>
+            </a>
+            <a href="/memex/infrastructure/hyperion-proxmox-boot-failure-postmortem.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Hyperion Proxmox Installation Boot Failure Postmortem</span>
+            </a>
+            <a href="/memex/projects/test-beads-full-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Test Beads Integration - Full Project</span>
+            </a>
+            <a href="/memex/projects/test-beads-single-issue.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Test Beads Integration - Single Issue</span>
+            </a>
+            <a href="/memex/infrastructure/ansible-inventory-split-guide.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Ansible Inventory Split Guide</span>
+            </a>
+            <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">TG Scrape - Social Media Astroturfing Analysis</span>
+            </a>
+            <a href="/memex/best-practices/ai-slop-antipatterns.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">AI Slop Antipatterns</span>
+            </a>
+            <a href="/memex/tooling/claude-code-local-plugin-hooks-bug.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Claude Code Local Plugin Hooks Bug</span>
+            </a></div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="https://github.com/aaronsb/memex" target="_blank" rel="noopener">Powered by memex</a>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            
+<div class="reader-container">
+    <article class="entry">
+        <header class="entry-header">
+            <div class="entry-path">infrastructure/sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough</div>
+            <h1 class="entry-title">Sunshine Streaming Setup on Omarchy VM with NVIDIA GPU Passthrough</h1>
+            <div class="entry-meta">
+                
+                <div class="entry-meta-item">Created: <span>2026-01-03 00:00:00</span></div>
+                
+            </div>
+            
+            <div class="entry-tags">
+                
+                <a href="/memex/tags/sunshine.html" class="tag">sunshine</a>
+                
+                <a href="/memex/tags/moonlight.html" class="tag">moonlight</a>
+                
+                <a href="/memex/tags/nvidia.html" class="tag">nvidia</a>
+                
+                <a href="/memex/tags/gpu-passthrough.html" class="tag">gpu-passthrough</a>
+                
+                <a href="/memex/tags/proxmox.html" class="tag">proxmox</a>
+                
+                <a href="/memex/tags/omarchy.html" class="tag">omarchy</a>
+                
+                <a href="/memex/tags/streaming.html" class="tag">streaming</a>
+                
+                <a href="/memex/tags/wayland.html" class="tag">wayland</a>
+                
+                <a href="/memex/tags/hyprland.html" class="tag">hyprland</a>
+                
+                <a href="/memex/tags/headless.html" class="tag">headless</a>
+                
+            </div>
+            
+        </header>
+        <div class="entry-content">
+            <h1>Sunshine Streaming Setup on Omarchy VM with NVIDIA GPU Passthrough</h1>
+<h2>Overview</h2>
+<p>Setting up Sunshine game streaming on an Omarchy (Arch Linux) VM with NVIDIA GPU passthrough requires careful configuration of multiple components. This guide documents the complete setup process and troubleshooting steps.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li>Proxmox VE host with NVIDIA GPU passed through to VM</li>
+<li>Omarchy/Arch Linux VM with LUKS encryption</li>
+<li>NVIDIA drivers installed in the VM</li>
+<li>Physical monitors connected to the passed-through GPU (or headless setup)</li>
+</ul>
+<h2>Key Configuration Files</h2>
+<h3>1. Proxmox VM Configuration</h3>
+<p>For web console access during LUKS decryption:</p>
+<pre><code>vga: std
+hostpci0: 01:00.0,pcie=1,rombar=0
+hostpci1: 01:00.1,pcie=1
+</code></pre>
+<p><strong>Critical</strong>: Use <code>vga: std</code> (not virtio) and <code>rombar=0</code> on GPU to ensure UEFI uses the virtual display for boot/LUKS prompt, not the physical GPU.</p>
+<h3>2. Hyprland Configuration (~/.config/hypr/hyprland.conf)</h3>
+<p>Force NVIDIA GPU for rendering (critical for multi-GPU VMs):</p>
+<pre><code class="language-bash"># Force NVIDIA GPU for rendering
+env = WLR_DRM_DEVICES,/dev/dri/card0
+env = AQ_DRM_DEVICES,/dev/dri/card0
+</code></pre>
+<p>Without this, Hyprland may render to the virtual GPU (bochs) instead of NVIDIA, causing black screens on physical monitors and in Moonlight.</p>
+<h3>3. Sunshine Configuration (~/.config/sunshine/sunshine.conf)</h3>
+<p><strong>For headless/virtual display streaming (recommended):</strong></p>
+<pre><code class="language-ini"># Stream from headless display
+# Use wlr capture mode - required for headless displays
+capture = wlr
+# Monitor index - use startup script to auto-detect
+output_name = 2
+</code></pre>
+<p><strong>For physical monitor streaming:</strong></p>
+<pre><code class="language-ini"># Monitor selection (indices differ between capture modes!)
+# Check logs: journalctl --user -u sunshine | grep &quot;Monitor list&quot;
+output_name = 1
+capture = kms
+adapter_name = /dev/dri/card0
+</code></pre>
+<h3>4. Sunshine Systemd Override (~/.config/systemd/user/sunshine.service.d/wayland.conf)</h3>
+<pre><code class="language-ini">[Service]
+Environment=&quot;WAYLAND_DISPLAY=wayland-1&quot;
+Environment=&quot;XDG_RUNTIME_DIR=/run/user/1000&quot;
+</code></pre>
+<h2>Headless Display Setup (for Remote-Only Streaming)</h2>
+<p>For streaming without physical monitors attached, use Hyprland headless displays.</p>
+<h3>Hyprland Headless Configuration</h3>
+<p>Add to <code>~/.config/hypr/hyprland.conf</code>:</p>
+<pre><code class="language-bash"># Headless display config - cover multiple names since they increment per session
+# Resolution matches MacBook Air 15&quot; (2880x1864), scale 1.5 for readable UI
+monitor = HEADLESS-1,2880x1864@60,auto,1.5
+monitor = HEADLESS-2,2880x1864@60,auto,1.5
+monitor = HEADLESS-3,2880x1864@60,auto,1.5
+monitor = HEADLESS-4,2880x1864@60,auto,1.5
+monitor = HEADLESS-5,2880x1864@60,auto,1.5
+monitor = HEADLESS-6,2880x1864@60,auto,1.5
+monitor = HEADLESS-7,2880x1864@60,auto,1.5
+monitor = HEADLESS-8,2880x1864@60,auto,1.5
+monitor = HEADLESS-9,2880x1864@60,auto,1.5
+monitor = HEADLESS-10,2880x1864@60,auto,1.5
+
+# Make headless the primary display (workspace 1)
+workspace = 1, monitor:HEADLESS-1, default:true
+
+# Software cursor - required for cursor to appear in headless streams
+cursor:no_hardware_cursors = true
+
+# Auto-configure headless on startup
+exec-once = sleep 2 &amp;&amp; ~/.local/bin/configure-headless.sh
+</code></pre>
+<p><strong>Why multiple HEADLESS-N entries?</strong> Hyprland increments the headless number each time one is created during a session. On reboot, it resets to HEADLESS-1.</p>
+<h3>Startup Script (~/.local/bin/configure-headless.sh)</h3>
+<pre><code class="language-bash">#!/bin/bash
+# Configure headless monitor for Moonlight streaming
+sleep 3  # Wait for Hyprland to fully initialize
+
+export HYPRLAND_INSTANCE_SIGNATURE=$(ls /run/user/1000/hypr/ 2&gt;/dev/null)
+if [ -z &quot;$HYPRLAND_INSTANCE_SIGNATURE&quot; ]; then
+    exit 0
+fi
+
+# Create headless if none exists
+if ! hyprctl monitors -j | jq -e &quot;.[] | select(.name | startswith(\&quot;HEADLESS\&quot;))&quot; &gt; /dev/null 2&gt;&amp;1; then
+    hyprctl output create headless
+    sleep 1
+fi
+
+# Find headless monitor and get its index
+HEADLESS_INFO=$(hyprctl monitors -j | jq -r &quot;.[] | select(.name | startswith(\&quot;HEADLESS\&quot;)) | \&quot;\(.name) \(.id)\&quot;&quot; | head -1)
+HEADLESS_NAME=$(echo &quot;$HEADLESS_INFO&quot; | cut -d&quot; &quot; -f1)
+HEADLESS_ID=$(echo &quot;$HEADLESS_INFO&quot; | cut -d&quot; &quot; -f2)
+
+if [ -n &quot;$HEADLESS_NAME&quot; ]; then
+    # Configure resolution
+    hyprctl keyword monitor &quot;$HEADLESS_NAME,2880x1864@60,auto,1.5&quot;
+
+    # Update Sunshine config with correct index
+    cat &gt; ~/.config/sunshine/sunshine.conf &lt;&lt; SCONF
+# Stream from headless display (auto-configured)
+output_name = $HEADLESS_ID
+capture = wlr
+SCONF
+
+    # Restart Sunshine to pick up new config
+    systemctl --user restart sunshine
+fi
+</code></pre>
+<p>Make executable: <code>chmod +x ~/.local/bin/configure-headless.sh</code></p>
+<h3>Key Insights: wlr vs kms Capture</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>kms capture</th>
+<th>wlr capture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Physical monitors</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Headless displays</td>
+<td><strong>No</strong></td>
+<td><strong>Yes</strong></td>
+</tr>
+<tr>
+<td>Hardware cursor</td>
+<td>Yes</td>
+<td>No (use software cursor)</td>
+</tr>
+<tr>
+<td>Performance</td>
+<td>Better</td>
+<td>Good</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Critical</strong>: Use <code>capture = wlr</code> for headless displays. KMS capture cannot see headless outputs.</p>
+<h3>Monitor Index Instability</h3>
+<p>The monitor index order is <strong>not stable</strong> between reboots or even Sunshine restarts. The order depends on when displays are detected.</p>
+<p><strong>Solution</strong>: The startup script auto-detects the headless monitor index and updates <code>sunshine.conf</code> dynamically.</p>
+<h2>Required Packages</h2>
+<pre><code class="language-bash"># NVIDIA drivers and CUDA (for optimal NVENC performance)
+sudo pacman -S nvidia nvidia-utils cuda
+
+# Sunshine (from AUR)
+yay -S sunshine
+
+# jq for startup script
+sudo pacman -S jq
+</code></pre>
+<h2>Critical: Set Capabilities for Capture</h2>
+<p><strong>This step is required for Wayland/KMS capture and input to work:</strong></p>
+<pre><code class="language-bash"># Set cap_sys_admin on Sunshine binary
+sudo setcap cap_sys_admin+p $(readlink -f $(which sunshine))
+
+# Verify
+getcap $(which sunshine)
+# Should show: cap_sys_admin=p
+</code></pre>
+<p>Without this capability, capture will fail silently and input devices won't work.</p>
+<h2>Required Group Memberships</h2>
+<pre><code class="language-bash">sudo usermod -aG video,render,input chris
+</code></pre>
+<ul>
+<li><strong>video</strong>: Access to /dev/dri/card*</li>
+<li><strong>render</strong>: Access to /dev/dri/renderD*</li>
+<li><strong>input</strong>: Access to /dev/uinput for virtual keyboard/mouse</li>
+</ul>
+<p><strong>Note</strong>: Group changes require logout/login or reboot to take effect.</p>
+<h2>Firewall Ports (UFW)</h2>
+<pre><code class="language-bash">sudo ufw allow 47984/tcp  # RTSP
+sudo ufw allow 47989/tcp  # HTTPS/control
+sudo ufw allow 47990/tcp  # Web UI
+sudo ufw allow 47998:48010/tcp  # Video/audio
+sudo ufw allow 47998:48010/udp  # Video/audio
+sudo ufw allow 47999/udp  # Control
+sudo ufw allow 48000/udp  # Audio
+</code></pre>
+<h2>Troubleshooting</h2>
+<h3>Black Screen in Moonlight</h3>
+<ol>
+<li>
+<p><strong>Check if Hyprland is rendering to NVIDIA GPU</strong>:</p>
+<pre><code class="language-bash">hyprctl systeminfo | grep -i panel
+</code></pre>
+<p>All panels should show &quot;backend drm&quot;</p>
+</li>
+<li>
+<p><strong>Test screencopy</strong>:</p>
+<pre><code class="language-bash">WAYLAND_DISPLAY=wayland-1 grim -o DP-1 /tmp/test.png
+file /tmp/test.png  # Should show actual size, not tiny
+</code></pre>
+</li>
+<li>
+<p><strong>If screenshot is black (0 bytes content)</strong>: Add WLR_DRM_DEVICES to hyprland.conf and restart session</p>
+</li>
+<li>
+<p><strong>For headless</strong>: Ensure using <code>capture = wlr</code> not <code>capture = kms</code></p>
+</li>
+</ol>
+<h3>Headless Display Reverts to 1920x1080</h3>
+<p>Hyprland headless displays default to 1920x1080. If your custom resolution doesn't stick:</p>
+<ol>
+<li>Add config entries for ALL possible HEADLESS-N names (1-10)</li>
+<li>Run <code>hyprctl reload</code> after changes</li>
+<li>Use the startup script to auto-configure</li>
+</ol>
+<h3>Monitor Index Changes</h3>
+<p>If Sunshine streams from wrong monitor after restart:</p>
+<ol>
+<li>Check current order: <code>journalctl --user -u sunshine | grep &quot;Monitor list&quot;</code></li>
+<li>Update <code>output_name</code> in sunshine.conf</li>
+<li>Use the startup script for automatic detection</li>
+</ol>
+<h3>NVENC Not Working</h3>
+<ol>
+<li>Install CUDA: <code>sudo pacman -S cuda</code></li>
+<li>Check logs for &quot;NVENC without CUDA support&quot; warning</li>
+<li>Verify encoder detection: <code>journalctl --user -u sunshine | grep encoder</code></li>
+</ol>
+<h3>No Keyboard/Mouse Input</h3>
+<ol>
+<li>Verify input group: <code>groups $USER | grep input</code></li>
+<li>Check /dev/uinput permissions: <code>ls -la /dev/uinput</code></li>
+<li>Verify cap_sys_admin: <code>getcap $(which sunshine)</code></li>
+<li>Restart Sunshine after adding to input group</li>
+</ol>
+<h3>Cursor Not Visible (Headless)</h3>
+<p>Add to hyprland.conf:</p>
+<pre><code class="language-bash">cursor:no_hardware_cursors = true
+</code></pre>
+<p>Then reload: <code>hyprctl reload</code></p>
+<h3>Sunshine Not Starting After Reboot</h3>
+<p>Sunshine may start before Hyprland initializes all displays:</p>
+<pre><code class="language-bash">systemctl --user restart sunshine
+</code></pre>
+<h3>Network Issues After Reboot</h3>
+<p>Omarchy may lose default gateway:</p>
+<pre><code class="language-bash">sudo ip route add default via 192.168.50.1
+</code></pre>
+<h2>Verification Commands</h2>
+<pre><code class="language-bash"># Check NVIDIA driver
+nvidia-smi
+
+# Check Hyprland monitors (including headless)
+export HYPRLAND_INSTANCE_SIGNATURE=$(ls /run/user/1000/hypr/)
+hyprctl monitors
+
+# Check Sunshine status
+systemctl --user status sunshine
+
+# View Sunshine logs
+journalctl --user -u sunshine -f
+
+# Check what monitor Sunshine selected
+journalctl --user -u sunshine | grep &quot;Selected monitor&quot;
+
+# Test screenshot capture
+WAYLAND_DISPLAY=wayland-1 grim -o HEADLESS-1 /tmp/test.png
+</code></pre>
+<h2>Known Issues</h2>
+<ol>
+<li><strong>Cursor may not display</strong>: Use <code>cursor:no_hardware_cursors = true</code> for headless</li>
+<li><strong>Session restart required</strong>: After group changes or GPU config changes</li>
+<li><strong>LUKS prompt on wrong display</strong>: Without rombar=0, UEFI may use physical GPU</li>
+<li><strong>HEADLESS-N increments</strong>: Names increment during session, reset on reboot</li>
+<li><strong>Monitor index unstable</strong>: Use startup script for automatic detection</li>
+</ol>
+<h2>Related</h2>
+<ul>
+<li><a href="proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html" class="wikilink">infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.md</a></li>
+<li><a href="omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html" class="wikilink">infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.md</a></li>
+</ul>
+
+        </div>
+    </article>
+</div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            
+        <div class="panel-section">
+            <div class="panel-header">Outgoing Links</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html">
+                        <div class="link-title">Omarchy VM Setup on Proxmox with GPU Passthrough</div>
+                        <div class="link-path">infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html">
+                        <div class="link-title">Proxmox GPU Passthrough on AMD - Kernel 6.8+ IOMMU Issue</div>
+                        <div class="link-path">infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="panel-section">
+            <div class="panel-header">Backlinks</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html">
+                        <div class="link-title">Omarchy VM Setup on Proxmox with GPU Passthrough</div>
+                        <div class="link-path">infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/infrastructure/sunshine-appsjson-presets-for-multi-device-resolution.html">
+                        <div class="link-title">Sunshine Apps.json Presets for Multi-Device Resolution</div>
+                        <div class="link-path">infrastructure/sunshine-appsjson-presets-for-multi-device-resolution</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        </aside>
+    </div>
+
+    <script>window.BASE_URL = "/memex";</script>
+    <script src="/memex/assets/search.js"></script>
+    <script src="/memex/assets/sidebar.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+</body>
+</html>

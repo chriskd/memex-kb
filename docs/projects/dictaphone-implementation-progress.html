@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dictaphone - Implementation Progress - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/memex/assets/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="/memex/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="/memex/" class="nav-link active">Reader</a>
+                <a href="/memex/graph.html" class="nav-link">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="tree">Browse</button>
+                <button class="nav-tab" data-tab="recent">Recent</button>
+            </div>
+
+            <div class="sidebar-section" id="tree-section">
+                <div class="sidebar-header">Categories</div>
+                <div class="tree" id="tree">
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">best-practices</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/best-practices/ai-slop-antipatterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ai-slop-antipatterns</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">development</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/development/memex/markdown-it-py-ast-parser.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">markdown-it-py-ast-parser</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">devops</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/devops/voidlabs-cicd-automation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-cicd-automation</span>
+                    </a>
+                    <a href="/memex/devops/voidlabs-provisioning-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-provisioning-workflow</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">infrastructure</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/infrastructure/ansible-inventory-split-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ansible-inventory-split-guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/common-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">common-patterns</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/deployment-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">deployment-guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docker-cp-permission-patterns-in-dokploy</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-compose-deployment-lessons</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-container-management.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-container-management</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-network-recovery-after-vm-restart</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-python-cli-reference</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-service-naming-and-database-url</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dokploy-vm-crash-recovery-and-traefik-troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/garage-s3-object-storage.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">garage-s3-object-storage</span>
+                    </a>
+                    <a href="/memex/infrastructure/hyperion-proxmox-boot-failure-postmortem.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">hyperion-proxmox-boot-failure-postmortem</span>
+                    </a>
+                    <a href="/memex/infrastructure/memex-knowledge-base.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">memex-knowledge-base</span>
+                    </a>
+                    <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">omarchy-vm-setup-on-proxmox-with-gpu-passthrough</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-subscription-nag-removal.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-subscription-nag-removal</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">proxmox-vm-filesystem-recovery-with-fsck</span>
+                    </a>
+                    <a href="/memex/infrastructure/sunshine-appsjson-presets-for-multi-device-resolution.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sunshine-appsjson-presets-for-multi-device-resolution</span>
+                    </a>
+                    <a href="/memex/infrastructure/sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough</span>
+                    </a>
+                    <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">virtiofs-limitations-and-troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-infrastructure-overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-infrastructure-overview</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-networking-and-dns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-networking-and-dns</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-storage-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-storage-architecture</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">projects</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/projects/cli-tool-path-lookup-behavior.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">cli-tool-path-lookup-behavior</span>
+                    </a>
+                    <a href="/memex/projects/concordance-datopt-import-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">concordance-datopt-import-patterns</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-app-ios-and-macos-voice-categorization-app</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-implementation-progress.html" class="tree-item active">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-implementation-progress</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-inbox-pattern-feature-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-inbox-pattern-feature-plan</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-5-core-ui-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-5-core-ui-implementation</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-6-cloud-providers-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-6-cloud-providers-implementation</span>
+                    </a>
+                    <a href="/memex/projects/dictaphone-phase-7-8-implementation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dictaphone-phase-7-8-implementation</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-deployment-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-deployment-architecture</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-local-development-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-local-development-workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-naming-conventions.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-naming-conventions</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/dataset-ingestion-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">dataset-ingestion-workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-production-database-access.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-production-database-access</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">docviewer-project</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">overview</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/status-and-recovery-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">status-and-recovery-plan</span>
+                    </a>
+                    <a href="/memex/projects/focusgroup-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">focusgroup-project</span>
+                    </a>
+                    <a href="/memex/projects/sightline-5ightline.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">sightline-5ightline</span>
+                    </a>
+                    <a href="/memex/projects/test-beads-full-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">test-beads-full-project</span>
+                    </a>
+                    <a href="/memex/projects/test-beads-single-issue.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">test-beads-single-issue</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape-social-media-astroturfing-analysis-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">tg-scrape-social-media-astroturfing-analysis-project</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">tg-scrape-social-media-astroturfing-analysis</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">tooling</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/tooling/beads-issue-tracker.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">beads-issue-tracker</span>
+                    </a>
+                    <a href="/memex/tooling/claude-code-local-plugin-hooks-bug.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">claude-code-local-plugin-hooks-bug</span>
+                    </a>
+                    <a href="/memex/tooling/project-template-sync-pbs.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">project-template-sync-pbs</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-agent-messaging.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail-agent-messaging</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-lightweight-agent-mail-cli.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail-lightweight-agent-mail-cli</span>
+                    </a>
+                    <a href="/memex/tooling/voidlabs-devtools.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">voidlabs-devtools</span>
+                    </a>
+                </div>
+            </div></div>
+            </div>
+
+            <div class="sidebar-section" id="recent-section" style="display: none;">
+                <div class="sidebar-header">Recent Updates</div>
+                <div class="tree" id="recent-list">
+            <a href="/memex/projects/cli-tool-path-lookup-behavior.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">CLI Tool PATH Lookup Behavior</span>
+            </a>
+            <a href="/memex/projects/dictaphone-inbox-pattern-feature-plan.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Inbox Pattern Feature Plan</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-7-8-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 7-8 Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-5-core-ui-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 5 - Core UI Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-phase-6-cloud-providers-implementation.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone Phase 6 - Cloud Providers Implementation</span>
+            </a>
+            <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone App - iOS and macOS Voice Categorization App</span>
+            </a>
+            <a href="/memex/projects/dictaphone-implementation-progress.html" class="tree-item active">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dictaphone - Implementation Progress</span>
+            </a>
+            <a href="/memex/projects/focusgroup-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Focusgroup Project</span>
+            </a>
+            <a href="/memex/infrastructure/sunshine-appsjson-presets-for-multi-device-resolution.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Sunshine Apps.json Presets for Multi-Device Resolution</span>
+            </a>
+            <a href="/memex/infrastructure/omarchy-vm-setup-on-proxmox-with-gpu-passthrough.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Omarchy VM Setup on Proxmox with GPU Passthrough</span>
+            </a>
+            <a href="/memex/infrastructure/sunshine-streaming-setup-on-omarchy-vm-with-nvidia-gpu-passthrough.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Sunshine Streaming Setup on Omarchy VM with NVIDIA GPU Passthrough</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-subscription-nag-removal.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox Subscription Nag Removal</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-gpu-passthrough-on-amd-kernel-68-iommu-issue.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox GPU Passthrough on AMD - Kernel 6.8+ IOMMU Issue</span>
+            </a>
+            <a href="/memex/infrastructure/hyperion-proxmox-boot-failure-postmortem.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Hyperion Proxmox Installation Boot Failure Postmortem</span>
+            </a>
+            <a href="/memex/projects/test-beads-full-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Test Beads Integration - Full Project</span>
+            </a>
+            <a href="/memex/projects/test-beads-single-issue.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Test Beads Integration - Single Issue</span>
+            </a>
+            <a href="/memex/infrastructure/ansible-inventory-split-guide.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Ansible Inventory Split Guide</span>
+            </a>
+            <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">TG Scrape - Social Media Astroturfing Analysis</span>
+            </a>
+            <a href="/memex/best-practices/ai-slop-antipatterns.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">AI Slop Antipatterns</span>
+            </a>
+            <a href="/memex/tooling/claude-code-local-plugin-hooks-bug.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Claude Code Local Plugin Hooks Bug</span>
+            </a></div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="https://github.com/aaronsb/memex" target="_blank" rel="noopener">Powered by memex</a>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            
+<div class="reader-container">
+    <article class="entry">
+        <header class="entry-header">
+            <div class="entry-path">projects/dictaphone-implementation-progress</div>
+            <h1 class="entry-title">Dictaphone - Implementation Progress</h1>
+            <div class="entry-meta">
+                
+                <div class="entry-meta-item">Created: <span>2026-01-05 00:00:00</span></div>
+                
+            </div>
+            
+            <div class="entry-tags">
+                
+                <a href="/memex/tags/projects.html" class="tag">projects</a>
+                
+                <a href="/memex/tags/dictaphone.html" class="tag">dictaphone</a>
+                
+                <a href="/memex/tags/swift.html" class="tag">swift</a>
+                
+                <a href="/memex/tags/implementation.html" class="tag">implementation</a>
+                
+            </div>
+            
+        </header>
+        <div class="entry-content">
+            <h1>Dictaphone - Implementation Progress</h1>
+<p>Related: <a href="dictaphone-app-ios-and-macos-voice-categorization-app.html" class="wikilink">Dictaphone App Plan</a></p>
+<h2>Completed Phases</h2>
+<h3>Phase 1: Project Setup &amp; Core Models ✅</h3>
+<ul>
+<li>Xcode 16 multiplatform project (iOS 18+ / macOS 15+)</li>
+<li>SwiftData models: Note, Category, Item, AppSettings</li>
+<li>Enums for provider types and audio retention policies</li>
+<li>Info.plist permissions configured</li>
+</ul>
+<h3>Phase 2: Audio Recording Infrastructure ✅</h3>
+<ul>
+<li><code>AudioRecordingService</code> using AVAudioEngine (cross-platform)</li>
+<li>Platform-specific audio session handling (iOS: AVAudioSession, macOS: direct AVAudioEngine)</li>
+<li><code>SendableAudioData</code> struct for thread-safe audio buffer transfer</li>
+<li><code>WaveformView</code> for real-time visualization</li>
+<li><code>AudioFileManager</code> for audio file storage</li>
+</ul>
+<p><strong>Key Decision</strong>: Recording format is 44.1kHz mono Float32, streamed via <code>AsyncStream&lt;SendableAudioData&gt;</code></p>
+<h3>Phase 3: Local Transcription (Apple Speech) ✅</h3>
+<ul>
+<li><code>TranscriptionProvider</code> protocol (actor-based for thread safety)</li>
+<li><code>AppleSpeechProvider</code> using SFSpeechRecognizer with streaming buffers</li>
+<li><code>TranscriptionService</code> facade with @MainActor for UI binding</li>
+<li>Real-time partial + final results with confidence scores</li>
+</ul>
+<h2>Key Architecture Decisions</h2>
+<h3>Swift 6 Strict Concurrency Compliance</h3>
+<ul>
+<li>[decision] All services use proper actor isolation or @MainActor</li>
+<li>[decision] Non-Sendable types (SFSpeechRecognitionResult) extracted to Sendable structs before crossing actor boundaries</li>
+<li>[technique] Use <code>ExtractedRecognitionResult</code> pattern to safely pass data from Speech framework callbacks</li>
+</ul>
+<h3>Audio Pipeline Architecture</h3>
+<ul>
+<li>[decision] Recording service emits raw audio as AsyncStream</li>
+<li>[decision] Transcription provider consumes audio stream, emits result stream</li>
+<li>[technique] Resampling from 44.1kHz to 16kHz for optimal speech recognition (linear interpolation)</li>
+</ul>
+<h3>Provider Pattern</h3>
+<ul>
+<li>[decision] Protocol-based providers allow swapping local/cloud implementations</li>
+<li>[decision] Providers are actors to safely manage recognition task state</li>
+<li>[decision] TranscriptionService facade provides @Published properties for SwiftUI binding</li>
+</ul>
+<h2>Integration Example</h2>
+<pre><code class="language-swift">// Start recording + transcription
+let audioStream = try await audioService.startRecording()
+try await transcriptionService.startTranscription(audioStream: audioStream)
+
+// Observe via @Published:
+// - transcriptionService.currentTranscription (includes partial)
+// - transcriptionService.finalizedTranscription (only confirmed)
+// - transcriptionService.segments (all finalized segments)
+</code></pre>
+<h2>Files Structure (Phase 2-3)</h2>
+<pre><code>Core/Services/
+├── Audio/
+│   ├── AudioRecordingService.swift    # AVAudioEngine wrapper
+│   └── AudioFileManager.swift         # File storage
+└── Transcription/
+    ├── TranscriptionTypes.swift       # Result types, errors, state
+    ├── TranscriptionProvider.swift    # Provider protocol
+    ├── AppleSpeechProvider.swift      # SFSpeechRecognizer impl
+    └── TranscriptionService.swift     # @MainActor facade
+</code></pre>
+<h3>Phase 4: Local Categorization (Apple Intelligence) ✅</h3>
+<ul>
+<li><code>CategorizationProvider</code> protocol (actor-based, mirrors TranscriptionProvider pattern)</li>
+<li><code>AppleIntelligenceProvider</code> using Foundation Models framework</li>
+<li><code>@Generable</code> structs for structured AI output (<code>GeneratedCategorizedItem</code>, <code>GeneratedCategorizationResult</code>)</li>
+<li><code>@Guide</code> attributes for constraining AI output (descriptions, ranges)</li>
+<li><code>CategorizationService</code> facade with @MainActor for SwiftUI binding</li>
+<li>Availability checking via <code>SystemLanguageModel.default.availability</code></li>
+</ul>
+<p><strong>Key Decision</strong>: @Generable types defined in provider file</p>
+<ul>
+<li>[decision] @Generable structs are provider-specific, defined in AppleIntelligenceProvider.swift</li>
+<li>[technique] Foundation Models uses constrained sampling via @Guide attributes</li>
+<li>[technique] Availability checking handles: deviceNotEligible, appleIntelligenceNotEnabled, modelNotReady</li>
+</ul>
+<h3>Foundation Models Integration Pattern</h3>
+<ul>
+<li>[decision] Use <code>LanguageModelSession().respond(to:generating:)</code> for typed output</li>
+<li>[decision] Actor isolation for AppleIntelligenceProvider (thread-safe state management)</li>
+<li>[decision] CategorizationService is @Observable + @MainActor for SwiftUI binding</li>
+<li>[technique] Build detailed prompts with available categories and custom instructions</li>
+<li>[technique] Convert @Generable output to domain types (CategorizedItem) for decoupling</li>
+</ul>
+<h3>Provider Availability Flow</h3>
+<pre><code class="language-swift">// Check availability before using
+let availability = await provider.checkAvailability()
+switch model.availability {
+case .available: // ready to use
+case .unavailable(.deviceNotEligible): // not Apple Silicon
+case .unavailable(.appleIntelligenceNotEnabled): // user needs to enable
+case .unavailable(.modelNotReady): // still downloading
+}
+</code></pre>
+<h2>Files Structure (Phase 4)</h2>
+<pre><code>Core/Services/Categorization/
+├── CategorizationTypes.swift        # Result types, errors, state
+├── CategorizationProvider.swift     # Provider protocol + factory
+├── AppleIntelligenceProvider.swift  # Foundation Models impl + @Generable
+└── CategorizationService.swift      # @MainActor facade for UI
+</code></pre>
+<h2>Integration with Transcription</h2>
+<p>The CategorizationService provides automatic categorization of finalized transcription segments:</p>
+<pre><code class="language-swift">// Enable auto-categorization
+categorizationService.defaultCategories = [&quot;Electronics&quot;, &quot;Books&quot;, &quot;Donate&quot;]
+categorizationService.enableAutoCategorization()
+
+// Feed finalized transcription
+await categorizationService.processFinalizedText(segment.text)
+
+// Access results via @Published
+for item in categorizationService.categorizedItems {
+    print(&quot;\(item.name) → \(item.categoryName)&quot;)
+}
+</code></pre>
+<h2>Next Phase</h2>
+<p>Phase 5: Core UI - Recording &amp; Note Detail</p>
+<ul>
+<li>requires <a href="dictaphone-app-ios-and-macos-voice-categorization-app.html" class="wikilink">Phase 4 categorization</a> for item display</li>
+<li>implements recording view with live transcription</li>
+<li>implements note detail view with category sections</li>
+<li>platform-adaptive layouts (iOS sheet vs macOS panel)</li>
+<li>drag-drop item reorganization</li>
+</ul>
+
+        </div>
+    </article>
+</div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            
+        <div class="panel-section">
+            <div class="panel-header">Outgoing Links</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html">
+                        <div class="link-title">Dictaphone App - iOS and macOS Voice Categorization App</div>
+                        <div class="link-path">projects/dictaphone-app-ios-and-macos-voice-categorization-app</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="panel-section">
+            <div class="panel-header">Backlinks</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/memex/projects/dictaphone-app-ios-and-macos-voice-categorization-app.html">
+                        <div class="link-title">Dictaphone App - iOS and macOS Voice Categorization App</div>
+                        <div class="link-path">projects/dictaphone-app-ios-and-macos-voice-categorization-app</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/projects/dictaphone-inbox-pattern-feature-plan.html">
+                        <div class="link-title">Dictaphone Inbox Pattern Feature Plan</div>
+                        <div class="link-path">projects/dictaphone-inbox-pattern-feature-plan</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/memex/projects/dictaphone-phase-6-cloud-providers-implementation.html">
+                        <div class="link-title">Dictaphone Phase 6 - Cloud Providers Implementation</div>
+                        <div class="link-path">projects/dictaphone-phase-6-cloud-providers-implementation</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        </aside>
+    </div>
+
+    <script>window.BASE_URL = "/memex";</script>
+    <script src="/memex/assets/search.js"></script>
+    <script src="/memex/assets/sidebar.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+</body>
+</html>
