@@ -16,8 +16,8 @@ Thanks for your interest in contributing to Memex! This document provides guidel
 git clone https://github.com/chriskd/memex.git
 cd memex
 
-# Install dependencies (including dev tools)
-uv sync --dev
+# Install all dependencies (dev tools + semantic search)
+uv sync --all-extras
 
 # Run tests
 uv run pytest
@@ -30,6 +30,18 @@ uv run mx --help
 
 # Run the web explorer
 uv run memex-web
+```
+
+### Dependency Options
+
+| Command | Size | Description |
+|---------|------|-------------|
+| `uv sync` | ~100MB | Core dependencies only (keyword search) |
+| `uv sync --all-extras` | ~600MB | Full install with semantic search |
+
+PyTorch is configured for **CPU-only** by default. For GPU support with CUDA:
+```bash
+uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124
 ```
 
 ## Code Style
