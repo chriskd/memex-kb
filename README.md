@@ -41,18 +41,29 @@ uv tool install "memex[semantic]"
 pip install "memex[semantic]"
 ```
 
-Adds ~500MB of dependencies (ChromaDB, sentence-transformers). First search will download the embedding model (~100MB).
+Adds ~500MB of dependencies (ChromaDB, sentence-transformers with CPU-only PyTorch). First search will download the embedding model (~100MB).
 
 ### From Source
 
 ```bash
 git clone https://github.com/chriskd/memex.git
 cd memex
-uv sync --dev              # Development install
-uv pip install -e ".[semantic]"  # Add semantic search
+uv sync                    # Core dependencies only (~100MB)
+uv sync --all-extras       # With semantic search (~600MB total)
 ```
 
-**Note:** On ARM64 (Apple Silicon, etc.), ChromaDB is capped at <1.0.0 for onnxruntime compatibility.
+**Notes:**
+- PyTorch is configured for **CPU-only** by default, keeping the install small (~600MB vs 5GB+ with CUDA)
+- On ARM64 (Apple Silicon, etc.), ChromaDB is capped at <1.0.0 for onnxruntime compatibility
+
+#### GPU Support (Optional)
+
+If you have an NVIDIA GPU and want CUDA acceleration for embeddings:
+
+```bash
+# Override the CPU-only default with CUDA 12.4
+uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124
+```
 
 ## Quick Start
 
