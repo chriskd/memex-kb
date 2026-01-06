@@ -1655,6 +1655,90 @@ def upsert(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Batch Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option(
+    "--file",
+    "-f",
+    "file_path",
+    type=click.Path(exists=True),
+    help="Read commands from file instead of stdin",
+)
+@click.option(
+    "--continue-on-error/--stop-on-error",
+    default=True,
+    help="Continue processing after errors (default: continue)",
+)
+@click.pass_context
+def batch(ctx: click.Context, file_path: str | None, continue_on_error: bool):
+    """Execute multiple KB operations in a single invocation.
+
+    Reads commands from stdin (or --file) and executes them sequentially.
+    Output is always JSON with per-operation results.
+
+    \b
+    Supported commands:
+      add --title='...' --tags='...' [--category=...] [--content='...'] [--force]
+      update <path> [--tags='...'] [--content='...'] [--append]
+      upsert <title> [--content='...'] [--tags='...'] [--directory=...]
+      search <query> [--tags='...'] [--mode=...] [--limit=N]
+      get <path> [--metadata]
+      delete <path> [--force]
+
+    \b
+    Example:
+      mx batch << 'EOF'
+      add --title='Note 1' --tags='tag1' --category=tooling --content='Content'
+      search 'api'
+      EOF
+
+    \b
+    Output format:
+      {
+        "total": 2,
+        "succeeded": 2,
+        "failed": 0,
+        "results": [
+          {"index": 0, "command": "add ...", "success": true, "result": {...}},
+          {"index": 1, "command": "search ...", "success": true, "result": {...}}
+        ]
+      }
+
+    Exit code is 1 if any operation fails, 0 if all succeed.
+    """
+    from .batch import run_batch
+
+    # Read input
+    if file_path:
+        lines = Path(file_path).read_text(encoding="utf-8").strip().split("\n")
+    else:
+        lines = sys.stdin.read().strip().split("\n")
+
+    # Filter empty lines and comments
+    commands = [
+        line.strip()
+        for line in lines
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    if not commands:
+        click.echo(
+            json.dumps({"error": "No commands provided", "code": 1501}), err=True
+        )
+        sys.exit(1)
+
+    result = run_async(run_batch(commands, continue_on_error=continue_on_error))
+    click.echo(result.model_dump_json(indent=2))
+
+    # Exit with error if any commands failed
+    if result.failed > 0:
+        sys.exit(1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Session Log Command
 # ─────────────────────────────────────────────────────────────────────────────
 

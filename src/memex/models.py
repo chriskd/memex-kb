@@ -188,3 +188,22 @@ class SessionLogResult(BaseModel):
     action: Literal["appended", "created"]  # What action was taken
     project: str | None = None  # Detected project name
     context_source: str | None = None  # How context was determined
+
+
+class BatchOperationResult(BaseModel):
+    """Result of a single batch operation."""
+
+    index: int  # 0-based index in batch
+    command: str  # Original command string
+    success: bool  # Whether operation succeeded
+    result: dict | list | None = None  # Operation-specific result data
+    error: dict | None = None  # Error details if failed
+
+
+class BatchResponse(BaseModel):
+    """Response from batch command."""
+
+    total: int  # Total operations attempted
+    succeeded: int  # Count of successful operations
+    failed: int  # Count of failed operations
+    results: list[BatchOperationResult]  # Per-operation results
