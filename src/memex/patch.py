@@ -324,7 +324,8 @@ def write_file_atomically(
     Returns:
         PatchResult with error if write failed, None on success.
     """
-    full_content = frontmatter + content
+    # Strip leading whitespace from content to prevent blank line accumulation
+    full_content = frontmatter + content.lstrip()
 
     # Create backup if requested
     if backup and path.exists():

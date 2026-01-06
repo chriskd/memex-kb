@@ -1101,3 +1101,86 @@ Special: `backticks` and *asterisks*"""
         data = json.loads(result.output)
         assert "action" in data
         assert data["action"] in ["created", "appended"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test blank line normalization
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestBlankLineNormalization:
+    """Tests to ensure blank lines don't accumulate after frontmatter."""
+
+    @pytest.mark.asyncio
+    async def test_update_normalizes_blank_lines(self, update_kb_root, update_index_root):
+        """Update prevents extra blank lines from accumulating."""
+        # Create entry with content that has leading newlines
+        (update_kb_root / "development").mkdir(parents=True, exist_ok=True)
+        (update_kb_root / "development" / "test.md").write_text(
+            """---
+title: Test Entry
+tags:
+- test
+created: '2024-01-15T10:00:00'
+---
+
+
+
+# Content with leading blank lines"""
+        )
+
+        # Update the entry
+        await core.update_entry(
+            path="development/test.md",
+            tags=["updated"],  # Just update tags
+        )
+
+        content = (update_kb_root / "development" / "test.md").read_text()
+
+        # After frontmatter closing ---, should be exactly one blank line before content
+        # Split on closing --- and check what comes after
+        parts = content.split("---\n", 2)  # Split into [empty, frontmatter, content]
+        assert len(parts) == 3
+        body = parts[2]
+
+        # Body should start with single newline then content (from build_frontmatter's \n\n)
+        # Verify no leading newlines in the actual stored content
+        lines = body.split("\n")
+        # First line after frontmatter should be empty (from build_frontmatter's trailing \n\n)
+        # Second line should be the content
+        assert lines[0] == ""  # One blank line
+        assert lines[1].startswith("# Content")  # Content starts immediately
+
+    @pytest.mark.asyncio
+    async def test_multiple_updates_dont_accumulate_blank_lines(self, update_kb_root, update_index_root):
+        """Multiple updates don't accumulate blank lines."""
+        _create_entry(
+            update_kb_root / "development" / "test.md",
+            "Test Entry",
+            "# Original Content",
+        )
+
+        # Perform several updates
+        for i in range(3):
+            await core.update_entry(
+                path="development/test.md",
+                tags=[f"tag-{i}"],
+            )
+
+        content = (update_kb_root / "development" / "test.md").read_text()
+
+        # Count blank lines between --- and first content line
+        parts = content.split("---\n", 2)
+        body = parts[2]
+        lines = body.split("\n")
+
+        # Count leading empty lines
+        leading_empty = 0
+        for line in lines:
+            if line.strip() == "":
+                leading_empty += 1
+            else:
+                break
+
+        # Should be exactly 1 blank line (from build_frontmatter's \n\n before content)
+        assert leading_empty == 1, f"Expected 1 leading blank line, got {leading_empty}"

@@ -1022,7 +1022,8 @@ async def add_entry(
     frontmatter = build_frontmatter(metadata)
 
     # Write the file
-    file_path.write_text(frontmatter + final_content, encoding="utf-8")
+    # Strip leading whitespace from content to prevent blank lines after frontmatter
+    file_path.write_text(frontmatter + final_content.lstrip(), encoding="utf-8")
     rebuild_backlink_cache(kb_root)
 
     # Collect warnings for non-critical failures
@@ -1249,7 +1250,8 @@ async def update_entry(
         new_content = apply_section_updates(new_content, section_updates)
 
     # Write updated file
-    file_path.write_text(frontmatter + new_content, encoding="utf-8")
+    # Strip leading whitespace from content to prevent blank line accumulation
+    file_path.write_text(frontmatter + new_content.lstrip(), encoding="utf-8")
     rebuild_backlink_cache(kb_root)
 
     relative_path = relative_kb_path(kb_root, file_path)
@@ -2649,7 +2651,8 @@ async def generate_descriptions(
                 new_frontmatter = build_frontmatter(metadata)
 
                 # Write updated content
-                new_content = f"{new_frontmatter}{content}"
+                # Strip leading whitespace from content to prevent blank line accumulation
+                new_content = f"{new_frontmatter}{content.lstrip()}"
                 file_path.write_text(new_content)
 
                 results.append({
@@ -3162,7 +3165,7 @@ async def log_session(
                 source_project=kb_context.name if kb_context else None,
             )
             frontmatter = build_frontmatter(metadata)
-            file_path.write_text(frontmatter + initial_content, encoding="utf-8")
+            file_path.write_text(frontmatter + initial_content.lstrip(), encoding="utf-8")
         else:
             # Auto-discovered path: use add_entry
             await add_entry(
