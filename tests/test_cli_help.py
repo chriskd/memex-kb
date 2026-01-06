@@ -40,6 +40,7 @@ TOP_LEVEL_COMMANDS = [
     "quick-add",
     "context",
     "beads",
+    "schema",
 ]
 
 # Commands with subcommands
@@ -259,3 +260,116 @@ class TestContextSubcommandHelp:
 
         assert "--project" in result.output
         assert "--force" in result.output
+
+
+class TestSchemaCommand:
+    """Test mx schema command for machine-readable command definitions."""
+
+    def test_schema_outputs_valid_json(self, runner):
+        """Schema command outputs valid JSON."""
+        import json
+
+        result = runner.invoke(cli, ["schema"])
+
+        assert result.exit_code == 0
+        # Should be valid JSON
+        data = json.loads(result.output)
+        assert "version" in data
+        assert "commands" in data
+
+    def test_schema_includes_all_commands(self, runner):
+        """Schema includes all top-level commands."""
+        import json
+
+        result = runner.invoke(cli, ["schema"])
+        data = json.loads(result.output)
+
+        commands = data["commands"]
+        for cmd in TOP_LEVEL_COMMANDS:
+            assert cmd in commands, f"Missing command in schema: {cmd}"
+
+    def test_schema_single_command(self, runner):
+        """Schema -c flag returns single command."""
+        import json
+
+        result = runner.invoke(cli, ["schema", "-c", "add"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data["commands"]) == 1
+        assert "add" in data["commands"]
+
+    def test_schema_command_has_params(self, runner):
+        """Schema includes parameter information."""
+        import json
+
+        result = runner.invoke(cli, ["schema", "-c", "add"])
+        data = json.loads(result.output)
+
+        add_schema = data["commands"]["add"]
+        assert "params" in add_schema
+        params = add_schema["params"]
+
+        # Required params
+        assert "title" in params
+        assert params["title"]["required"] is True
+        assert params["title"]["type"] == "string"
+
+        # Optional params
+        assert "force" in params
+        assert params["force"]["is_flag"] is True
+        assert params["force"]["type"] == "boolean"
+
+    def test_schema_subcommand_group(self, runner):
+        """Schema includes subcommands for command groups."""
+        import json
+
+        result = runner.invoke(cli, ["schema", "-c", "context"])
+        data = json.loads(result.output)
+
+        context_schema = data["commands"]["context"]
+        assert "subcommands" in context_schema
+
+        subcommands = context_schema["subcommands"]
+        assert "init" in subcommands
+        assert "show" in subcommands
+        assert "validate" in subcommands
+
+    def test_schema_compact_output(self, runner):
+        """Schema --compact produces minified JSON."""
+        result_pretty = runner.invoke(cli, ["schema", "-c", "add"])
+        result_compact = runner.invoke(cli, ["schema", "-c", "add", "--compact"])
+
+        assert result_pretty.exit_code == 0
+        assert result_compact.exit_code == 0
+
+        # Compact output should be shorter (no newlines/indentation)
+        assert len(result_compact.output) < len(result_pretty.output)
+        # Compact should be single line
+        assert result_compact.output.count("\n") <= 1
+
+    def test_schema_unknown_command_error(self, runner):
+        """Schema -c with unknown command shows error."""
+        result = runner.invoke(cli, ["schema", "-c", "nonexistent"])
+
+        assert result.exit_code != 0
+        assert "Unknown command" in result.output
+
+    def test_schema_param_types_are_clean(self, runner):
+        """Schema param types are clean strings, not internal names."""
+        import json
+
+        result = runner.invoke(cli, ["schema", "-c", "add"])
+        data = json.loads(result.output)
+
+        params = data["commands"]["add"]["params"]
+
+        # Check that types are clean, not internal Click names
+        for param_name, param_info in params.items():
+            param_type = param_info["type"]
+            # Should not have internal type names
+            assert "ParamType" not in param_type, f"{param_name} has internal type: {param_type}"
+            # Should be one of the expected clean types
+            clean_types = ["string", "integer", "float", "boolean", "path", "file"]
+            is_clean = any(param_type.startswith(t) for t in clean_types)
+            assert is_clean, f"{param_name} has unexpected type: {param_type}"

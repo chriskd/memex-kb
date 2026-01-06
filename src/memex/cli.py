@@ -3741,6 +3741,165 @@ def publish(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Introspection
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _extract_command_schema(cmd: click.Command, name: str) -> dict:
+    """Extract schema information from a Click command.
+
+    Args:
+        cmd: Click command object
+        name: Command name
+
+    Returns:
+        Dict with command schema including description, params, and examples
+    """
+    schema = {
+        "name": name,
+        "description": cmd.help or "",
+    }
+
+    # Extract parameters
+    params = {}
+    for param in cmd.params:
+        if isinstance(param, click.Option):
+            param_info = {
+                "type": _get_param_type(param),
+                "required": param.required,
+            }
+            # Only include defaults that are meaningful (not None, (), or sentinel objects)
+            if param.default is not None and param.default != ():
+                default_str = str(param.default)
+                # Skip sentinel and special internal values
+                if not default_str.startswith("Sentinel.") and default_str != "<stdin>":
+                    param_info["default"] = param.default
+            if param.help:
+                param_info["help"] = param.help
+            if param.is_flag:
+                param_info["is_flag"] = True
+            if param.multiple:
+                param_info["multiple"] = True
+            if param.envvar:
+                param_info["envvar"] = param.envvar
+
+            # Use the first option name without dashes as the key
+            opt_name = param.opts[0].lstrip("-").replace("-", "_")
+            params[opt_name] = param_info
+
+        elif isinstance(param, click.Argument):
+            param_info = {
+                "type": _get_param_type(param),
+                "required": param.required,
+                "positional": True,
+            }
+            if param.nargs != 1:
+                param_info["nargs"] = param.nargs
+            params[param.name] = param_info
+
+    if params:
+        schema["params"] = params
+
+    return schema
+
+
+def _get_param_type(param: click.Parameter) -> str:
+    """Get string representation of a Click parameter type."""
+    if param.type is None:
+        return "string"
+    type_name = type(param.type).__name__
+
+    # Direct type class check
+    if isinstance(param.type, click.types.StringParamType):
+        return "string"
+    if isinstance(param.type, click.types.IntParamType):
+        return "integer"
+    if isinstance(param.type, click.types.FloatParamType):
+        return "float"
+    if isinstance(param.type, click.types.BoolParamType):
+        return "boolean"
+    if isinstance(param.type, click.Path):
+        return "path"
+    if isinstance(param.type, click.Choice):
+        return f"choice[{','.join(param.type.choices)}]"
+    if isinstance(param.type, click.File):
+        return "file"
+
+    # Fallback to type name
+    type_map = {
+        "STRING": "string",
+        "INT": "integer",
+        "FLOAT": "float",
+        "BOOL": "boolean",
+    }
+    return type_map.get(type_name.upper(), type_name.lower())
+
+
+@cli.command()
+@click.option("--command", "-c", help="Get schema for specific command only")
+@click.option("--compact", is_flag=True, help="Compact JSON output (no indentation)")
+def schema(command: str | None, compact: bool):
+    """Output machine-readable schema of all mx commands.
+
+    Useful for LLM agents and tools that need to programmatically
+    understand available commands and their parameters.
+
+    \b
+    Examples:
+      mx schema                    # Full schema as JSON
+      mx schema -c add             # Schema for 'add' command only
+      mx schema --compact          # Minified JSON output
+    """
+    import json
+
+    commands_schema = {}
+
+    # Get the parent CLI group
+    cli_group = cli
+
+    if command:
+        # Get specific command
+        cmd = cli_group.commands.get(command)
+        if cmd is None:
+            click.echo(f"Error: Unknown command '{command}'", err=True)
+            click.echo(f"Available commands: {', '.join(sorted(cli_group.commands.keys()))}", err=True)
+            sys.exit(1)
+
+        if isinstance(cmd, click.Group):
+            # Handle subcommand groups
+            group_schema = _extract_command_schema(cmd, command)
+            subcommands = {}
+            for sub_name, sub_cmd in cmd.commands.items():
+                subcommands[sub_name] = _extract_command_schema(sub_cmd, sub_name)
+            if subcommands:
+                group_schema["subcommands"] = subcommands
+            commands_schema[command] = group_schema
+        else:
+            commands_schema[command] = _extract_command_schema(cmd, command)
+    else:
+        # Get all commands
+        for cmd_name, cmd in sorted(cli_group.commands.items()):
+            if isinstance(cmd, click.Group):
+                group_schema = _extract_command_schema(cmd, cmd_name)
+                subcommands = {}
+                for sub_name, sub_cmd in cmd.commands.items():
+                    subcommands[sub_name] = _extract_command_schema(sub_cmd, sub_name)
+                if subcommands:
+                    group_schema["subcommands"] = subcommands
+                commands_schema[cmd_name] = group_schema
+            else:
+                commands_schema[cmd_name] = _extract_command_schema(cmd, cmd_name)
+
+    result = {
+        "version": "0.1.0",
+        "commands": commands_schema,
+    }
+
+    indent = None if compact else 2
+    click.echo(json.dumps(result, indent=indent, default=str))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 
