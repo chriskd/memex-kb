@@ -71,15 +71,16 @@ uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124
 # Initialize a knowledge base
 mkdir -p kb
 export MEMEX_KB_ROOT=$(pwd)/kb
+mx init
 
 # Create your first entry
-mx add --title="My First Note" --tags="example" --content="Hello, world!"
+mx add --title="My First Note" --tags="example" --category=notes --content="Hello, world!"
 
 # Search for entries
 mx search "hello"
 
 # View an entry
-mx get example/my-first-note.md
+mx get notes/my-first-note.md
 ```
 
 **New to Memex?** See the [First 5 Minutes Tutorial](TUTORIAL.md) for a complete walkthrough.
@@ -115,7 +116,7 @@ mx update path/entry.md --tags="new,tags"
 mx update path/entry.md --content="Append this" --append --timestamp
 mx upsert --title="Daily Log" --content="New entry" --append
 mx quick-add --stdin                # Auto-generate metadata from content
-mx patch path/entry.md --find="old" --replace="new" --dry-run
+mx patch path/entry.md --old="old text" --new="new text" --dry-run
 
 # Analysis
 mx hubs                             # Most connected entries
@@ -297,3 +298,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 ## License
 
 MIT - see [LICENSE](LICENSE)
+# memex
