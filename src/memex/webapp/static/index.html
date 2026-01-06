@@ -649,21 +649,17 @@
         }
 
         .entry-path {
+            display: block;
             font-family: var(--font-mono);
             font-size: 0.6875rem;
             color: var(--text-muted);
             margin-bottom: 16px;
             letter-spacing: 0.02em;
+            text-decoration: none;
         }
 
-        .entry-title {
-            font-family: var(--font-display);
-            font-size: 2.25rem;
-            font-weight: 500;
-            color: var(--text-primary);
-            margin-bottom: 20px;
-            line-height: 1.25;
-            letter-spacing: -0.01em;
+        .entry-path:hover {
+            color: var(--text-secondary);
         }
 
         .entry-meta {
@@ -2242,8 +2238,7 @@
 
                 $('#entry-content').innerHTML = `
                     <div class="entry-header">
-                        <div class="entry-path">${entry.path}</div>
-                        <h1 class="entry-title">${entry.title}</h1>
+                        <a href="#${entry.path}" class="entry-path">${entry.path}</a>
                         <div class="entry-meta">
                             ${entry.created ? `<div class="entry-meta-item">Created: <span>${formatDate(entry.created)}</span></div>` : ''}
                             ${entry.updated ? `<div class="entry-meta-item">Updated: <span>${formatDate(entry.updated)}</span></div>` : ''}
