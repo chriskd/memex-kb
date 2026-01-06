@@ -265,6 +265,7 @@ def _base_layout(
     <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>window.BASE_URL = "{base_url}";</script>
 </head>
 <body>
     <div class="app">
@@ -309,7 +310,6 @@ def _base_layout(
         </aside>
     </div>
 
-    <script>window.BASE_URL = "{base_url}";</script>
     <script src="{base_url}/assets/search.js"></script>
     <script src="{base_url}/assets/sidebar.js"></script>
     <script>hljs.highlightAll(); mermaid.initialize({{startOnLoad: true, theme: 'dark'}});</script>

@@ -68,6 +68,10 @@
   "edges": [
     {
       "source": "guides/quick-start",
+      "target": "reference/cli"
+    },
+    {
+      "source": "guides/quick-start",
       "target": "reference/entry-format"
     },
     {
@@ -75,16 +79,12 @@
       "target": "guides/ai-integration"
     },
     {
-      "source": "guides/quick-start",
+      "source": "guides/ai-integration",
       "target": "reference/cli"
     },
     {
       "source": "guides/ai-integration",
       "target": "reference/entry-format"
-    },
-    {
-      "source": "guides/ai-integration",
-      "target": "reference/cli"
     },
     {
       "source": "guides/ai-integration",
@@ -96,11 +96,11 @@
     },
     {
       "source": "guides/mcp-setup",
-      "target": "guides/ai-integration"
+      "target": "reference/cli"
     },
     {
       "source": "guides/mcp-setup",
-      "target": "reference/cli"
+      "target": "guides/ai-integration"
     },
     {
       "source": "guides/installation",
@@ -116,11 +116,11 @@
     },
     {
       "source": "reference/entry-format",
-      "target": "guides/quick-start"
+      "target": "reference/cli"
     },
     {
       "source": "reference/entry-format",
-      "target": "reference/cli"
+      "target": "guides/quick-start"
     },
     {
       "source": "reference/cli",
@@ -128,11 +128,11 @@
     },
     {
       "source": "reference/cli",
-      "target": "guides/ai-integration"
+      "target": "reference/entry-format"
     },
     {
       "source": "reference/cli",
-      "target": "reference/entry-format"
+      "target": "guides/ai-integration"
     }
   ]
 }
