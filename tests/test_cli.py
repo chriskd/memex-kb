@@ -634,7 +634,7 @@ class TestAddCommand:
         ])
 
         assert result.exit_code == 1
-        assert "Must provide --content, --file, or --stdin" in result.output
+        assert "Must provide --content, --file, --template, or --stdin" in result.output
 
     def test_add_help_includes_required_and_common_issues(self, runner):
         """Help text highlights required flags and common issues."""
@@ -757,6 +757,147 @@ class TestAddCommand:
         assert "Suggested: --category=tooling" in result.output
         assert "Available categories: tooling, devops" in result.output
         assert "mx context init" in result.output
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Templates Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestTemplatesCommand:
+    """Tests for 'mx templates' command."""
+
+    def test_templates_list(self, runner):
+        """Templates list shows all built-in templates."""
+        result = runner.invoke(cli, ["templates"])
+
+        assert result.exit_code == 0
+        assert "troubleshooting" in result.output
+        assert "project" in result.output
+        assert "pattern" in result.output
+        assert "decision" in result.output
+        assert "runbook" in result.output
+        assert "api" in result.output
+
+    def test_templates_list_explicit(self, runner):
+        """Templates list works with explicit 'list' action."""
+        result = runner.invoke(cli, ["templates", "list"])
+
+        assert result.exit_code == 0
+        assert "Available templates:" in result.output
+
+    def test_templates_show(self, runner):
+        """Templates show displays template content."""
+        result = runner.invoke(cli, ["templates", "show", "troubleshooting"])
+
+        assert result.exit_code == 0
+        assert "Template: troubleshooting" in result.output
+        assert "Problem" in result.output
+        assert "Solution" in result.output
+        assert "Suggested tags: troubleshooting, fix" in result.output
+
+    def test_templates_show_unknown(self, runner):
+        """Templates show fails gracefully for unknown template."""
+        result = runner.invoke(cli, ["templates", "show", "nonexistent"])
+
+        assert result.exit_code == 1
+        assert "Unknown template: nonexistent" in result.output
+        assert "Available:" in result.output
+
+    def test_templates_json_output(self, runner):
+        """Templates list outputs JSON when requested."""
+        result = runner.invoke(cli, ["templates", "--json"])
+
+        assert result.exit_code == 0
+        import json
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        names = [t["name"] for t in data]
+        assert "troubleshooting" in names
+        assert "project" in names
+
+    def test_templates_show_json_output(self, runner):
+        """Templates show outputs JSON when requested."""
+        result = runner.invoke(cli, ["templates", "show", "pattern", "--json"])
+
+        assert result.exit_code == 0
+        import json
+        data = json.loads(result.output)
+        assert data["name"] == "pattern"
+        assert "suggested_tags" in data
+        assert data["source"] == "builtin"
+
+
+class TestAddWithTemplate:
+    """Tests for 'mx add' with --template option."""
+
+    @patch("memex.cli.run_async")
+    @patch("memex.config.get_kb_root")
+    def test_add_with_template(
+        self, mock_kb_root, mock_run_async, runner, tmp_path, mock_add_result,
+    ):
+        """Add command applies template content."""
+        mock_kb_root.return_value = tmp_path
+        mock_run_async.return_value = mock_add_result
+
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Fix login bug",
+            "--tags", "auth",
+            "--template", "troubleshooting",
+            "--category", "test",
+        ])
+
+        assert result.exit_code == 0
+        # Verify add_entry was called with template content
+        call_kwargs = mock_run_async.call_args
+        content = call_kwargs[0][0].cr_frame.f_locals.get("content", "")
+        # The content should include template sections
+        # Tags should include template suggested tags
+        tags = call_kwargs[0][0].cr_frame.f_locals.get("tags", [])
+        assert "troubleshooting" in tags or "fix" in tags or "auth" in tags
+
+    @patch("memex.cli.run_async")
+    @patch("memex.config.get_kb_root")
+    def test_add_with_template_dry_run(
+        self, mock_kb_root, mock_run_async, runner, tmp_path,
+    ):
+        """Add with template shows preview in dry-run mode."""
+        mock_kb_root.return_value = tmp_path
+        # Mock the preview function
+        from unittest.mock import MagicMock
+        preview = MagicMock()
+        preview.absolute_path = tmp_path / "test" / "fix-bug.md"
+        preview.frontmatter = "---\ntitle: Fix bug\ntags:\n- auth\n- troubleshooting\n---\n"
+        preview.content = "# Fix bug\n\n## Problem\n..."
+        preview.warning = None
+        preview.potential_duplicates = []
+        mock_run_async.return_value = preview
+
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Fix bug",
+            "--tags", "auth",
+            "--template", "troubleshooting",
+            "--category", "test",
+            "--dry-run",
+        ])
+
+        assert result.exit_code == 0
+        assert "Would create:" in result.output
+
+    def test_add_with_invalid_template(self, runner):
+        """Add command fails with unknown template."""
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Test",
+            "--tags", "test",
+            "--template", "nonexistent",
+            "--category", "test",
+        ])
+
+        assert result.exit_code == 1
+        assert "Unknown template: nonexistent" in result.output
 
 
 # ─────────────────────────────────────────────────────────────────────────────

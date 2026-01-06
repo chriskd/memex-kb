@@ -1088,6 +1088,7 @@ def get(ctx: click.Context, path: str, as_json: bool, metadata: bool):
     type=click.Path(exists=True), help="Read content from file",
 )
 @click.option("--stdin", is_flag=True, help="Read content from stdin")
+@click.option("--template", "-T", "template_name", help="Use a template (see 'mx templates list')")
 @click.option("--force", is_flag=True, help="Create even if duplicates detected")
 @click.option("--dry-run", is_flag=True, help="Preview path/frontmatter/content without creating")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
@@ -1100,6 +1101,7 @@ def add(
     content: str | None,
     file_path: str | None,
     stdin: bool,
+    template_name: str | None,
     force: bool,
     dry_run: bool,
     as_json: bool,
@@ -1110,6 +1112,7 @@ def add(
     Examples:
       mx add --title="My Entry" --tags="foo,bar" --content="# Content here"
       mx add --title="My Entry" --tags="foo,bar" --file=content.md
+      mx add --title="Fix login bug" --tags="auth" --template=troubleshooting
       cat content.md | mx add --title="My Entry" --tags="foo,bar" --stdin
       mx add --title="My Entry" --tags="foo,bar" --content="..." --dry-run
 
@@ -1127,25 +1130,50 @@ def add(
       - Missing category? Run 'mx context init' or pass --category
     """
     from .core import add_entry, preview_add_entry
-
     from .errors import ErrorCode, MemexError
+    from .templates import apply_template, get_template
+
+    # Handle template if specified
+    template = None
+    if template_name:
+        template = get_template(template_name)
+        if not template:
+            from .templates import list_templates
+            available = ", ".join(t.name for t in list_templates())
+            _handle_error(
+                ctx,
+                MemexError(
+                    ErrorCode.INVALID_CONTENT,
+                    f"Unknown template: {template_name}",
+                    {"suggestion": f"Available templates: {available}"},
+                ),
+            )
 
     # Resolve content source
     if stdin:
         content = sys.stdin.read()
     elif file_path:
         content = Path(file_path).read_text()
+    elif template:
+        # Use template content
+        content = apply_template(template, title)
     elif not content:
         _handle_error(
             ctx,
             MemexError(
                 ErrorCode.MISSING_REQUIRED_FIELD,
-                "Must provide --content, --file, or --stdin",
-                {"suggestion": "Use --content='...' or --file=path or --stdin"},
+                "Must provide --content, --file, --template, or --stdin",
+                {"suggestion": "Use --content='...' or --file=path or --template=name or --stdin"},
             ),
         )
 
+    # Build tag list, including template suggested tags
     tag_list = [t.strip() for t in tags.split(",")]
+    if template and template.suggested_tags:
+        # Add template tags that aren't already present
+        for tag in template.suggested_tags:
+            if tag not in tag_list:
+                tag_list.append(tag)
 
     if dry_run:
         try:
@@ -1469,6 +1497,91 @@ def quick_add(
     else:
         path = result.path if hasattr(result, 'path') else result.get('path')
         click.echo(f"\n✓ Created: {path}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Templates Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("action", default="list", type=click.Choice(["list", "show"]))
+@click.argument("name", required=False)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def templates(action: str, name: str | None, as_json: bool):
+    """List or show entry templates.
+
+    \b
+    Examples:
+      mx templates              # List all available templates
+      mx templates list         # Same as above
+      mx templates show pattern # Show the 'pattern' template content
+
+    \b
+    Templates provide scaffolding for structured entries. Use with:
+      mx add --title="..." --tags="..." --template=<name>
+
+    \b
+    Template sources (in priority order):
+      1. Project: .kbcontext templates: section
+      2. User: ~/.config/memex/templates/*.yaml
+      3. Built-in: troubleshooting, project, pattern, decision, runbook, api, meeting
+    """
+    from .templates import get_template, list_templates
+
+    if action == "show":
+        if not name:
+            click.echo("Usage: mx templates show <name>", err=True)
+            sys.exit(1)
+
+        template = get_template(name)
+        if not template:
+            available = ", ".join(t.name for t in list_templates())
+            click.echo(f"Unknown template: {name}", err=True)
+            click.echo(f"Available: {available}", err=True)
+            sys.exit(1)
+
+        if as_json:
+            output({
+                "name": template.name,
+                "description": template.description,
+                "content": template.content,
+                "suggested_tags": template.suggested_tags,
+                "source": template.source,
+            }, as_json=True)
+            return
+
+        click.echo(f"Template: {template.name}")
+        click.echo(f"Source: {template.source}")
+        click.echo(f"Description: {template.description}")
+        if template.suggested_tags:
+            click.echo(f"Suggested tags: {', '.join(template.suggested_tags)}")
+        click.echo()
+        click.echo("Content:")
+        click.echo("─" * 40)
+        click.echo(template.content if template.content else "(empty)")
+        return
+
+    # List templates
+    all_templates = list_templates()
+
+    if as_json:
+        output([{
+            "name": t.name,
+            "description": t.description,
+            "source": t.source,
+            "suggested_tags": t.suggested_tags,
+        } for t in all_templates], as_json=True)
+        return
+
+    click.echo("Available templates:\n")
+    for t in all_templates:
+        source_badge = f"[{t.source}]" if t.source != "builtin" else ""
+        click.echo(f"  {t.name:16} {t.description} {source_badge}")
+
+    click.echo()
+    click.echo("Use: mx add --title='...' --tags='...' --template=<name>")
+    click.echo("Show: mx templates show <name>")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
