@@ -69,12 +69,10 @@ def _build_file_tree(entries: list["EntryData"], current_path: str = "", base_ur
 
         for entry in folders[folder]:
             active_class = ' active' if entry.path == current_path else ''
-            # Get just the filename part for display
-            filename = entry.path.split("/")[-1]
             html_parts.append(f'''
                     <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
                         <span class="tree-icon file">◇</span>
-                        <span class="tree-label">{_escape_html(filename)}</span>
+                        <span class="tree-label">{_escape_html(entry.title)}</span>
                     </a>''')
 
         html_parts.append('''
@@ -87,7 +85,7 @@ def _build_file_tree(entries: list["EntryData"], current_path: str = "", base_ur
         html_parts.append(f'''
             <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
                 <span class="tree-icon file">◇</span>
-                <span class="tree-label">{_escape_html(entry.path)}</span>
+                <span class="tree-label">{_escape_html(entry.title)}</span>
             </a>''')
 
     html_parts.append('</div>')
