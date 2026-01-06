@@ -7,7 +7,7 @@ suitable for static site generation.
 from __future__ import annotations
 
 import html
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from markdown_it.renderer import RendererHTML

@@ -1,9 +1,7 @@
 """Tests for search quality evaluation."""
 
-from pathlib import Path
 from unittest.mock import Mock
 
-import pytest
 
 from memex.evaluation import (
     EVAL_QUERIES,

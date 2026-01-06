@@ -1710,7 +1710,6 @@ class TestUpdateCommand:
 
         def capture_call(coro):
             # Extract parameters from the coroutine
-            import inspect
             frame = coro.cr_frame
             if frame and "content" in frame.f_locals:
                 captured_content.append(frame.f_locals["content"])

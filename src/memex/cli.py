@@ -92,7 +92,7 @@ def _handle_error(
         error: The exception that occurred.
         fallback_message: Optional message to use for non-MemexError exceptions.
     """
-    from .errors import ErrorCode, MemexError, format_error_json
+    from .errors import MemexError, format_error_json
 
     json_errors = ctx.obj.get("json_errors", False) if ctx.obj else False
 
@@ -113,7 +113,7 @@ def _handle_error(
     sys.exit(1)
 
 
-def _infer_error_code(error: Exception, message: str) -> "ErrorCode":
+def _infer_error_code(error: Exception, message: str):
     """Infer an error code from exception type and message.
 
     Used for backwards compatibility when non-MemexError exceptions are raised.
@@ -353,7 +353,7 @@ def _output_status(
     # Recent entries section
     if entries:
         lines.append("")
-        header = f"Recent Entries"
+        header = "Recent Entries"
         if project_name and any(
             e.get("path", "").startswith(f"projects/{project_name}")
             or project_name in e.get("tags", [])
@@ -449,7 +449,7 @@ PRIME_OUTPUT = """# Memex Knowledge Base
 
 > Search organizational knowledge before reinventing. Add discoveries for future agents.
 
-**⚡ Use `mx` CLI instead of MCP tools** - CLI uses ~0 tokens vs MCP schema overhead.
+**Use `mx` CLI instead of MCP tools** - CLI uses ~0 tokens vs MCP schema overhead.
 
 ## Session Protocol
 
@@ -490,15 +490,15 @@ mx suggest-links path/entry.md      # Find related entries
 
 ## When to Search KB
 
-- ✅ Looking for org patterns, guides, troubleshooting
-- ✅ Before implementing something that might exist
-- ✅ Understanding infrastructure or deployment
+- Looking for org patterns, guides, troubleshooting
+- Before implementing something that might exist
+- Understanding infrastructure or deployment
 
 ## When to Contribute
 
-- ✅ Discovered reusable pattern or solution
-- ✅ Troubleshooting steps worth preserving
-- ✅ Infrastructure or deployment knowledge
+- Discovered reusable pattern or solution
+- Troubleshooting steps worth preserving
+- Infrastructure or deployment knowledge
 
 ## Entry Format
 
@@ -1940,7 +1940,7 @@ def session_log(
 
     # Parse tags and links
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
-    link_list = [l.strip() for l in links.split(",")] if links else None
+    link_list = [link.strip() for link in links.split(",")] if links else None
 
     try:
         result = run_async(
