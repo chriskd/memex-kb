@@ -966,7 +966,7 @@ class TestQuickAddCommand:
         result = runner.invoke(cli, ["quick-add"])
 
         assert result.exit_code == 1
-        assert "Must provide --content, --file, or --stdin" in result.output
+        assert "Missing required field: content" in result.output
 
     @patch("memex.cli.run_async")
     @patch("memex.core.get_valid_categories")
@@ -2037,15 +2037,15 @@ class TestPrimeCommand:
 
     @patch("memex.cli._detect_current_project")
     @patch("memex.cli._get_recent_project_entries")
-    def test_prime_force_mcp_flag(self, mock_recent, mock_project, runner):
-        """Test prime with explicit --mcp flag forces minimal output."""
+    def test_prime_force_compact_flag(self, mock_recent, mock_project, runner):
+        """Test prime with explicit --compact flag forces minimal output."""
         mock_project.return_value = None
         mock_recent.return_value = []
 
-        result = runner.invoke(cli, ["prime", "--mcp"])
+        result = runner.invoke(cli, ["prime", "--compact"])
 
         assert result.exit_code == 0
-        # MCP mode should produce minimal output
+        # Compact mode should produce minimal output
         assert "Memex KB Active" in result.output
 
     @patch("memex.cli._detect_mcp_mode")

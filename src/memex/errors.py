@@ -66,6 +66,7 @@ class ErrorCode(IntEnum):
     MISSING_REQUIRED_FIELD = 1301
     INVALID_CONTENT = 1302
     INVALID_TAGS = 1303
+    VALIDATION_ERROR = 1304  # General input validation (mutually exclusive options, etc.)
 
     # File operation errors (1401-1499)
     FILE_READ_ERROR = 1401
@@ -96,6 +97,7 @@ ERROR_NAMES: dict[ErrorCode, str] = {
     ErrorCode.MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
     ErrorCode.INVALID_CONTENT: "INVALID_CONTENT",
     ErrorCode.INVALID_TAGS: "INVALID_TAGS",
+    ErrorCode.VALIDATION_ERROR: "VALIDATION_ERROR",
     ErrorCode.FILE_READ_ERROR: "FILE_READ_ERROR",
     ErrorCode.FILE_WRITE_ERROR: "FILE_WRITE_ERROR",
     ErrorCode.PERMISSION_DENIED: "PERMISSION_DENIED",
@@ -235,6 +237,15 @@ class MemexError(Exception):
             code=ErrorCode.MISSING_REQUIRED_FIELD,
             message=f"Missing required field: {field}",
             details=details,
+        )
+
+    @classmethod
+    def validation_error(cls, message: str, details: dict[str, Any] | None = None) -> "MemexError":
+        """Create a VALIDATION_ERROR for input validation failures."""
+        return cls(
+            code=ErrorCode.VALIDATION_ERROR,
+            message=message,
+            details=details or {},
         )
 
 

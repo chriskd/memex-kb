@@ -81,6 +81,7 @@ def _handle_error(
     ctx: click.Context,
     error: Exception,
     fallback_message: str | None = None,
+    exit_code: int = 1,
 ) -> None:
     """Handle an error with optional JSON output.
 
@@ -91,6 +92,7 @@ def _handle_error(
         ctx: Click context (must have obj["json_errors"] set).
         error: The exception that occurred.
         fallback_message: Optional message to use for non-MemexError exceptions.
+        exit_code: Exit code to use (default 1). Some commands use specific codes.
     """
     from .errors import MemexError, format_error_json
 
@@ -110,7 +112,7 @@ def _handle_error(
         else:
             click.echo(f"Error: {_normalize_error_message(message)}", err=True)
 
-    sys.exit(1)
+    sys.exit(exit_code)
 
 
 def _infer_error_code(error: Exception, message: str):
@@ -1402,7 +1404,9 @@ def _suggest_category_from_content(content: str, categories: list[str]) -> str |
 @click.option("--category", help="Override auto-suggested category")
 @click.option("--confirm", "-y", is_flag=True, help="Auto-confirm without prompting")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def quick_add(
+    ctx: click.Context,
     file_path: str | None,
     stdin: bool,
     content: str | None,
@@ -1425,6 +1429,7 @@ def quick_add(
       echo "..." | mx quick-add --stdin --json  # Machine-readable
     """
     from .core import add_entry, get_valid_categories
+    from .errors import MemexError
 
     # Resolve content source
     if stdin:
@@ -1432,12 +1437,19 @@ def quick_add(
     elif file_path:
         content = Path(file_path).read_text()
     elif not content:
-        click.echo("Error: Must provide --content, --file, or --stdin", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.missing_required_field(
+                "content",
+                "Provide --content, --file, or --stdin",
+            ),
+        )
 
     if not content.strip():
-        click.echo("Error: Content is empty", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("Content is empty"),
+        )
 
     # Get existing KB structure
     valid_categories = get_valid_categories()
@@ -1505,8 +1517,7 @@ def quick_add(
             force=True,  # Skip duplicate check for quick-add
         ))
     except Exception as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
-        sys.exit(1)
+        _handle_error(ctx, e)
 
     if hasattr(result, 'created') and not result.created:
         click.echo(f"\nWarning: {result.warning}")
@@ -1711,7 +1722,9 @@ def update(
     help="Create entry if not found (default: create)",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def upsert(
+    ctx: click.Context,
     title: str,
     content: str | None,
     file_path: str | None,
@@ -1743,15 +1756,25 @@ def upsert(
       - Fuzzy match (with confidence threshold)
     """
     from .core import AmbiguousMatchError, upsert_entry
+    from .errors import MemexError
 
     # Validate content source (mutually exclusive)
     content_sources = sum([bool(content), bool(file_path), stdin])
     if content_sources == 0:
-        click.echo("Error: Must provide --content, --file, or --stdin", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.missing_required_field(
+                "content",
+                "Provide --content, --file, or --stdin",
+            ),
+        )
     if content_sources > 1:
-        click.echo("Error: --content, --file, and --stdin are mutually exclusive", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.validation_error(
+                "--content, --file, and --stdin are mutually exclusive"
+            ),
+        )
 
     # Get content from source
     if stdin:
@@ -1775,25 +1798,15 @@ def upsert(
             )
         )
     except AmbiguousMatchError as e:
-        if as_json:
-            output({
-                "error": "ambiguous_match",
-                "message": str(e),
-                "matches": [m.model_dump() for m in e.matches],
-            }, as_json=True)
-        else:
-            click.echo(f"Error: {e}", err=True)
-            click.echo("\nCandidates:", err=True)
-            for m in e.matches[:5]:
-                click.echo(f"  - {m.path} \"{m.title}\" ({m.score:.0%})", err=True)
-            click.echo("\nUse --json for full match list or provide more specific title.", err=True)
-        sys.exit(1)
-    except ValueError as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.ambiguous_match(
+                title,
+                [m.path for m in e.matches],
+            ),
+        )
     except Exception as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
-        sys.exit(1)
+        _handle_error(ctx, e)
 
     if as_json:
         output(result.model_dump(), as_json=True)
@@ -1910,7 +1923,9 @@ def batch(ctx: click.Context, file_path: str | None, continue_on_error: bool):
 @click.option("--links", help="Wiki-style links to include (comma-separated)")
 @click.option("--no-timestamp", is_flag=True, help="Don't add timestamp header")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def session_log(
+    ctx: click.Context,
     message: str | None,
     file_path: str | None,
     stdin: bool,
@@ -1940,15 +1955,25 @@ def session_log(
       4. Error with guidance if no context
     """
     from .core import log_session as core_log_session
+    from .errors import MemexError
 
     # Validate message source (mutually exclusive)
     content_sources = sum([bool(message), bool(file_path), stdin])
     if content_sources == 0:
-        click.echo("Error: Must provide --message, --file, or --stdin", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.missing_required_field(
+                "message",
+                "Provide --message, --file, or --stdin",
+            ),
+        )
     if content_sources > 1:
-        click.echo("Error: --message, --file, and --stdin are mutually exclusive", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.validation_error(
+                "--message, --file, and --stdin are mutually exclusive"
+            ),
+        )
 
     # Get message from source
     if stdin:
@@ -1970,12 +1995,8 @@ def session_log(
                 timestamp=not no_timestamp,
             )
         )
-    except ValueError as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
-        sys.exit(1)
     except Exception as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
-        sys.exit(1)
+        _handle_error(ctx, e)
 
     if as_json:
         output(result.model_dump(), as_json=True)
@@ -2008,7 +2029,9 @@ def session_log(
 @click.option("--dry-run", is_flag=True, help="Preview changes without modifying the entry")
 @click.option("--backup", is_flag=True, help="Create .bak backup before patching (recommended for large changes)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def patch(
+    ctx: click.Context,
     path: str,
     old: str | None,
     new: str | None,
@@ -2047,30 +2070,43 @@ def patch(
       mx patch tooling/notes.md --old "# TODO" --new "# DONE" --dry-run
     """
     from .core import patch_entry
+    from .errors import MemexError
 
     # Resolve --old input source
     if old_file and old:
-        click.echo("Error: --old and --old-file are mutually exclusive", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("--old and --old-file are mutually exclusive"),
+            exit_code=3,
+        )
     if old_file:
         old_text = Path(old_file).read_text(encoding="utf-8")
     elif old is not None:
         old_text = old
     else:
-        click.echo("Error: Must provide --old or --old-file", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.missing_required_field("old", "Provide --old or --old-file"),
+            exit_code=3,
+        )
 
     # Resolve --new input source
     if new_file and new:
-        click.echo("Error: --new and --new-file are mutually exclusive", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("--new and --new-file are mutually exclusive"),
+            exit_code=3,
+        )
     if new_file:
         new_text = Path(new_file).read_text(encoding="utf-8")
     elif new is not None:
         new_text = new
     else:
-        click.echo("Error: Must provide --new or --new-file", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.missing_required_field("new", "Provide --new or --new-file"),
+            exit_code=3,
+        )
 
     try:
         result = run_async(
@@ -2084,8 +2120,7 @@ def patch(
             )
         )
     except Exception as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
-        sys.exit(3)
+        _handle_error(ctx, e, exit_code=3)
 
     exit_code = result.get("exit_code", 0)
 
@@ -2099,12 +2134,20 @@ def patch(
             else:
                 click.echo(f"Patched: {result['path']} ({result['replacements']} replacement(s))")
         else:
-            click.echo(f"Error: {result['message']}", err=True)
-            # Show match contexts for ambiguous case
-            if result.get("match_contexts"):
-                click.echo("\nMatches found:", err=True)
-                for ctx in result["match_contexts"]:
-                    click.echo(f"  {ctx['preview']}", err=True)
+            # Handle error output respecting --json-errors
+            json_errors = ctx.obj.get("json_errors", False) if ctx.obj else False
+            if json_errors:
+                from .errors import format_error_json, ErrorCode
+                # Map exit codes to error types
+                code = ErrorCode.ENTRY_NOT_FOUND if exit_code == 1 else ErrorCode.AMBIGUOUS_MATCH if exit_code == 2 else ErrorCode.VALIDATION_ERROR
+                click.echo(format_error_json(code, result['message'], result.get("match_contexts")), err=True)
+            else:
+                click.echo(f"Error: {result['message']}", err=True)
+                # Show match contexts for ambiguous case
+                if result.get("match_contexts"):
+                    click.echo("\nMatches found:", err=True)
+                    for match_ctx in result["match_contexts"]:
+                        click.echo(f"  {match_ctx['preview']}", err=True)
 
     sys.exit(exit_code)
 
@@ -2837,7 +2880,8 @@ def context_status(ctx):
 @click.option("--project", "-p", help="Project name (auto-detected from directory if not provided)")
 @click.option("--directory", "-d", help="KB directory (defaults to projects/<project>)")
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing .kbcontext file")
-def context_init(project: str | None, directory: str | None, force: bool):
+@click.pass_context
+def context_init(ctx: click.Context, project: str | None, directory: str | None, force: bool):
     """Create a new .kbcontext file in the current directory.
 
     \b
@@ -2847,12 +2891,19 @@ def context_init(project: str | None, directory: str | None, force: bool):
       mx context init --project myapp --directory projects/myapp/docs
     """
     from .context import CONTEXT_FILENAME, create_default_context
+    from .errors import MemexError, ErrorCode
 
     context_path = Path.cwd() / CONTEXT_FILENAME
 
     if context_path.exists() and not force:
-        click.echo(f"Error: {CONTEXT_FILENAME} already exists. Use --force to overwrite.", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError(
+                ErrorCode.ENTRY_EXISTS,
+                f"{CONTEXT_FILENAME} already exists",
+                {"suggestion": "Use --force to overwrite"},
+            ),
+        )
 
     # Auto-detect project name from directory
     if not project:
@@ -2869,7 +2920,8 @@ def context_init(project: str | None, directory: str | None, force: bool):
 
 @context.command("validate")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def context_validate(as_json: bool):
+@click.pass_context
+def context_validate(ctx: click.Context, as_json: bool):
     """Validate the current .kbcontext file against the knowledge base.
 
     Checks that:
@@ -2883,27 +2935,31 @@ def context_validate(as_json: bool):
     """
     from .config import get_kb_root
     from .context import get_kb_context, validate_context
+    from .errors import MemexError, ErrorCode
 
-    ctx = get_kb_context()
+    kb_ctx = get_kb_context()
 
-    if ctx is None:
-        if as_json:
-            output({"valid": False, "error": "No .kbcontext file found"}, as_json=True)
-        else:
-            click.echo("Error: No .kbcontext file found.", err=True)
-        sys.exit(1)
+    if kb_ctx is None:
+        _handle_error(
+            ctx,
+            MemexError(
+                ErrorCode.CONTEXT_NOT_FOUND,
+                "No .kbcontext file found",
+                {"suggestion": "Run 'mx context init' to create one"},
+            ),
+        )
 
     kb_root = get_kb_root()
-    warnings = validate_context(ctx, kb_root)
+    warnings = validate_context(kb_ctx, kb_root)
 
     if as_json:
         output({
             "valid": True,
-            "source_file": str(ctx.source_file),
+            "source_file": str(kb_ctx.source_file),
             "warnings": warnings,
         }, as_json=True)
     else:
-        click.echo(f"Validating: {ctx.source_file}")
+        click.echo(f"Validating: {kb_ctx.source_file}")
 
         if warnings:
             click.echo("\nWarnings:")
@@ -2979,7 +3035,8 @@ def session_show(as_json: bool):
 @click.option("--tags", "-t", help="Tags to filter by (comma-separated)")
 @click.option("--project", "-p", help="Project to boost in results")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def session_start(tags: str | None, project: str | None, as_json: bool):
+@click.pass_context
+def session_start(ctx: click.Context, tags: str | None, project: str | None, as_json: bool):
     """Start a new session with the given context.
 
     Replaces any existing session context.
@@ -2991,10 +3048,16 @@ def session_start(tags: str | None, project: str | None, as_json: bool):
       mx session start --tags=python --project=memex
     """
     from .session import SessionContext, save_session
+    from .errors import MemexError
 
     if not tags and not project:
-        click.echo("Error: At least one of --tags or --project required", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.missing_required_field(
+                "tags or project",
+                "Provide --tags or --project (or both)",
+            ),
+        )
 
     tag_list = [t.strip() for t in tags.split(",")] if tags else []
     session_ctx = SessionContext(tags=tag_list, project=project)
@@ -3697,7 +3760,9 @@ def beads_projects(as_json: bool):
     help="Don't remove output directory before build",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def publish(
+    ctx: click.Context,
     kb_root: str | None,
     use_global: bool,
     output_dir: str,
@@ -3746,6 +3811,7 @@ def publish(
     from .config import get_kb_root
     from .context import get_kb_context
     from .core import publish as core_publish
+    from .errors import MemexError, ErrorCode
 
     # Get context early - used for multiple settings
     context = get_kb_context()
@@ -3768,13 +3834,21 @@ def publish(
     # No local KB found - require --global flag for safety
     if not resolved_kb:
         if not use_global:
-            click.echo("Error: No project KB found.", err=True)
-            click.echo("", err=True)
-            click.echo("Options:", err=True)
-            click.echo("  1. Add 'project_kb: ./kb' to .kbcontext", err=True)
-            click.echo("  2. Use --kb-root ./path/to/kb", err=True)
-            click.echo("  3. Use --global to publish from MEMEX_KB_ROOT", err=True)
-            sys.exit(1)
+            _handle_error(
+                ctx,
+                MemexError(
+                    ErrorCode.KB_NOT_CONFIGURED,
+                    "No project KB found",
+                    {
+                        "suggestion": "Add 'project_kb: ./kb' to .kbcontext, use --kb-root, or --global",
+                        "options": [
+                            "Add 'project_kb: ./kb' to .kbcontext",
+                            "Use --kb-root ./path/to/kb",
+                            "Use --global to publish from MEMEX_KB_ROOT",
+                        ],
+                    },
+                ),
+            )
 
         resolved_kb = get_kb_root()
         source_description = "MEMEX_KB_ROOT (--global)"
@@ -3801,8 +3875,7 @@ def publish(
             kb_root=resolved_kb,
         ))
     except Exception as e:
-        click.echo(f"Error: {_normalize_error_message(str(e))}", err=True)
-        sys.exit(1)
+        _handle_error(ctx, e)
 
     if as_json:
         output(result, as_json=True)
