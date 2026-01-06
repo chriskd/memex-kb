@@ -111,6 +111,9 @@ class SiteGenerator:
         # Phase 7: Copy theme assets
         self._copy_theme_assets()
 
+        # Phase 8: Create .nojekyll for GitHub Pages
+        (self.config.output_dir / ".nojekyll").touch()
+
         return PublishResult(
             entries_published=len(self.entries),
             broken_links=self.broken_links,
