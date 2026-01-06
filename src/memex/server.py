@@ -163,7 +163,9 @@ _get_current_project = core.get_current_project
     name="search",
     description=(
         "Search the knowledge base using hybrid keyword + semantic search. "
-        "Returns ranked entries."
+        "Returns ranked entries. Check match_type field to understand how results matched: "
+        "'hybrid' (both keyword+semantic), 'keyword', 'semantic', or 'semantic-fallback' "
+        "(no keyword matches, may not be relevant). Use strict=True to disable fallbacks."
     ),
 )
 async def search_tool(
@@ -172,6 +174,7 @@ async def search_tool(
     mode: Literal["hybrid", "keyword", "semantic"] = "hybrid",
     tags: list[str] | None = None,
     include_content: bool = False,
+    strict: bool = False,
 ) -> SearchResponse:
     """Search the knowledge base."""
     return await core.search(
@@ -180,6 +183,7 @@ async def search_tool(
         mode=mode,
         tags=tags,
         include_content=include_content,
+        strict=strict,
     )
 
 

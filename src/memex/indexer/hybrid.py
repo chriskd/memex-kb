@@ -94,12 +94,18 @@ class HybridSearcher:
 
         if mode == "keyword":
             results = self._whoosh.search(query, limit=fetch_limit)
+            # Set match_type for keyword-only search
+            for r in results:
+                r.match_type = "keyword"
             if apply_adjustments:
                 results = self._apply_ranking_adjustments(
                     query, results, project_context, kb_context,
                 )
         elif mode == "semantic":
             results = self._chroma.search(query, limit=fetch_limit)
+            # Set match_type for semantic-only search
+            for r in results:
+                r.match_type = "semantic"
             if apply_adjustments:
                 results = self._apply_ranking_adjustments(
                     query, results, project_context, kb_context,
@@ -144,19 +150,27 @@ class HybridSearcher:
         if not whoosh_results and not chroma_results:
             return []
         if not whoosh_results:
+            # No keyword matches - these are semantic fallbacks
+            results = chroma_results[:limit]
+            for r in results:
+                r.match_type = "semantic-fallback"
             if apply_adjustments:
                 return self._apply_ranking_adjustments(
-                    query, chroma_results[:limit], project_context, kb_context,
+                    query, results, project_context, kb_context,
                 )
-            return chroma_results[:limit]
+            return results
         if not chroma_results:
+            # Only keyword results (semantic may not be available)
+            results = whoosh_results[:limit]
+            for r in results:
+                r.match_type = "keyword"
             if apply_adjustments:
                 return self._apply_ranking_adjustments(
-                    query, whoosh_results[:limit], project_context, kb_context,
+                    query, results, project_context, kb_context,
                 )
-            return whoosh_results[:limit]
+            return results
 
-        # Apply RRF
+        # Apply RRF - both indices have results
         return self._rrf_merge(
             query,
             whoosh_results,
@@ -233,6 +247,7 @@ class HybridSearcher:
                     updated=result.updated,
                     token_count=result.token_count,
                     source_project=result.source_project,
+                    match_type="hybrid",  # RRF merged results from both indices
                 )
             )
 

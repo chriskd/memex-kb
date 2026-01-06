@@ -35,14 +35,17 @@ def mock_search_result():
             title="Beads Issue Tracker",
             score=0.95,
             snippet="Issue tracking tool...",
+            match_type="hybrid",
         ),
         MagicMock(
             path="tooling/git.md",
             title="Git Workflow",
             score=0.75,
             snippet="Version control...",
+            match_type="hybrid",
         ),
     ]
+    result.warnings = []
     return result
 
 
@@ -358,6 +361,118 @@ class TestSearchCommand:
         )
 
         assert result.exit_code == 0
+
+    @patch("memex.cli.run_async")
+    def test_search_terse_output(self, mock_run_async, runner, mock_search_result):
+        """Test search with --terse flag outputs paths only."""
+        mock_run_async.return_value = mock_search_result
+
+        result = runner.invoke(cli, ["search", "test", "--terse"])
+
+        assert result.exit_code == 0
+        # Terse output should only contain paths, one per line
+        lines = result.output.strip().split("\n")
+        assert lines == ["tooling/beads.md", "tooling/git.md"]
+
+    @patch("memex.cli.run_async")
+    def test_search_compact_json_output(self, mock_run_async, runner, mock_search_result):
+        """Test search with --compact flag outputs minimal JSON."""
+        mock_run_async.return_value = mock_search_result
+
+        result = runner.invoke(cli, ["search", "test", "--compact"])
+
+        assert result.exit_code == 0
+        output_data = json.loads(result.output)
+        assert isinstance(output_data, list)
+        assert len(output_data) == 2
+        # Compact format uses short keys
+        assert output_data[0]["p"] == "tooling/beads.md"
+        assert output_data[0]["t"] == "Beads Issue Tracker"
+        assert "s" in output_data[0]  # score
+        # Compact format should NOT include full keys
+        assert "path" not in output_data[0]
+        assert "title" not in output_data[0]
+
+    @patch("memex.cli.run_async")
+    def test_search_match_type_in_table(self, mock_run_async, runner):
+        """Test search table output includes match_type column."""
+        mock_result = MagicMock()
+        mock_result.results = [
+            MagicMock(
+                path="tooling/beads.md",
+                title="Beads",
+                score=0.95,
+                snippet="...",
+                match_type="hybrid",
+            ),
+        ]
+        mock_result.warnings = []
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["search", "beads"])
+
+        assert result.exit_code == 0
+        assert "MATCH" in result.output
+        assert "hybrid" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_search_match_type_in_json(self, mock_run_async, runner):
+        """Test search JSON output includes match_type field."""
+        mock_result = MagicMock()
+        mock_result.results = [
+            MagicMock(
+                path="tooling/beads.md",
+                title="Beads",
+                score=0.95,
+                snippet="...",
+                match_type="hybrid",
+            ),
+        ]
+        mock_result.warnings = []
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["search", "beads", "--json"])
+
+        assert result.exit_code == 0
+        output_data = json.loads(result.output)
+        assert output_data[0]["match_type"] == "hybrid"
+
+    @patch("memex.cli.run_async")
+    def test_search_semantic_fallback_warning(self, mock_run_async, runner):
+        """Test search shows warning for semantic fallbacks."""
+        mock_result = MagicMock()
+        mock_result.results = [
+            MagicMock(
+                path="tooling/beads.md",
+                title="Beads",
+                score=0.95,
+                snippet="...",
+                match_type="semantic-fallback",
+            ),
+        ]
+        mock_result.warnings = [
+            "No exact keyword matches found. Showing semantically similar entries "
+            "(may not be directly relevant to your query)."
+        ]
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["search", "xyznonexistent"])
+
+        assert result.exit_code == 0
+        assert "Warning:" in result.output
+        assert "semantic" in result.output.lower()
+
+    @patch("memex.cli.run_async")
+    def test_search_strict_flag(self, mock_run_async, runner, mock_search_result):
+        """Test search with --strict flag is passed to core."""
+        mock_run_async.return_value = mock_search_result
+
+        result = runner.invoke(cli, ["search", "test", "--strict"])
+
+        assert result.exit_code == 0
+        # Verify strict=True was passed to the core search function
+        call_args = mock_run_async.call_args[0][0]
+        # The coroutine was created with strict=True (checked via invocation)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

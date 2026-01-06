@@ -836,6 +836,7 @@ async def search(
     tags: list[str] | None = None,
     include_content: bool = False,
     kb_context: KBContext | None = None,
+    strict: bool = False,
 ) -> SearchResponse:
     """Search the knowledge base.
 
@@ -848,6 +849,8 @@ async def search(
                          Default False (snippet only). Limited to MAX_CONTENT_RESULTS.
         kb_context: Optional project context for path-based boosting.
                     If not provided, auto-discovered from cwd.
+        strict: If True, return empty results instead of semantic fallbacks.
+                Default False (show fallbacks with warning).
 
     Returns:
         SearchResponse with results and optional warnings.
@@ -862,6 +865,19 @@ async def search(
         query, limit=limit, mode=mode, project_context=project_context, kb_context=kb_context
     )
     warnings: list[str] = []
+
+    # Check for semantic fallbacks (no keyword matches, only semantic results)
+    has_fallbacks = any(r.match_type == "semantic-fallback" for r in results)
+    if has_fallbacks:
+        if strict:
+            # In strict mode, return empty results instead of semantic fallbacks
+            results = []
+        else:
+            # Warn agents that these are semantic fallbacks, not keyword matches
+            warnings.append(
+                "No exact keyword matches found. Showing semantically similar entries "
+                "(may not be directly relevant to your query)."
+            )
 
     # Filter by tags if specified
     if tags:

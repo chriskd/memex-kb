@@ -52,6 +52,12 @@ class SearchResult(BaseModel):
     token_count: int = 0
     content: str | None = None  # Full document content when requested
     source_project: str | None = None  # Project that created this entry
+    # Match type indicates how the result was found:
+    # - "keyword": matched via keyword/BM25 search
+    # - "semantic": matched via semantic/embedding search
+    # - "hybrid": matched via both keyword and semantic (RRF merged)
+    # - "semantic-fallback": no keyword matches, showing semantic results as fallback
+    match_type: Literal["keyword", "semantic", "hybrid", "semantic-fallback"] | None = None
 
 
 class SearchSuggestion(BaseModel):

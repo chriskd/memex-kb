@@ -790,9 +790,13 @@ def init_kb(
 @click.option("--content", "-c", is_flag=True, help="Include full content in results")
 @click.option("--no-history", is_flag=True, help="Don't record this search in history")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.option("--strict", is_flag=True, help="Return empty results instead of semantic fallbacks")
+@click.option("--terse", is_flag=True, help="Output paths only (one per line)")
+@click.option("--compact", is_flag=True, help="Output minimal JSON (short keys: p, t, s)")
 def search(
     query: str, tags: str | None, mode: str, limit: int,
-    content: bool, no_history: bool, as_json: bool,
+    content: bool, no_history: bool, as_json: bool, strict: bool,
+    terse: bool, compact: bool,
 ):
     """Search the knowledge base.
 
@@ -801,6 +805,9 @@ def search(
       mx search "deployment"
       mx search "docker" --tags=infrastructure
       mx search "api" --mode=semantic --limit=5
+      mx search "config" --strict          # No semantic fallbacks
+      mx search "deploy" --terse           # Paths only
+      mx search "api" --compact            # Minimal JSON
     """
     from .core import search as core_search
     from .indexer.chroma_index import semantic_deps_available
@@ -821,6 +828,7 @@ def search(
         mode=mode,
         tags=tag_list,
         include_content=content,
+        strict=strict,
     ))
 
     # Record search in history (unless --no-history flag is set)
@@ -833,9 +841,26 @@ def search(
             tags=tag_list,
         )
 
-    if as_json:
+    # Show warnings (e.g., semantic fallback warning)
+    for warning in result.warnings:
+        click.echo(f"Warning: {warning}", err=True)
+
+    # Output format selection (mutually exclusive, priority: terse > compact > json > table)
+    if terse:
+        # Terse mode: just paths, one per line
+        for r in result.results:
+            click.echo(r.path)
+    elif compact:
+        # Compact JSON: minimal keys (p=path, t=title, s=score)
         output(
-            [{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet}
+            [{"p": r.path, "t": r.title, "s": round(r.score, 2)} for r in result.results],
+            as_json=True,
+        )
+    elif as_json:
+        # Full JSON with match_type
+        output(
+            [{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet,
+              "match_type": r.match_type}
              for r in result.results],
             as_json=True,
         )
@@ -845,10 +870,11 @@ def search(
             return
 
         rows = [
-            {"path": r.path, "title": r.title, "score": f"{r.score:.2f}"}
+            {"path": r.path, "title": r.title, "score": f"{r.score:.2f}",
+             "match": r.match_type or ""}
             for r in result.results
         ]
-        click.echo(format_table(rows, ["path", "title", "score"], {"path": 40, "title": 35}))
+        click.echo(format_table(rows, ["path", "title", "score", "match"], {"path": 40, "title": 30}))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
