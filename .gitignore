@@ -30,3 +30,7 @@ Thumbs.db
 # uv
 .python-version
 .mcp.json
+
+# Local development artifacts
+.devcontainer/
+.vl-mail/
