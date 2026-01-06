@@ -24,11 +24,15 @@ import os
 import sys
 
 
-def configure_logging() -> None:
+def configure_logging(quiet: bool = False) -> None:
     """Configure logging for the memex package.
 
     Call this once at application startup (e.g., in cli.py or server.py).
-    Subsequent calls are no-ops.
+    Subsequent calls are no-ops unless reconfigure() is called.
+
+    Args:
+        quiet: If True, suppress warnings and show only errors.
+               Can also be set via MEMEX_QUIET=1 environment variable.
     """
     # Get the package root logger
     root_logger = logging.getLogger("memex")
@@ -37,9 +41,15 @@ def configure_logging() -> None:
     if root_logger.handlers:
         return
 
-    # Determine log level from environment
-    level_name = os.environ.get("MEMEX_LOG_LEVEL", "INFO").upper()
-    level = getattr(logging, level_name, logging.INFO)
+    # Check for quiet mode from environment or argument
+    quiet = quiet or os.environ.get("MEMEX_QUIET", "").lower() in ("1", "true", "yes")
+
+    # Determine log level from environment (or override with ERROR if quiet)
+    if quiet:
+        level = logging.ERROR
+    else:
+        level_name = os.environ.get("MEMEX_LOG_LEVEL", "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
 
     # Create console handler with formatting
     handler = logging.StreamHandler(sys.stderr)
@@ -58,6 +68,21 @@ def configure_logging() -> None:
 
     # Prevent propagation to root logger (avoids duplicate messages)
     root_logger.propagate = False
+
+
+def set_quiet_mode(quiet: bool = True) -> None:
+    """Set quiet mode after logging has been configured.
+
+    Use this to enable/disable quiet mode dynamically (e.g., from --quiet flag).
+
+    Args:
+        quiet: If True, suppress warnings and show only errors.
+    """
+    root_logger = logging.getLogger("memex")
+    level = logging.ERROR if quiet else logging.INFO
+    root_logger.setLevel(level)
+    for handler in root_logger.handlers:
+        handler.setLevel(level)
 
 
 def get_logger(name: str) -> logging.Logger:

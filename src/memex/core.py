@@ -1203,8 +1203,8 @@ async def update_entry(
     if not file_path.is_file():
         raise ValueError(f"Path is not a file: {path}")
 
-    if content is None and not section_updates:
-        raise ValueError("Provide new content or section_updates")
+    if content is None and not section_updates and tags is None:
+        raise ValueError("Provide new content, section_updates, or tags")
 
     if append and section_updates:
         raise ValueError("--append cannot be combined with section_updates")
@@ -2997,7 +2997,7 @@ async def upsert_entry(
 
         return UpsertResult(
             path=path,
-            action="appended" if append else "no_change",
+            action="appended" if append else "replaced",
             title=match.title,
             matched_by=match.match_type,
             match_score=match.score,
@@ -3152,16 +3152,28 @@ async def log_session(
         # Ensure directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create the entry
-        await add_entry(
-            title=f"{project_name} Sessions",
-            content=initial_content,
-            tags=default_tags,
-            directory=str(file_path.parent.relative_to(kb_root)),
-            kb_context=kb_context,
-            check_duplicates=False,
-            force=True,
-        )
+        # When entry_path is explicitly provided, use that exact path
+        # Otherwise, use add_entry which generates filename from title
+        if entry_path is not None:
+            # Explicit path: write directly to that location
+            metadata = create_new_metadata(
+                title=f"{project_name} Sessions",
+                tags=default_tags,
+                source_project=kb_context.name if kb_context else None,
+            )
+            frontmatter = build_frontmatter(metadata)
+            file_path.write_text(frontmatter + initial_content, encoding="utf-8")
+        else:
+            # Auto-discovered path: use add_entry
+            await add_entry(
+                title=f"{project_name} Sessions",
+                content=initial_content,
+                tags=default_tags,
+                directory=str(file_path.parent.relative_to(kb_root)),
+                kb_context=kb_context,
+                check_duplicates=False,
+                force=True,
+            )
         action = "created"
 
     # Determine context source for reporting

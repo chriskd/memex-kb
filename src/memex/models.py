@@ -210,7 +210,7 @@ class UpsertResult(BaseModel):
     """Result of upsert operation."""
 
     path: str  # Path to the entry (created or updated)
-    action: Literal["created", "appended", "no_change"]  # What action was taken
+    action: Literal["created", "appended", "replaced"]  # What action was taken
     title: str  # Title of the entry
     matched_by: str | None = None  # How matched: 'exact_title', 'alias', 'fuzzy', None if created
     match_score: float | None = None  # Confidence score if matched

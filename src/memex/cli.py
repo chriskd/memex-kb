@@ -417,8 +417,14 @@ def _output_status(
     envvar="MX_JSON_ERRORS",
     help="Output errors as JSON for programmatic handling",
 )
+@click.option(
+    "--quiet", "-q",
+    is_flag=True,
+    envvar="MEMEX_QUIET",
+    help="Suppress warnings, show only errors and essential output",
+)
 @click.pass_context
-def cli(ctx: click.Context, json_errors: bool):
+def cli(ctx: click.Context, json_errors: bool, quiet: bool):
     """mx: Token-efficient CLI for memex knowledge base.
 
     Search, browse, and manage KB entries without MCP context overhead.
@@ -434,9 +440,20 @@ def cli(ctx: click.Context, json_errors: bool):
     \b
     For programmatic error handling:
       mx --json-errors add ...   # Errors output as JSON with error codes
+
+    \b
+    For quieter output:
+      mx --quiet search ...      # Suppress warnings
+      MEMEX_QUIET=1 mx search    # Or use environment variable
     """
+    from ._logging import set_quiet_mode
+
     ctx.ensure_object(dict)
     ctx.obj["json_errors"] = json_errors
+    ctx.obj["quiet"] = quiet
+
+    if quiet:
+        set_quiet_mode(True)
     if ctx.invoked_subcommand is None:
         _show_status()
 
@@ -1785,7 +1802,8 @@ def upsert(
             click.echo(f"Created: {result.path}")
         else:
             match_info = f" (matched by {result.matched_by})" if result.matched_by else ""
-            click.echo(f"Appended to: {result.path}{match_info}")
+            action_verb = "Replaced" if result.action == "replaced" else "Appended to"
+            click.echo(f"{action_verb}: {result.path}{match_info}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

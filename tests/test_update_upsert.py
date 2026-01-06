@@ -120,6 +120,29 @@ class TestUpdateTags:
         assert "old-tag2" not in content
 
     @pytest.mark.asyncio
+    async def test_update_tags_only_preserves_content(self, update_kb_root, update_index_root):
+        """Update --tags alone preserves existing content."""
+        _create_entry(
+            update_kb_root / "development" / "test.md",
+            "Test Entry",
+            "Original content that should be preserved",
+            tags=["old-tag"],
+        )
+
+        result = await core.update_entry(
+            path="development/test.md",
+            tags=["new-tag"],
+            # NOTE: No content argument - tags only update
+        )
+
+        assert result["path"] == "development/test.md"
+
+        content = (update_kb_root / "development" / "test.md").read_text()
+        assert "new-tag" in content
+        assert "old-tag" not in content
+        assert "Original content that should be preserved" in content
+
+    @pytest.mark.asyncio
     async def test_update_preserves_tags_when_not_specified(self, update_kb_root, update_index_root):
         """Update preserves existing tags when tags not specified."""
         _create_entry(
@@ -158,11 +181,7 @@ class TestUpdateTags:
             )
 
     def test_update_tags_via_cli(self, update_kb_root, update_index_root, runner):
-        """Test update --tags via CLI.
-
-        Note: The core function requires content along with tags.
-        Tags-only updates are not currently supported.
-        """
+        """Test update --tags via CLI with content."""
         _create_entry(
             update_kb_root / "development" / "test.md",
             "CLI Test",
@@ -170,7 +189,6 @@ class TestUpdateTags:
             tags=["old"],
         )
 
-        # Note: must provide content along with tags (core requirement)
         result = runner.invoke(
             cli,
             ["update", "development/test.md", "--tags", "alpha,beta,gamma", "--content", "CLI content"],
@@ -184,6 +202,29 @@ class TestUpdateTags:
         assert "beta" in content
         assert "gamma" in content
         assert "old" not in content
+
+    def test_update_tags_only_via_cli(self, update_kb_root, update_index_root, runner):
+        """Test update --tags via CLI without content preserves existing content."""
+        _create_entry(
+            update_kb_root / "development" / "test.md",
+            "CLI Test",
+            "Original content to preserve",
+            tags=["old-tag"],
+        )
+
+        result = runner.invoke(
+            cli,
+            ["update", "development/test.md", "--tags", "new-tag1,new-tag2"],
+        )
+
+        assert result.exit_code == 0
+        assert "Updated:" in result.output
+
+        content = (update_kb_root / "development" / "test.md").read_text()
+        assert "new-tag1" in content
+        assert "new-tag2" in content
+        assert "old-tag" not in content
+        assert "Original content to preserve" in content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -803,6 +844,79 @@ class TestUpsertAppend:
         content = (update_kb_root / "notes" / "cli-test.md").read_text()
         assert "Original CLI content" in content
         assert "Appended via CLI" in content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test mx upsert with --replace
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestUpsertReplace:
+    """Tests for mx upsert --replace flag."""
+
+    @pytest.mark.asyncio
+    async def test_upsert_replace_replaces_content(self, update_kb_root, update_index_root):
+        """Upsert --replace replaces content instead of appending."""
+        _create_entry(
+            update_kb_root / "notes" / "replace-test.md",
+            "Replace Test Entry",
+            "Original content to be replaced",
+        )
+
+        result = await core.upsert_entry(
+            title="Replace Test Entry",
+            content="Completely new content",
+            append=False,  # Replace mode
+        )
+
+        assert result.action == "replaced"
+        assert result.path == "notes/replace-test.md"
+
+        content = (update_kb_root / "notes" / "replace-test.md").read_text()
+        assert "Completely new content" in content
+        assert "Original content to be replaced" not in content
+
+    def test_upsert_replace_via_cli(self, update_kb_root, update_index_root, runner):
+        """Test upsert --replace via CLI shows correct message."""
+        _create_entry(
+            update_kb_root / "notes" / "cli-replace.md",
+            "CLI Replace Test",
+            "Original CLI content",
+        )
+
+        result = runner.invoke(
+            cli,
+            ["upsert", "CLI Replace Test", "--content", "Replaced via CLI", "--replace"],
+        )
+
+        assert result.exit_code == 0
+        assert "Replaced:" in result.output
+        assert "Appended to:" not in result.output
+
+        content = (update_kb_root / "notes" / "cli-replace.md").read_text()
+        assert "Replaced via CLI" in content
+        assert "Original CLI content" not in content
+
+    def test_upsert_replace_json_output(self, update_kb_root, update_index_root, runner, monkeypatch):
+        """Test upsert --replace JSON output contains 'replaced' action."""
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(update_kb_root))
+        monkeypatch.setenv("MEMEX_INDEX_ROOT", str(update_index_root))
+
+        _create_entry(
+            update_kb_root / "notes" / "json-replace.md",
+            "JSON Replace Test",
+            "Original content",
+        )
+
+        result = runner.invoke(
+            cli,
+            ["upsert", "JSON Replace Test", "--content", "New content", "--replace", "--json"],
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["action"] == "replaced"
+        assert data["path"] == "notes/json-replace.md"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

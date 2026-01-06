@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from memex._logging import configure_logging, get_logger
+from memex._logging import configure_logging, get_logger, set_quiet_mode
 
 
 class TestConfigureLogging:
@@ -129,3 +129,85 @@ class TestGetLogger:
         logger.info("Test message")
         logger.debug("Debug message")
         logger.warning("Warning message")
+
+
+class TestQuietMode:
+    """Tests for quiet mode functionality."""
+
+    @pytest.fixture(autouse=True)
+    def reset_logging(self):
+        """Reset memex logger before each test."""
+        logger = logging.getLogger("memex")
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+        logger.setLevel(logging.NOTSET)
+        yield
+
+    def test_quiet_param_sets_error_level(self):
+        """configure_logging(quiet=True) sets level to ERROR."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("MEMEX_LOG_LEVEL", None)
+            os.environ.pop("MEMEX_QUIET", None)
+            configure_logging(quiet=True)
+
+        logger = logging.getLogger("memex")
+        assert logger.level == logging.ERROR
+
+    def test_memex_quiet_env_var(self):
+        """MEMEX_QUIET=1 environment variable enables quiet mode."""
+        with patch.dict(os.environ, {"MEMEX_QUIET": "1"}):
+            configure_logging()
+
+        logger = logging.getLogger("memex")
+        assert logger.level == logging.ERROR
+
+    def test_memex_quiet_env_var_true(self):
+        """MEMEX_QUIET=true enables quiet mode."""
+        with patch.dict(os.environ, {"MEMEX_QUIET": "true"}):
+            configure_logging()
+
+        logger = logging.getLogger("memex")
+        assert logger.level == logging.ERROR
+
+    def test_memex_quiet_env_var_yes(self):
+        """MEMEX_QUIET=yes enables quiet mode."""
+        with patch.dict(os.environ, {"MEMEX_QUIET": "yes"}):
+            configure_logging()
+
+        logger = logging.getLogger("memex")
+        assert logger.level == logging.ERROR
+
+    def test_memex_quiet_env_var_false_is_not_quiet(self):
+        """MEMEX_QUIET=false does not enable quiet mode."""
+        with patch.dict(os.environ, {"MEMEX_QUIET": "false"}):
+            configure_logging()
+
+        logger = logging.getLogger("memex")
+        assert logger.level == logging.INFO
+
+    def test_set_quiet_mode_after_configure(self):
+        """set_quiet_mode() can enable quiet mode after configure_logging()."""
+        configure_logging()
+        logger = logging.getLogger("memex")
+        assert logger.level == logging.INFO
+
+        set_quiet_mode(True)
+        assert logger.level == logging.ERROR
+
+    def test_set_quiet_mode_can_disable_quiet(self):
+        """set_quiet_mode(False) can disable quiet mode."""
+        configure_logging(quiet=True)
+        logger = logging.getLogger("memex")
+        assert logger.level == logging.ERROR
+
+        set_quiet_mode(False)
+        assert logger.level == logging.INFO
+
+    def test_set_quiet_mode_updates_handlers(self):
+        """set_quiet_mode() updates handler levels too."""
+        configure_logging()
+        logger = logging.getLogger("memex")
+
+        set_quiet_mode(True)
+        for handler in logger.handlers:
+            assert handler.level == logging.ERROR
