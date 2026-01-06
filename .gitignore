@@ -34,3 +34,11 @@ Thumbs.db
 # Local development artifacts
 .devcontainer/
 .vl-mail/
+
+# Test coverage artifacts
+htmlcov/
+.coverage
+coverage.xml
+
+# Empty scripts directory
+scripts/
