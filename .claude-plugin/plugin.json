@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mx prime --mcp"
+            "command": "mx prime --compact"
           }
         ]
       }

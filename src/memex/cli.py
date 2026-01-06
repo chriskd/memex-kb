@@ -659,14 +659,14 @@ def _format_recent_entries(entries: list, project: str) -> str:
 
 @cli.command()
 @click.option("--full", is_flag=True, help="Force full CLI output (ignore MCP detection)")
-@click.option("--mcp", is_flag=True, help="Force MCP mode (minimal output)")
+@click.option("--compact", is_flag=True, help="Force compact output (minimal, for PreCompact hooks)")
 @click.option(
     "--project", "-p",
     help="Include recent entries for project (auto-detected if not specified)",
 )
 @click.option("--days", "-d", default=7, help="Days to look back for project entries")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def prime(full: bool, mcp: bool, project: str | None, days: int, as_json: bool):
+def prime(full: bool, compact: bool, project: str | None, days: int, as_json: bool):
     """Output agent workflow context for session start.
 
     Automatically detects MCP vs CLI mode and adapts output:
@@ -683,14 +683,14 @@ def prime(full: bool, mcp: bool, project: str | None, days: int, as_json: bool):
     Examples:
       mx prime                    # Auto-detect mode
       mx prime --full             # Force full output
-      mx prime --mcp              # Force minimal output
+      mx prime --compact          # Force minimal output
       mx prime --project=myapp    # Include myapp recent entries
       mx prime -p myapp -d 14     # Last 14 days of myapp changes
     """
     # Determine output mode
     if full:
         use_full = True
-    elif mcp:
+    elif compact:
         use_full = False
     else:
         use_full = not _detect_mcp_mode()
@@ -709,7 +709,7 @@ def prime(full: bool, mcp: bool, project: str | None, days: int, as_json: bool):
 
     if as_json:
         output({
-            "mode": "full" if use_full else "mcp",
+            "mode": "full" if use_full else "compact",
             "content": content,
             "project": detected_project,
             "recent_entries": recent_entries,
