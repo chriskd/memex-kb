@@ -325,8 +325,7 @@ ENTRY_TEMPLATE = """
 <div class="reader-container">
     <article class="entry">
         <header class="entry-header">
-            <div class="entry-path">{{ entry.path }}</div>
-            <h1 class="entry-title">{{ entry.title }}</h1>
+            <a href="{{ base_url }}/{{ entry.path }}.html" class="entry-path">{{ entry.path }}</a>
             <div class="entry-meta">
                 {% if entry.metadata.created %}
                 <div class="entry-meta-item">Created: <span>{{ entry.metadata.created }}</span></div>

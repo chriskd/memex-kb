@@ -161,10 +161,12 @@ class TestTemplates:
         return entry
 
     def test_render_entry_page_includes_title(self, mock_entry):
-        """Entry page includes title in heading."""
+        """Entry page includes title in page title and path as permalink."""
         html = render_entry_page(mock_entry, base_url="")
         assert "<title>Test Entry - Memex</title>" in html
-        assert "Test Entry</h1>" in html  # Title in h1 (may have class)
+        # Path is a permalink, title comes from content
+        assert 'class="entry-path"' in html
+        assert 'href="/test/entry.html"' in html
 
     def test_render_entry_page_includes_content(self, mock_entry):
         """Entry page includes rendered HTML content."""
