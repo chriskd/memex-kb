@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 from click.testing import CliRunner
 
-from memex.cli import cli, _show_status, _get_recent_entries_for_status, _output_status
+from memex.cli import cli, _get_recent_entries_for_status, _output_status
 
 
 @pytest.fixture

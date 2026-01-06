@@ -3,7 +3,6 @@
 Verifies that help text is accurate, complete, and AI-friendly.
 """
 
-import re
 import tomllib
 from pathlib import Path
 

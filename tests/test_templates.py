@@ -1,7 +1,5 @@
 """Tests for the templates module."""
 
-import pytest
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from memex.templates import (
@@ -12,7 +10,6 @@ from memex.templates import (
     apply_template,
     get_all_templates,
     _load_user_template,
-    USER_TEMPLATES_DIR,
 )
 
 

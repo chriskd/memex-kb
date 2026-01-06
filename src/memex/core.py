@@ -3107,7 +3107,6 @@ async def log_session(
 
     # Add links if provided
     if links:
-        link_lines = [f"- [[{link}]]" for link in links]
         final_content += "\n\nRelated: " + ", ".join(f"[[{link}]]" for link in links)
 
     # Add tags as inline metadata if provided

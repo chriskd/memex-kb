@@ -111,7 +111,7 @@ mx whats-new         # Recent changes
 ### Add more entries
 ```bash
 # From a file
-mx add --title="Meeting Notes" --tags="meetings" --file=notes.md
+mx add --title="Meeting Notes" --tags="meetings" --category=notes --file=notes.md
 
 # Quick add with auto-generated metadata
 echo "Learned about Docker volumes today..." | mx quick-add --stdin
