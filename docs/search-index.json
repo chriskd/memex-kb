@@ -1,0 +1,100 @@
+{
+  "documents": [
+    {
+      "id": "guides/quick-start",
+      "title": "Quick Start Guide",
+      "tags": "getting-started tutorial basics",
+      "content": "Quick Start Guide Get productive with memex in 5 minutes. 1. Set Up Your Knowledge Base # Create a directory for your KB mkdir -p ~/kb # Set environment variables (add to shell profile for persistence) export MEMEX_KB_ROOT=~/kb export MEMEX_INDEX_ROOT=~/.memex-indices # Initialize the KB mx init 2. Create Your First Entry mx add \\ --title=&quot;Git Stash Workflow&quot; \\ --tags=&quot;git,workflow,cli&quot; \\ --category=tooling \\ --content=&quot;# Git Stash Workflow Quick save work in progress: \\`\\`\\`bash git stash push -m 'WIP: feature X' git stash list git stash pop \\`\\`\\` Use \\`git stash apply\\` to keep the stash after applying.&quot; This creates tooling/git-stash-workflow.md in your KB. 3. Search for It # Keyword search mx search &quot;stash&quot; # With semantic search (if installed) mx search &quot;save work in progress&quot; # Filter by tag mx search &quot;git&quot; --tags=workflow 4. Read It Back # Full entry with content mx get tooling/git-stash-workflow.md # Metadata only mx get tooling/git-stash-workflow.md --metadata 5. Check KB Health mx health Audits your KB for: Missing frontmatter Broken links Orphaned entries Index sync issues Essential Commands Command Description mx search &quot;query&quot; Search the KB mx get path/entry.md Read an entry mx add --title=&quot;...&quot; --tags=&quot;...&quot; --category=... Create entry mx tree Browse structure mx tags List all tags mx whats-new Recent changes mx health Audit KB Next Steps CLI Reference - Full command documentation Entry Format - Frontmatter and linking AI Agent Integration - Use with Claude Code"
+    },
+    {
+      "id": "guides/ai-integration",
+      "title": "AI Agent Integration",
+      "tags": "ai claude-code codex agents integration",
+      "content": "AI Agent Integration Memex is designed for AI coding assistants. The CLI is the recommended interface - it uses ~0 tokens vs MCP's schema overhead. Claude Code Permission Setup Add to .claude/settings.local.json : { &quot;permissions&quot;: { &quot;allow&quot;: [&quot;Bash(mx:*)&quot;] } } This grants Claude Code permission to run any mx command without prompting. Session Hooks For automatic context injection, use hooks: { &quot;hooks&quot;: { &quot;SessionStart&quot;: [ { &quot;command&quot;: &quot;mx prime&quot; } ] } } The mx prime command: Injects KB workflow guidance at session start Auto-detects MCP vs CLI mode Adapts output format accordingly Workflow Pattern # Before implementing: search KB for existing patterns mx search &quot;authentication patterns&quot; # During work: add discoveries for future sessions mx add --title=&quot;OAuth2 Setup&quot; --tags=&quot;auth,patterns&quot; --category=patterns \\ --content=&quot;...&quot; # Track progress: update project session log mx session-log --message=&quot;Implemented OAuth2 flow&quot; Codex CLI Codex can use memex via shell commands in AGENTS.md: ## Knowledge Base Search organizational knowledge before implementing: - `mx search &quot;query&quot;` - Find existing patterns - `mx get path/entry.md` - Read specific entry - `mx add --title=&quot;...&quot; --tags=&quot;...&quot; --category=... --content=&quot;...&quot;` - Add discoveries Other AI Agents Any agent with shell access can use the mx CLI. Common Patterns # Check for relevant knowledge before implementing mx search &quot;deployment strategies&quot; # Add discoveries for future sessions mx add --title=&quot;API Rate Limiting&quot; \\ --tags=&quot;api,patterns&quot; \\ --category=patterns \\ --content=&quot;...&quot; # View recent project updates mx whats-new --project=myapp --days=7 # Quick status check mx info Search Strategy Before implementing : Search for existing patterns When stuck : Search for troubleshooting guides After solving : Add solution to KB When to Search KB Looking for organizational patterns or guides Before implementing something that might exist Understanding infrastructure or deployment Troubleshooting known issues When to Contribute Discovered reusable pattern or solution Troubleshooting steps worth preserving Infrastructure or deployment knowledge Project-specific conventions Project Context Set up project-specific KB context with .kbcontext : # In your project directory mx context init This creates a .kbcontext file that: Routes new entries to projects/&lt;name&gt; by default Boosts project entries in search results Suggests project-specific tags Session Management Track work across sessions: # Start a session with context mx session start --tags=infrastructure --project=myapp # Log session activity mx session-log --message=&quot;Fixed auth bug, added tests&quot; # Clear session context mx session clear Best Practices Search before creating - Avoid duplicate entries Tag consistently - Use mx tags to see existing tags Link related entries - Use [[path/to/entry]] syntax Keep entries focused - One topic per entry Update, don't duplicate - Append to existing entries See Also CLI Reference MCP Server Setup Entry Format"
+    },
+    {
+      "id": "guides/mcp-setup",
+      "title": "MCP Server Setup",
+      "tags": "mcp claude-desktop setup configuration",
+      "content": "MCP Server Setup Memex provides a Model Context Protocol (MCP) server for integration with Claude Desktop and other MCP-compatible tools. Basic Configuration Add to your Claude Code settings or MCP configuration: { &quot;mcpServers&quot;: { &quot;memex&quot;: { &quot;type&quot;: &quot;stdio&quot;, &quot;command&quot;: &quot;memex&quot; } } } Configuration Locations Claude Desktop (macOS): ~/Library/Application Support/Claude/claude_desktop_config.json Claude Desktop (Windows): %APPDATA%\\Claude\\claude_desktop_config.json Claude Code: .claude/settings.local.json Environment Variables Configure the KB location via environment: { &quot;mcpServers&quot;: { &quot;memex&quot;: { &quot;type&quot;: &quot;stdio&quot;, &quot;command&quot;: &quot;memex&quot;, &quot;env&quot;: { &quot;MEMEX_KB_ROOT&quot;: &quot;/path/to/kb&quot;, &quot;MEMEX_INDEX_ROOT&quot;: &quot;/path/to/indices&quot; } } } } Available MCP Tools Tool Description search Hybrid keyword + semantic search get Retrieve entry with content and links add Create new KB entry update Modify existing entry delete Remove an entry list List entries by category/tag whats_new Recently modified entries tree Directory structure tags List all tags backlinks Find entries linking to a path suggest_links Find semantically related entries health KB audit mkdir Create a directory move Move/rename an entry rmdir Remove empty directory quality Detailed quality report Preloading Embedding Model For faster first search, preload the embedding model: { &quot;mcpServers&quot;: { &quot;memex&quot;: { &quot;type&quot;: &quot;stdio&quot;, &quot;command&quot;: &quot;memex&quot;, &quot;env&quot;: { &quot;MEMEX_PRELOAD&quot;: &quot;true&quot; } } } } CLI vs MCP Aspect CLI ( mx ) MCP Server Token cost ~0 (shell command) ~500+ (tool schema) Setup Just install Configure mcpServers Output Human-readable Structured JSON Best for Most agents Claude Desktop app Recommendation: Use CLI for AI agents unless you specifically need MCP's structured responses. Troubleshooting Server not starting Verify memex is installed: memex --version Check KB path exists: ls $MEMEX_KB_ROOT Test manually: echo '{}' | memex Search not returning results Verify entries exist: mx list Rebuild indices: mx reindex Check search mode: semantic requires [semantic] extras See Also Installation Guide AI Agent Integration CLI Reference"
+    },
+    {
+      "id": "guides/installation",
+      "title": "Installation Guide",
+      "tags": "installation setup getting-started",
+      "content": "Installation Guide Memex can be installed in two configurations: minimal (keyword search only) or full (with semantic search). Minimal Install (Recommended Start) Fast, lightweight installation with keyword search only: # With uv (recommended) uv tool install memex # With pip pip install memex # Verify installation mx --version This gives you: Full CLI functionality ( mx command) MCP server for Claude Desktop BM25 keyword search via Whoosh ~100MB footprint Full Install (Semantic Search) Add semantic search for meaning-based queries: # With uv uv tool install &quot;memex[semantic]&quot; # With pip pip install &quot;memex[semantic]&quot; This adds: ChromaDB for vector storage sentence-transformers for embeddings CPU-only PyTorch (~500MB additional) First search downloads embedding model (~100MB) From Source For development or customization: git clone https://github.com/chriskd/memex.git cd memex # Core only (~100MB) uv sync # With semantic search (~600MB) uv sync --all-extras GPU Support (Optional) If you have an NVIDIA GPU and want CUDA acceleration: uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124 Platform Notes ARM64 (Apple Silicon) : ChromaDB capped at &lt;1.0.0 for onnxruntime compatibility CPU-only default : PyTorch configured for CPU to minimize install size Python requirement : 3.11 or higher Next Steps After installation: Quick Start Guide - Create your first KB CLI Reference - Full command documentation MCP Server Setup - Configure for Claude Desktop"
+    },
+    {
+      "id": "reference/entry-format",
+      "title": "Entry Format Reference",
+      "tags": "reference frontmatter markdown links",
+      "content": "Entry Format Reference Memex entries are Markdown files with YAML frontmatter. Basic Structure --- title: Entry Title tags: [tag1, tag2, tag3] created: 2025-01-15 description: One-line summary for search results --- # Entry Title Your content here with [[bidirectional links]] to other entries. Frontmatter Fields Required Field Type Description title string Entry title (used for display and title matching) tags list Tags for filtering and discovery Optional Field Type Description created date Creation date (YYYY-MM-DD) updated date Last update date description string One-line summary for search results aliases list Alternative titles for title matching draft boolean Exclude from mx publish unless --include-drafts archived boolean Exclude from search and publish source_project string Project that created this entry Bidirectional Links Link to other entries using wiki-style syntax: See [[guides/installation]] for setup instructions. Or use display text: [[guides/installation|the installation guide]]. Link Resolution Links resolve in this order: Exact path match (with or without .md ) Title match (case-insensitive) Filename match (for short links) Examples [[guides/installation]] # Path link [[Installation Guide]] # Title link [[installation]] # Filename link [[guides/installation|Setup]] # With display text Tags Tags enable filtering and discovery: tags: [infrastructure, deployment, docker] Best Practices Use lowercase, hyphenated tags Check existing tags with mx tags Be consistent across entries Use 2-5 tags per entry Common Tag Patterns Pattern Example Technology docker , kubernetes , python Category troubleshooting , patterns , reference Project myapp , api-gateway Status draft , needs-review Content Guidelines Headings Use heading hierarchy for structure: # Main Title (matches frontmatter title) ## Section ### Subsection Code Blocks Use fenced code blocks with language hints: \\`\\`\\`bash mx search &quot;query&quot; \\`\\`\\` \\`\\`\\`python def example(): pass \\`\\`\\` Lists Use consistent list formatting: - Item one - Item two - Nested item 1. First step 2. Second step File Organization Categories Organize entries into directories: kb/ ├── guides/ # How-to guides ├── reference/ # Reference documentation ├── patterns/ # Reusable patterns ├── troubleshooting/ # Problem-solution pairs ├── projects/ # Project-specific docs └── infrastructure/ # Infrastructure docs Naming Use lowercase with hyphens: my-entry-title.md Keep names descriptive but concise Avoid special characters Templates Use templates for consistent structure: # List available templates mx templates # Create entry from template mx add --title=&quot;...&quot; --tags=&quot;...&quot; --category=... --template=troubleshooting Built-in Templates Template Use case troubleshooting Problem/solution documentation pattern Reusable code/design patterns runbook Operational procedures decision Architecture decision records api API endpoint documentation See Also CLI Reference Quick Start Guide"
+    },
+    {
+      "id": "reference/cli",
+      "title": "CLI Reference",
+      "tags": "cli reference commands",
+      "content": "CLI Reference The mx CLI provides token-efficient access to your knowledge base. Search Commands mx search Search the knowledge base with hybrid keyword + semantic search. mx search &quot;query&quot; # Hybrid search mx search &quot;docker&quot; --tags=infra # Filter by tag mx search &quot;api&quot; --mode=semantic # Semantic only mx search &quot;api&quot; --mode=keyword # Keyword only mx search &quot;query&quot; --limit=20 # More results mx search &quot;query&quot; --content # Include full content mx search &quot;query&quot; --strict # No semantic fallback mx search &quot;query&quot; --terse # Paths only mx search &quot;query&quot; --json # JSON output Options: --tags, -t : Filter by tags (comma-separated) --mode : Search mode (hybrid, keyword, semantic) --limit, -n : Maximum results (default: 10) --content, -c : Include full content in results --strict : Disable semantic fallback --terse : Output paths only --json : JSON output mx history View and re-run past searches. mx history # Show last 10 searches mx history -n 20 # Show last 20 mx history --rerun 1 # Re-run most recent mx history --clear # Clear history Read Commands mx get Read a knowledge base entry. mx get tooling/my-entry.md # Full entry mx get tooling/my-entry.md --metadata # Metadata only mx get tooling/my-entry.md --json # JSON output mx list List entries with optional filters. mx list # All entries mx list --tag=infrastructure # Filter by tag mx list --category=tooling # Filter by category mx list --limit=50 # More results mx tree Display directory structure. mx tree # Full tree mx tree tooling # Specific path mx tree --depth=2 # Limit depth Write Commands mx add Create a new entry. mx add --title=&quot;My Entry&quot; --tags=&quot;foo,bar&quot; --category=tooling --content=&quot;...&quot; mx add --title=&quot;...&quot; --tags=&quot;...&quot; --category=... --file=content.md cat content.md | mx add --title=&quot;...&quot; --tags=&quot;...&quot; --category=... --stdin mx add --title=&quot;...&quot; --tags=&quot;...&quot; --template=troubleshooting mx add --title=&quot;...&quot; --tags=&quot;...&quot; --dry-run # Preview only Required: --title, -t : Entry title --tags : Tags (comma-separated) --category, -c : Target directory (unless .kbcontext sets primary) mx update Update an existing entry. mx update path/entry.md --tags=&quot;new,tags&quot; mx update path/entry.md --content=&quot;New content&quot; mx update path/entry.md --content=&quot;Append this&quot; --append mx update path/entry.md --content=&quot;...&quot; --append --timestamp mx update path/entry.md --file=new-content.md mx patch Surgical find-replace edits. mx patch path/entry.md --old=&quot;old text&quot; --new=&quot;new text&quot; mx patch path/entry.md --old=&quot;TODO&quot; --new=&quot;DONE&quot; --replace-all mx patch path/entry.md --old=&quot;...&quot; --new=&quot;...&quot; --dry-run mx upsert Create or append to entry by title. mx upsert &quot;Daily Log&quot; --content=&quot;Session summary&quot; mx upsert &quot;API Docs&quot; --file=api.md --tags=&quot;api,docs&quot; mx upsert &quot;Debug Log&quot; --content=&quot;...&quot; --no-create # Error if not found mx delete Delete an entry. mx delete path/entry.md mx delete path/entry.md --force # Delete even with backlinks Analysis Commands mx health Audit KB for problems. mx health mx health --json Checks for: Orphaned entries (no backlinks) Broken links Stale content (&gt;90 days) Missing frontmatter mx hubs Show most connected entries. mx hubs mx hubs --limit=5 mx suggest-links Find semantically related entries. mx suggest-links path/entry.md mx suggest-links path/entry.md --limit=10 mx tags List all tags with counts. mx tags mx tags --min-count=3 Browse Commands mx info Show KB configuration and stats. mx info mx info --json mx whats-new Show recently modified entries. mx whats-new # Last 30 days mx whats-new --days=7 # Last week mx whats-new --project=myapp # Filter by project mx whats-new --limit=20 # More results Context Commands mx context Manage project-specific KB context. mx context # Show current context mx context init # Create .kbcontext file mx context validate # Validate context paths Publishing mx publish Generate static HTML site. mx publish # Build to _site/ mx publish -o docs # Build to docs/ mx publish --base-url /my-kb # For subdirectory hosting mx publish --include-drafts # Include draft entries Maintenance mx reindex Rebuild search indices. mx reindex mx prime Output agent workflow context (for hooks). mx prime # Auto-detect mode mx prime --full # Force full output mx prime --mcp # Force minimal output Global Options All commands support: --json : JSON output --help : Show help See Also Installation Guide AI Agent Integration Entry Format"
+    }
+  ],
+  "metadata": {
+    "guides/quick-start": {
+      "title": "Quick Start Guide",
+      "tags": [
+        "getting-started",
+        "tutorial",
+        "basics"
+      ],
+      "path": "guides/quick-start.html"
+    },
+    "guides/ai-integration": {
+      "title": "AI Agent Integration",
+      "tags": [
+        "ai",
+        "claude-code",
+        "codex",
+        "agents",
+        "integration"
+      ],
+      "path": "guides/ai-integration.html"
+    },
+    "guides/mcp-setup": {
+      "title": "MCP Server Setup",
+      "tags": [
+        "mcp",
+        "claude-desktop",
+        "setup",
+        "configuration"
+      ],
+      "path": "guides/mcp-setup.html"
+    },
+    "guides/installation": {
+      "title": "Installation Guide",
+      "tags": [
+        "installation",
+        "setup",
+        "getting-started"
+      ],
+      "path": "guides/installation.html"
+    },
+    "reference/entry-format": {
+      "title": "Entry Format Reference",
+      "tags": [
+        "reference",
+        "frontmatter",
+        "markdown",
+        "links"
+      ],
+      "path": "reference/entry-format.html"
+    },
+    "reference/cli": {
+      "title": "CLI Reference",
+      "tags": [
+        "cli",
+        "reference",
+        "commands"
+      ],
+      "path": "reference/cli.html"
+    }
+  }
+}

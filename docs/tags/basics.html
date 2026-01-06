@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tag: basics - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="/" class="nav-link active">Reader</a>
+                <a href="/graph.html" class="nav-link">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">Categories</div>
+            <div class="tree">
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">guides</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/guides/ai-integration.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ai-integration</span>
+                    </a>
+                    <a href="/guides/installation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">installation</span>
+                    </a>
+                    <a href="/guides/mcp-setup.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">mcp-setup</span>
+                    </a>
+                    <a href="/guides/quick-start.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">quick-start</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">reference</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/reference/cli.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">cli</span>
+                    </a>
+                    <a href="/reference/entry-format.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">entry-format</span>
+                    </a>
+                </div>
+            </div></div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            
+<div class="tag-page-container">
+    <h1>Tag: basics</h1>
+    <p class="tag-count">1 entries</p>
+    <ul class="entry-list">
+        
+        <li>
+            <a href="/guides/quick-start.html">Quick Start Guide</a>
+            
+            <span class="entry-date">2026-01-06 00:00:00</span>
+            
+        </li>
+        
+    </ul>
+    <p class="back-link"><a href="/">← Back to index</a></p>
+</div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            
+        <div class="panel-section">
+            <div class="panel-header">Tag Info</div>
+            <p class="empty-state">Entries tagged with this topic</p>
+        </div>
+    
+        </aside>
+    </div>
+
+    <script>window.BASE_URL = "";</script>
+    <script src="/assets/search.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ build/
 
 # Search indices (rebuilt locally)
 .indices/
+.kb-indices/
 
 # IDE
 .idea/

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Installation Guide - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="/" class="nav-link active">Reader</a>
+                <a href="/graph.html" class="nav-link">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">Categories</div>
+            <div class="tree">
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">guides</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/guides/ai-integration.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">ai-integration</span>
+                    </a>
+                    <a href="/guides/installation.html" class="tree-item active">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">installation</span>
+                    </a>
+                    <a href="/guides/mcp-setup.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">mcp-setup</span>
+                    </a>
+                    <a href="/guides/quick-start.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">quick-start</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">reference</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/reference/cli.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">cli</span>
+                    </a>
+                    <a href="/reference/entry-format.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">entry-format</span>
+                    </a>
+                </div>
+            </div></div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            
+<div class="reader-container">
+    <article class="entry">
+        <header class="entry-header">
+            <div class="entry-path">guides/installation</div>
+            <h1 class="entry-title">Installation Guide</h1>
+            <div class="entry-meta">
+                
+                <div class="entry-meta-item">Created: <span>2026-01-06 00:00:00</span></div>
+                
+            </div>
+            
+            <div class="entry-tags">
+                
+                <a href="/tags/installation.html" class="tag">installation</a>
+                
+                <a href="/tags/setup.html" class="tag">setup</a>
+                
+                <a href="/tags/getting-started.html" class="tag">getting-started</a>
+                
+            </div>
+            
+        </header>
+        <div class="entry-content">
+            <h1>Installation Guide</h1>
+<p>Memex can be installed in two configurations: minimal (keyword search only) or full (with semantic search).</p>
+<h2>Minimal Install (Recommended Start)</h2>
+<p>Fast, lightweight installation with keyword search only:</p>
+<pre><code class="language-bash"># With uv (recommended)
+uv tool install memex
+
+# With pip
+pip install memex
+
+# Verify installation
+mx --version
+</code></pre>
+<p>This gives you:</p>
+<ul>
+<li>Full CLI functionality (<code>mx</code> command)</li>
+<li>MCP server for Claude Desktop</li>
+<li>BM25 keyword search via Whoosh</li>
+<li>~100MB footprint</li>
+</ul>
+<h2>Full Install (Semantic Search)</h2>
+<p>Add semantic search for meaning-based queries:</p>
+<pre><code class="language-bash"># With uv
+uv tool install &quot;memex[semantic]&quot;
+
+# With pip
+pip install &quot;memex[semantic]&quot;
+</code></pre>
+<p>This adds:</p>
+<ul>
+<li>ChromaDB for vector storage</li>
+<li>sentence-transformers for embeddings</li>
+<li>CPU-only PyTorch (~500MB additional)</li>
+<li>First search downloads embedding model (~100MB)</li>
+</ul>
+<h2>From Source</h2>
+<p>For development or customization:</p>
+<pre><code class="language-bash">git clone https://github.com/chriskd/memex.git
+cd memex
+
+# Core only (~100MB)
+uv sync
+
+# With semantic search (~600MB)
+uv sync --all-extras
+</code></pre>
+<h2>GPU Support (Optional)</h2>
+<p>If you have an NVIDIA GPU and want CUDA acceleration:</p>
+<pre><code class="language-bash">uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124
+</code></pre>
+<h2>Platform Notes</h2>
+<ul>
+<li><strong>ARM64 (Apple Silicon)</strong>: ChromaDB capped at &lt;1.0.0 for onnxruntime compatibility</li>
+<li><strong>CPU-only default</strong>: PyTorch configured for CPU to minimize install size</li>
+<li><strong>Python requirement</strong>: 3.11 or higher</li>
+</ul>
+<h2>Next Steps</h2>
+<p>After installation:</p>
+<ol>
+<li><a href="quick-start.html" class="wikilink">Quick Start Guide</a> - Create your first KB</li>
+<li><a href="../reference/cli.html" class="wikilink">CLI Reference</a> - Full command documentation</li>
+<li><a href="mcp-setup.html" class="wikilink">MCP Server Setup</a> - Configure for Claude Desktop</li>
+</ol>
+
+        </div>
+    </article>
+</div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            
+        <div class="panel-section">
+            <div class="panel-header">Outgoing Links</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/guides/mcp-setup.html">
+                        <div class="link-title">MCP Server Setup</div>
+                        <div class="link-path">guides/mcp-setup</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/guides/quick-start.html">
+                        <div class="link-title">Quick Start Guide</div>
+                        <div class="link-path">guides/quick-start</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/reference/cli.html">
+                        <div class="link-title">CLI Reference</div>
+                        <div class="link-path">reference/cli</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="panel-section">
+            <div class="panel-header">Backlinks</div>
+            <ul class="link-list">
+                <li class="link-item">
+                    <a href="/guides/mcp-setup.html">
+                        <div class="link-title">MCP Server Setup</div>
+                        <div class="link-path">guides/mcp-setup</div>
+                    </a>
+                </li>
+                <li class="link-item">
+                    <a href="/reference/cli.html">
+                        <div class="link-title">CLI Reference</div>
+                        <div class="link-path">reference/cli</div>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        </aside>
+    </div>
+
+    <script>window.BASE_URL = "";</script>
+    <script src="/assets/search.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+</body>
+</html>
