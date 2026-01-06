@@ -582,8 +582,8 @@ class TestUpdateTool:
             ["test"],
         )
 
-        # Update requires either content or section_updates
-        with pytest.raises(ValueError, match="Provide new content or section_updates"):
+        # Update requires either content, section_updates, or tags
+        with pytest.raises(ValueError, match="Provide new content, section_updates, or tags"):
             await _call_tool(
                 server.update_tool,
                 path="development/test.md",
