@@ -265,6 +265,35 @@ class TestTemplates:
         )
         assert "Powered by memex" in html
 
+    def test_tabbed_sidebar_in_entry_page(self, mock_entry):
+        """Entry page has tabbed sidebar with Browse and Recent tabs."""
+        html = render_entry_page(mock_entry, base_url="", all_entries=[mock_entry])
+        # Check for tab buttons
+        assert 'class="nav-tabs"' in html
+        assert 'data-tab="tree"' in html
+        assert 'data-tab="recent"' in html
+        assert ">Browse</button>" in html
+        assert ">Recent</button>" in html
+        # Check for both sections
+        assert 'id="tree-section"' in html
+        assert 'id="recent-section"' in html
+
+    def test_tabbed_sidebar_in_index_page(self, mock_entry):
+        """Index page has tabbed sidebar."""
+        html = render_index_page(
+            [mock_entry],
+            {"test": ["test/entry"]},
+            base_url="",
+        )
+        assert 'class="nav-tabs"' in html
+        assert 'data-tab="tree"' in html
+        assert 'data-tab="recent"' in html
+
+    def test_sidebar_js_included(self, mock_entry):
+        """Sidebar JavaScript is included in pages."""
+        html = render_entry_page(mock_entry, base_url="")
+        assert 'src="/assets/sidebar.js"' in html
+
 
 class TestSiteGeneratorIntegration:
     """Integration tests for full site generation."""
@@ -320,6 +349,7 @@ Content here.
         assert (output_dir / "link.html").exists()
         assert (output_dir / "search-index.json").exists()
         assert (output_dir / "assets" / "style.css").exists()
+        assert (output_dir / "assets" / "sidebar.js").exists()
 
     @pytest.mark.asyncio
     async def test_excludes_drafts_by_default(self, tmp_path):
@@ -469,3 +499,27 @@ This is a draft.
         # Check index page falls back to default (Recent Entries)
         index_html = (output_dir / "index.html").read_text()
         assert "Recent Entries" in index_html
+
+    @pytest.mark.asyncio
+    async def test_tabbed_sidebar_in_generated_pages(self, temp_kb, tmp_path):
+        """Generated pages have tabbed sidebar with Browse/Recent tabs."""
+        from memex.publisher import PublishConfig, SiteGenerator
+
+        output_dir = tmp_path / "site"
+        config = PublishConfig(output_dir=output_dir, base_url="")
+        generator = SiteGenerator(config, temp_kb)
+
+        await generator.generate()
+
+        # Check entry page
+        entry_html = (output_dir / "test.html").read_text()
+        assert 'class="nav-tabs"' in entry_html
+        assert 'data-tab="tree"' in entry_html
+        assert 'data-tab="recent"' in entry_html
+        assert 'id="tree-section"' in entry_html
+        assert 'id="recent-section"' in entry_html
+        assert "sidebar.js" in entry_html
+
+        # Check index page
+        index_html = (output_dir / "index.html").read_text()
+        assert 'class="nav-tabs"' in index_html

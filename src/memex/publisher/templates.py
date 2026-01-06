@@ -55,7 +55,7 @@ def _build_file_tree(entries: list["EntryData"], current_path: str = "", base_ur
         else:
             root_entries.append(entry)
 
-    html_parts = ['<div class="tree">']
+    html_parts = ['<div class="tree" id="tree">']
 
     # Render folders
     for folder in sorted(folders.keys()):
@@ -92,6 +92,70 @@ def _build_file_tree(entries: list["EntryData"], current_path: str = "", base_ur
 
     html_parts.append('</div>')
     return ''.join(html_parts)
+
+
+def _build_recent_list(entries: list["EntryData"], current_path: str = "", base_url: str = "", limit: int = 20) -> str:
+    """Build HTML for the recent entries list in sidebar.
+
+    Args:
+        entries: All entry data
+        current_path: Currently viewed entry path (for highlighting)
+        base_url: Base URL prefix for links
+        limit: Maximum number of recent entries to show
+
+    Returns:
+        HTML string for the recent entries list
+    """
+    # Sort by created date, newest first
+    sorted_entries = sorted(
+        entries,
+        key=lambda e: str(e.metadata.created) if e.metadata.created else "",
+        reverse=True
+    )[:limit]
+
+    html_parts = ['<div class="tree" id="recent-list">']
+
+    for entry in sorted_entries:
+        active_class = ' active' if entry.path == current_path else ''
+        html_parts.append(f'''
+            <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">{_escape_html(entry.title)}</span>
+            </a>''')
+
+    html_parts.append('</div>')
+    return ''.join(html_parts)
+
+
+def _build_tabbed_sidebar(entries: list["EntryData"], current_path: str = "", base_url: str = "") -> str:
+    """Build HTML for the tabbed sidebar with Browse and Recent tabs.
+
+    Args:
+        entries: All entry data
+        current_path: Currently viewed entry path (for highlighting)
+        base_url: Base URL prefix for links
+
+    Returns:
+        HTML string for the complete tabbed sidebar content
+    """
+    tree_html = _build_file_tree(entries, current_path, base_url)
+    recent_html = _build_recent_list(entries, current_path, base_url)
+
+    return f'''
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="tree">Browse</button>
+                <button class="nav-tab" data-tab="recent">Recent</button>
+            </div>
+
+            <div class="sidebar-section" id="tree-section">
+                <div class="sidebar-header">Categories</div>
+                {tree_html}
+            </div>
+
+            <div class="sidebar-section" id="recent-section" style="display: none;">
+                <div class="sidebar-header">Recent Updates</div>
+                {recent_html}
+            </div>'''
 
 
 def _build_link_panel(
@@ -228,7 +292,6 @@ def _base_layout(
 
         <!-- Sidebar -->
         <aside class="sidebar">
-            <div class="sidebar-header">Categories</div>
             {sidebar_html}
             <div class="sidebar-footer">
                 <a href="https://github.com/aaronsb/memex" target="_blank" rel="noopener">Powered by memex</a>
@@ -248,6 +311,7 @@ def _base_layout(
 
     <script>window.BASE_URL = "{base_url}";</script>
     <script src="{base_url}/assets/search.js"></script>
+    <script src="{base_url}/assets/sidebar.js"></script>
     <script>hljs.highlightAll(); mermaid.initialize({{startOnLoad: true, theme: 'dark'}});</script>
 </body>
 </html>
@@ -362,8 +426,8 @@ def render_entry_page(
     all_entries = all_entries or []
     entries_dict = entries_dict or {}
 
-    # Build sidebar
-    sidebar_html = _build_file_tree(all_entries, entry.path, base_url)
+    # Build tabbed sidebar
+    sidebar_html = _build_tabbed_sidebar(all_entries, entry.path, base_url)
 
     # Build main content
     tmpl = env.from_string(ENTRY_TEMPLATE)
@@ -411,8 +475,8 @@ def render_index_page(
     """
     env = _get_env()
 
-    # Build sidebar
-    sidebar_html = _build_file_tree(entries, base_url=base_url)
+    # Build tabbed sidebar
+    sidebar_html = _build_tabbed_sidebar(entries, base_url=base_url)
 
     # Sort entries by created date (newest first)
     recent_entries = sorted(
@@ -475,8 +539,8 @@ def render_tag_page(
     env = _get_env()
     all_entries = all_entries or entries
 
-    # Build sidebar
-    sidebar_html = _build_file_tree(all_entries, base_url=base_url)
+    # Build tabbed sidebar
+    sidebar_html = _build_tabbed_sidebar(all_entries, base_url=base_url)
 
     # Sort entries alphabetically by title
     sorted_entries = sorted(entries, key=lambda e: e.title.lower())
@@ -524,8 +588,8 @@ def render_graph_page(
     """
     all_entries = all_entries or []
 
-    # Build sidebar
-    sidebar_html = _build_file_tree(all_entries, base_url=base_url)
+    # Build tabbed sidebar
+    sidebar_html = _build_tabbed_sidebar(all_entries, base_url=base_url)
 
     # Full-page graph with D3.js force simulation
     main_html = """

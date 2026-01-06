@@ -339,6 +339,46 @@ body::before {
     color: var(--text-muted);
 }
 
+/* Sidebar navigation tabs */
+.nav-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 12px;
+    margin-bottom: 16px;
+}
+
+.nav-tab {
+    flex: 1;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--border-void);
+    border-radius: 8px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all var(--duration-fast) ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.nav-tab:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-subtle);
+    color: var(--text-secondary);
+}
+
+.nav-tab.active {
+    background: var(--cyan-muted);
+    border-color: var(--cyan-glow);
+    color: var(--cyan-bright);
+}
+
+.sidebar-section {
+    margin-bottom: 8px;
+}
+
 /* Tree navigation */
 .tree {
     padding: 0 8px;
