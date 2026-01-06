@@ -1,6 +1,6 @@
 """Tests for memex.frontmatter module."""
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -16,7 +16,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Test Entry",
             tags=["python"],
-            created=date(2024, 1, 15),
+            created=datetime(2024, 1, 15, 10, 30, 45),
         )
 
         result = build_frontmatter(metadata)
@@ -25,14 +25,15 @@ class TestBuildFrontmatter:
         assert "title: Test Entry" in result
         assert "tags:" in result
         assert "- python" in result
-        assert "created: 2024-01-15" in result
+        # Full ISO 8601 timestamp with seconds
+        assert "2024-01-15T10:30:45" in result
 
     def test_title_with_colon(self):
         """Titles with colons are properly quoted for valid YAML."""
         metadata = EntryMetadata(
             title="vl-mail: Lightweight Agent Mail CLI",
             tags=["test"],
-            created=date(2024, 1, 15),
+            created=datetime(2024, 1, 15, 10, 30, 0),
         )
 
         result = build_frontmatter(metadata)
@@ -45,7 +46,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title='Entry with "quoted" text',
             tags=["test"],
-            created=date(2024, 1, 15),
+            created=datetime(2024, 1, 15, 10, 30, 0),
         )
 
         result = build_frontmatter(metadata)
@@ -59,7 +60,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["simple", "category: subcategory", "foo:bar"],
-            created=date(2024, 1, 15),
+            created=datetime(2024, 1, 15, 10, 30, 0),
         )
 
         result = build_frontmatter(metadata)
@@ -76,20 +77,21 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Updated Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
-            updated=date(2024, 1, 15),
+            created=datetime(2024, 1, 1, 0, 0, 0),
+            updated=datetime(2024, 1, 15, 14, 0, 0),
         )
 
         result = build_frontmatter(metadata)
 
-        assert "updated: 2024-01-15" in result
+        # Full ISO 8601 timestamp with seconds
+        assert "2024-01-15T14:00:00" in result
 
     def test_with_contributors(self):
         """Includes contributors when present."""
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             contributors=["Alice", "Bob"],
         )
 
@@ -104,7 +106,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             aliases=["old-name", "alternate"],
         )
 
@@ -119,7 +121,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Draft Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             status="draft",
         )
 
@@ -132,7 +134,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Published Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             status="published",
         )
 
@@ -145,7 +147,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             source_project="my-project",
         )
 
@@ -158,7 +160,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             edit_sources=["project-a", "project-b"],
         )
 
@@ -173,7 +175,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             model="claude-opus-4",
         )
 
@@ -186,7 +188,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             git_branch="feature/new-thing",
         )
 
@@ -199,7 +201,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             last_edited_by="ci-agent",
         )
 
@@ -212,7 +214,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             beads_issues=["issue-123", "issue-456"],
         )
 
@@ -227,7 +229,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             beads_project="my-beads-project",
         )
 
@@ -240,8 +242,8 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title="Complete Entry",
             tags=["python", "testing"],
-            created=date(2024, 1, 1),
-            updated=date(2024, 1, 15),
+            created=datetime(2024, 1, 1, 0, 0, 0),
+            updated=datetime(2024, 1, 15, 14, 0, 0),
             contributors=["Alice"],
             aliases=["complete", "full"],
             status="draft",
@@ -260,8 +262,9 @@ class TestBuildFrontmatter:
         assert "title: Complete Entry" in result
         assert "- python" in result
         assert "- testing" in result
-        assert "created: 2024-01-01" in result
-        assert "updated: 2024-01-15" in result
+        assert "2024-01-01T00:00:00" in result
+        # Full ISO 8601 timestamp with seconds
+        assert "2024-01-15T14:00:00" in result
         assert "contributors:" in result
         assert "aliases:" in result
         assert "status: draft" in result
@@ -280,7 +283,7 @@ class TestBuildFrontmatter:
         metadata = EntryMetadata(
             title='vl-mail: Test with "quotes" and colons',
             tags=["simple", "category: subcategory"],
-            created=date(2024, 1, 15),
+            created=datetime(2024, 1, 15, 10, 30, 0),
             aliases=["old: name"],
             contributors=['User <email: local>'],
         )
@@ -308,7 +311,9 @@ class TestCreateNewMetadata:
 
         assert metadata.title == "New Entry"
         assert metadata.tags == ["test"]
-        assert metadata.created == date.today()
+        # Created datetime should be close to now
+        assert isinstance(metadata.created, datetime)
+        assert metadata.created.date() == date.today()
         assert metadata.updated is None
         assert metadata.contributors == []
 
@@ -372,7 +377,7 @@ class TestUpdateMetadataForEdit:
         return EntryMetadata(
             title="Original Title",
             tags=["original"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             source_project="original-project",
         )
 
@@ -381,14 +386,16 @@ class TestUpdateMetadataForEdit:
         updated = update_metadata_for_edit(base_metadata)
 
         assert updated.title == "Original Title"
-        assert updated.created == date(2024, 1, 1)
+        assert updated.created == datetime(2024, 1, 1, 0, 0, 0)
         assert updated.source_project == "original-project"
 
     def test_sets_updated_date(self, base_metadata):
-        """Sets updated date to today."""
+        """Sets updated datetime to now."""
         updated = update_metadata_for_edit(base_metadata)
 
-        assert updated.updated == date.today()
+        # Updated datetime should be close to now
+        assert isinstance(updated.updated, datetime)
+        assert updated.updated.date() == date.today()
 
     def test_updates_tags(self, base_metadata):
         """Updates tags when provided."""
@@ -419,7 +426,7 @@ class TestUpdateMetadataForEdit:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             contributors=["Alice"],
         )
 
@@ -453,7 +460,7 @@ class TestUpdateMetadataForEdit:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             edit_sources=["other-project"],
         )
 
@@ -482,7 +489,7 @@ class TestUpdateMetadataForEdit:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             beads_issues=["issue-1"],
             beads_project="tracker",
         )
@@ -497,7 +504,7 @@ class TestUpdateMetadataForEdit:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             aliases=["alias1", "alias2"],
         )
 
@@ -510,7 +517,7 @@ class TestUpdateMetadataForEdit:
         metadata = EntryMetadata(
             title="Entry",
             tags=["test"],
-            created=date(2024, 1, 1),
+            created=datetime(2024, 1, 1, 0, 0, 0),
             status="draft",
         )
 

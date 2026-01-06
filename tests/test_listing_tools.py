@@ -1,6 +1,6 @@
 """Tests for KB listing MCP tools (whats_new)."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -115,7 +115,9 @@ class TestWhatsNewTool:
 
         assert len(results) == 1
         assert results[0]["activity_type"] == "updated"
-        assert results[0]["activity_date"] == (today - timedelta(days=2)).isoformat()
+        # activity_date is now full ISO datetime format
+        expected_dt = datetime.combine(today - timedelta(days=2), datetime.min.time())
+        assert results[0]["activity_date"] == expected_dt.isoformat()
 
     @pytest.mark.asyncio
     async def test_whats_new_sorts_by_activity_date(self, kb_root):

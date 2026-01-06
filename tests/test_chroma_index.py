@@ -1,6 +1,6 @@
 """Comprehensive tests for ChromaIndex semantic search indexer."""
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -689,8 +689,9 @@ class TestChromaSearchMetadata:
         assert result.title == "Metadata Test"
         assert result.section == "section1"
         assert set(result.tags) == {"meta", "test"}
-        assert result.created == date(2024, 1, 15)
-        assert result.updated == date(2024, 2, 20)
+        # Returns datetime objects now
+        assert result.created == datetime(2024, 1, 15, 0, 0, 0)
+        assert result.updated == datetime(2024, 2, 20, 0, 0, 0)
         assert result.token_count == 42
         assert result.source_project == "test-project"
 

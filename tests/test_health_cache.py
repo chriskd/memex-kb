@@ -2,7 +2,7 @@
 
 import json
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -105,7 +105,8 @@ class TestParseFileMetadata:
         assert meta is not None
         assert error is None
         assert meta["title"] == "Test Entry"
-        assert meta["created"] == "2024-01-15"
+        # Full ISO 8601 timestamp format
+        assert meta["created"] == "2024-01-15T00:00:00"
         assert meta["updated"] is None
         assert "link/to/other" in meta["links"]
 
@@ -314,8 +315,9 @@ class TestGetEntryMetadata:
 
         result = get_entry_metadata(kb_root, index_root)
 
-        assert result["test"]["created"] == date(2024, 6, 15)
-        assert result["test"]["updated"] == date(2024, 7, 20)
+        # Returns datetime objects now
+        assert result["test"]["created"] == datetime(2024, 6, 15, 0, 0, 0)
+        assert result["test"]["updated"] == datetime(2024, 7, 20, 0, 0, 0)
 
     def test_handles_null_dates(self, tmp_path):
         """Null dates remain as None."""

@@ -1,9 +1,44 @@
 """Pydantic models for the knowledge base."""
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+def _coerce_date_to_datetime(v: date | datetime | str | None) -> datetime | None:
+    """Coerce date or string to datetime for backwards compatibility.
+
+    Handles:
+    - datetime: returned as-is
+    - date: converted to datetime at midnight UTC
+    - str: parsed as ISO format (handles both date-only and full datetime)
+    - None: returned as None
+    """
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, date):
+        return datetime(v.year, v.month, v.day, 0, 0, 0)
+    if isinstance(v, str):
+        # Try datetime first (with time component)
+        try:
+            return datetime.fromisoformat(v)
+        except ValueError:
+            pass
+        # Fall back to date-only parsing
+        try:
+            d = date.fromisoformat(v)
+            return datetime(d.year, d.month, d.day, 0, 0, 0)
+        except ValueError:
+            pass
+    return v  # Let pydantic handle validation error
+
+
+# Custom type that accepts date or datetime and normalizes to datetime
+FlexibleDatetime = Annotated[datetime, BeforeValidator(_coerce_date_to_datetime)]
+OptionalFlexibleDatetime = Annotated[datetime | None, BeforeValidator(_coerce_date_to_datetime)]
 
 
 class EntryMetadata(BaseModel):
@@ -12,8 +47,8 @@ class EntryMetadata(BaseModel):
     title: str
     description: str | None = None  # One-line summary of entry content
     tags: list[str] = Field(min_length=1)
-    created: date
-    updated: date | None = None
+    created: FlexibleDatetime  # Full datetime with seconds precision
+    updated: OptionalFlexibleDatetime = None  # Full datetime with seconds precision
     contributors: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     status: Literal["draft", "published", "archived"] = "published"
@@ -47,8 +82,8 @@ class SearchResult(BaseModel):
     score: float
     tags: list[str] = Field(default_factory=list)
     section: str | None = None
-    created: date | None = None
-    updated: date | None = None
+    created: OptionalFlexibleDatetime = None  # Full datetime with seconds precision
+    updated: OptionalFlexibleDatetime = None  # Full datetime with seconds precision
     token_count: int = 0
     content: str | None = None  # Full document content when requested
     source_project: str | None = None  # Project that created this entry

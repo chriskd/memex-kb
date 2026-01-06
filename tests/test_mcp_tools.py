@@ -560,7 +560,8 @@ class TestUpdateTool:
         from memex.parser import parse_entry
         metadata, _, _ = parse_entry(kb_root / "development" / "test.md")
         assert metadata.updated is not None
-        assert metadata.updated >= date.today()
+        # Updated is now a datetime, compare date portion
+        assert metadata.updated.date() >= date.today()
 
     @pytest.mark.asyncio
     async def test_update_nonexistent_entry(self, kb_root, index_root):

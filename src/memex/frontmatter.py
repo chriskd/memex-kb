@@ -4,11 +4,24 @@ This module provides functions to serialize EntryMetadata to YAML frontmatter.
 Extracted from core.py to reduce duplication in add_entry/update_entry.
 """
 
-from datetime import date
+from datetime import datetime, timezone
 
 import yaml
 
 from .models import EntryMetadata
+
+
+def _format_timestamp(dt: datetime) -> str:
+    """Format datetime as ISO 8601 string with seconds precision.
+
+    Args:
+        dt: Datetime to format.
+
+    Returns:
+        ISO 8601 formatted string (e.g., "2025-01-06T14:30:45").
+    """
+    # Strip microseconds and timezone for clean output
+    return dt.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def build_frontmatter(metadata: EntryMetadata) -> str:
@@ -34,11 +47,11 @@ def build_frontmatter(metadata: EntryMetadata) -> str:
     if metadata.description:
         data["description"] = metadata.description
     data["tags"] = list(metadata.tags)
-    data["created"] = metadata.created
+    data["created"] = _format_timestamp(metadata.created)
 
-    # Updated date (present on updates, not on creation)
+    # Updated timestamp (present on updates, not on creation)
     if metadata.updated:
-        data["updated"] = metadata.updated
+        data["updated"] = _format_timestamp(metadata.updated)
 
     # Contributors
     if metadata.contributors:
@@ -118,7 +131,7 @@ def create_new_metadata(
         title=title,
         description=description,
         tags=tags,
-        created=date.today(),
+        created=datetime.now(timezone.utc),
         updated=None,
         contributors=[contributor] if contributor else [],
         source_project=source_project,
@@ -172,7 +185,7 @@ def update_metadata_for_edit(
         description=new_description if new_description is not None else metadata.description,
         tags=new_tags if new_tags is not None else list(metadata.tags),
         created=metadata.created,
-        updated=date.today(),
+        updated=datetime.now(timezone.utc),
         contributors=contributors,
         aliases=list(metadata.aliases),
         status=metadata.status,
