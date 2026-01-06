@@ -27,6 +27,7 @@ class PublishConfig:
     include_archived: bool = False
     clean: bool = True  # Remove output dir before build
     site_title: str = "Memex"  # Configurable site title for header and <title>
+    index_entry: str | None = None  # Path to entry to use as landing page (e.g., "guides/welcome")
 
 
 @dataclass
@@ -243,13 +244,25 @@ class SiteGenerator:
             )
             html_path.write_text(html, encoding="utf-8")
 
-        # Index page
-        index_html = render_index_page(
-            entries=all_entries,
-            tags_index=self.tags_index,
-            base_url=self.config.base_url,
-            site_title=self.config.site_title,
-        )
+        # Index page - use custom entry if specified, otherwise default listing
+        if self.config.index_entry and self.config.index_entry in self.entries:
+            # Use specified entry as landing page
+            index_entry = self.entries[self.config.index_entry]
+            index_html = render_entry_page(
+                entry=index_entry,
+                base_url=self.config.base_url,
+                site_title=self.config.site_title,
+                all_entries=all_entries,
+                entries_dict=self.entries,
+            )
+        else:
+            # Default: show recent entries listing
+            index_html = render_index_page(
+                entries=all_entries,
+                tags_index=self.tags_index,
+                base_url=self.config.base_url,
+                site_title=self.config.site_title,
+            )
         (self.config.output_dir / "index.html").write_text(index_html, encoding="utf-8")
 
         # Tag pages

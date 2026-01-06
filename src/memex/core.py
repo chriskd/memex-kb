@@ -3200,6 +3200,7 @@ async def publish(
     output_dir: Path | str | None = None,
     base_url: str = "",
     site_title: str = "Memex",
+    index_entry: str | None = None,
     include_drafts: bool = False,
     include_archived: bool = False,
     clean: bool = True,
@@ -3213,6 +3214,7 @@ async def publish(
         output_dir: Output directory (default: _site)
         base_url: Base URL prefix for links (e.g., "/my-kb" for subdirectory hosting)
         site_title: Site title for header and page titles (default: "Memex")
+        index_entry: Path to entry to use as landing page (e.g., "guides/welcome")
         include_drafts: Include entries with status="draft"
         include_archived: Include entries with status="archived"
         clean: Remove output directory before build (default True)
@@ -3232,6 +3234,7 @@ async def publish(
         output_dir=Path(output_dir) if output_dir else Path("_site"),
         base_url=base_url,
         site_title=site_title,
+        index_entry=index_entry,
         include_drafts=include_drafts,
         include_archived=include_archived,
         clean=clean,

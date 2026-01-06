@@ -429,3 +429,43 @@ This is a draft.
         # Check entry page
         entry_html = (output_dir / "test.html").read_text()
         assert "Powered by memex" in entry_html
+
+    @pytest.mark.asyncio
+    async def test_custom_index_entry(self, temp_kb, tmp_path):
+        """Custom index_entry is used as landing page."""
+        from memex.publisher import PublishConfig, SiteGenerator
+
+        output_dir = tmp_path / "site"
+        config = PublishConfig(
+            output_dir=output_dir,
+            base_url="",
+            index_entry="test",  # Use test.md as landing page
+        )
+        generator = SiteGenerator(config, temp_kb)
+
+        await generator.generate()
+
+        # Check index page contains the test entry content
+        index_html = (output_dir / "index.html").read_text()
+        assert "Test Entry" in index_html  # Title from test.md
+        # Should NOT have "Recent Entries" which is the default index
+        assert "Recent Entries" not in index_html
+
+    @pytest.mark.asyncio
+    async def test_invalid_index_entry_falls_back_to_default(self, temp_kb, tmp_path):
+        """Invalid index_entry falls back to default listing."""
+        from memex.publisher import PublishConfig, SiteGenerator
+
+        output_dir = tmp_path / "site"
+        config = PublishConfig(
+            output_dir=output_dir,
+            base_url="",
+            index_entry="nonexistent",  # Entry doesn't exist
+        )
+        generator = SiteGenerator(config, temp_kb)
+
+        await generator.generate()
+
+        # Check index page falls back to default (Recent Entries)
+        index_html = (output_dir / "index.html").read_text()
+        assert "Recent Entries" in index_html
