@@ -702,15 +702,15 @@ def render_graph_page(
                         d.fy = null;
                     }));
 
-            // Category colors matching webapp
+            // Category colors - Nord Aurora palette
             const categoryColors = {
-                'devops': '#f59e0b',
-                'infrastructure': '#22d3ee',
-                'projects': '#10b981',
-                'tooling': '#f43f5e',
-                'development': '#a78bfa',
-                'best-practices': '#f472b6',
-                'default': '#8b5cf6'
+                'devops': '#d08770',        // nord12 - orange
+                'infrastructure': '#88c0d0', // nord8 - cyan
+                'projects': '#a3be8c',       // nord14 - green
+                'tooling': '#bf616a',        // nord11 - red
+                'development': '#b48ead',    // nord15 - purple
+                'best-practices': '#ebcb8b', // nord13 - yellow
+                'default': '#81a1c1'         // nord9 - blue
             };
 
             function getNodeColor(d) {
