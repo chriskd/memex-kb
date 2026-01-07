@@ -74,7 +74,7 @@
     --glow-accent: 0 0 30px rgba(136, 192, 208, 0.2);
 
     /* Typography */
-    --font-display: 'Cormorant Garamond', Georgia, serif;
+    --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
 
     /* Transitions */
