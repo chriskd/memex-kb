@@ -27,22 +27,68 @@ This grants Claude Code permission to run any `mx` command without prompting.
 
 ### Session Hooks
 
-For automatic context injection, use hooks:
+For automatic context injection, configure both SessionStart and PreCompact hooks:
 
 ```json
 {
   "hooks": {
     "SessionStart": [
       { "command": "mx prime" }
+    ],
+    "PreCompact": [
+      { "command": "mx prime --compact" }
     ]
   }
 }
 ```
 
-The `mx prime` command:
-- Injects KB workflow guidance at session start
-- Auto-detects MCP vs CLI mode
-- Adapts output format accordingly
+**SessionStart** runs when a new session begins:
+- Injects full KB workflow guidance (~1-2k tokens)
+- Auto-detects MCP vs CLI mode and adapts output
+- Includes recent project entries if `.kbcontext` is present
+
+**PreCompact** runs before Claude's context is summarized:
+- Re-injects minimal KB reminders into the compacted context
+- Prevents agents from "forgetting" KB workflow after compaction
+- Uses `--compact` flag for minimal token usage (~50 tokens)
+
+### Context Preservation Across Compaction
+
+When Claude's context window fills up, it compacts (summarizes) older conversation. Without PreCompact hooks, agents often forget about memex entirely after compaction.
+
+The PreCompact hook solves this by injecting a brief reminder:
+
+```
+# Memex KB Active
+
+**Session Start**: Search KB before implementing: `mx search "query"`
+**Session End**: Consider adding discoveries: `mx add --title="..." --tags="..."`
+
+Quick: search | get | add | tree | whats-new | health
+```
+
+This ensures agents continue using the KB throughout long sessions.
+
+### The `mx prime` Command
+
+The prime command adapts its output based on context:
+
+```bash
+mx prime                    # Auto-detect mode (full if CLI, minimal if MCP)
+mx prime --full             # Force full output (~1-2k tokens)
+mx prime --compact          # Force minimal output (~50 tokens)
+mx prime --project=myapp    # Include recent entries for project
+mx prime -p myapp -d 14     # Last 14 days of project changes
+```
+
+**Full output** (SessionStart) includes:
+- Complete CLI quick reference
+- Search and contribution guidelines
+- Entry format documentation
+
+**Compact output** (PreCompact) includes:
+- Brief workflow reminder
+- Essential command list
 
 ### Workflow Pattern
 
@@ -127,6 +173,74 @@ This creates a `.kbcontext` file that:
 - Routes new entries to `projects/<name>` by default
 - Boosts project entries in search results
 - Suggests project-specific tags
+
+## Typical Agent Session Workflow
+
+A complete agent session with memex follows this pattern:
+
+### 1. Session Start (Automatic)
+
+The SessionStart hook runs `mx prime`, which:
+- Outputs KB workflow guidance
+- Shows recent project entries (if `.kbcontext` exists)
+- Reminds agent to search before implementing
+
+### 2. Before Implementation
+
+```bash
+# Check for existing patterns before writing code
+mx search "authentication"
+mx search "api rate limiting" --tags=patterns
+
+# Review project-specific knowledge
+mx whats-new --project=myapp --days=7
+```
+
+### 3. During Work
+
+```bash
+# Quick reference while implementing
+mx get patterns/oauth2.md
+
+# Log progress to session entry
+mx session-log -m "Implemented OAuth2 flow"
+```
+
+### 4. After Discovery
+
+```bash
+# Add reusable patterns for future agents
+mx add --title="OAuth2 Setup" \
+  --tags="auth,patterns" \
+  --category=patterns \
+  --content="..."
+
+# Or append to existing entry
+mx upsert "Redis Troubleshooting" \
+  --content="## New Finding\n\nDetails..."
+```
+
+### 5. Context Recovery (After Compaction)
+
+When context compacts, the PreCompact hook re-injects KB reminders. The agent should:
+
+```bash
+# Recover project context
+mx whats-new --project=myapp --days=7
+
+# Check session log for previous progress
+mx get projects/myapp/sessions.md
+```
+
+### 6. Session End
+
+```bash
+# Log final status
+mx session-log -m "Completed: auth module. TODO: tests"
+
+# Ensure knowledge is captured
+mx health  # Check for issues
+```
 
 ## Session Management
 
