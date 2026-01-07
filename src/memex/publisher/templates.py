@@ -31,17 +31,29 @@ def _format_date(value) -> str:
         value: datetime object or None
 
     Returns:
-        Formatted date string like "Jan 6, 2026" or empty string if None
+        Formatted date string like "Jan 6, 2026 at 2:30 PM" or empty string if None.
+        If time is midnight (00:00:00), only shows date.
     """
     if value is None:
         return ""
     try:
-        # Format as "Jan 6, 2026"
-        return value.strftime("%b %-d, %Y")
+        # Check if we have a meaningful time component (not midnight)
+        has_time = value.hour != 0 or value.minute != 0 or value.second != 0
+        if has_time:
+            # Format as "Jan 6, 2026 at 2:30 PM"
+            return value.strftime("%b %-d, %Y at %-I:%M %p")
+        else:
+            # Date only - "Jan 6, 2026"
+            return value.strftime("%b %-d, %Y")
     except (AttributeError, ValueError):
-        # Fall back to string representation if strftime fails (e.g., on Windows)
+        # Fall back for Windows (no %-d support)
         try:
-            return value.strftime("%b %d, %Y").replace(" 0", " ")
+            has_time = value.hour != 0 or value.minute != 0 or value.second != 0
+            if has_time:
+                result = value.strftime("%b %d, %Y at %I:%M %p")
+                return result.replace(" 0", " ").replace(" 0", " ")  # Remove leading zeros
+            else:
+                return value.strftime("%b %d, %Y").replace(" 0", " ")
         except (AttributeError, ValueError):
             return str(value).split()[0] if value else ""
 

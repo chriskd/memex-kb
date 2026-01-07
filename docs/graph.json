@@ -87,11 +87,11 @@
   "edges": [
     {
       "source": "guides/quick-start",
-      "target": "reference/entry-format"
+      "target": "guides/ai-integration"
     },
     {
       "source": "guides/quick-start",
-      "target": "guides/ai-integration"
+      "target": "reference/entry-format"
     },
     {
       "source": "guides/quick-start",
@@ -103,11 +103,11 @@
     },
     {
       "source": "guides/ai-integration",
-      "target": "reference/entry-format"
+      "target": "reference/cli"
     },
     {
       "source": "guides/ai-integration",
-      "target": "reference/cli"
+      "target": "reference/entry-format"
     },
     {
       "source": "guides/mcp-setup",
