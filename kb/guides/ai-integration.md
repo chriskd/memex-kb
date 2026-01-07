@@ -105,6 +105,24 @@ mx add --title="OAuth2 Setup" --tags="auth,patterns" --category=patterns \
 mx session-log --message="Implemented OAuth2 flow"
 ```
 
+### Important: Always Use mx for KB Operations
+
+**Never use Write/Edit tools directly on KB files.** Always use `mx` commands:
+
+| Operation | Wrong | Right |
+|-----------|-------|-------|
+| Create entry | `Write kb/foo.md` | `mx add --title="..." --tags="..." --content="..."` |
+| Update entry | `Edit kb/foo.md` | `mx update path/entry.md --content="..."` |
+| Update section | `Edit kb/foo.md` | `mx patch path/entry.md --old="..." --new="..."` |
+
+**Why this matters:**
+- `mx add` generates proper frontmatter (title, tags, dates)
+- `mx add` runs duplicate detection before creating
+- `mx update` updates the `updated` timestamp automatically
+- Both commands trigger re-indexing for search
+
+Direct file writes bypass all of this, leaving entries with missing metadata and stale search indices.
+
 ## Codex CLI
 
 Codex can use memex via shell commands in AGENTS.md:

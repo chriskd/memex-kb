@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q '\"file_path\".*kb/'; then echo 'Use mx add/update for KB entries instead of direct file writes. This ensures proper indexing and metadata. Examples: mx add --title=\"...\" --tags=\"...\" --content=\"...\" or mx update path/to/entry.md --content=\"...\"'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
