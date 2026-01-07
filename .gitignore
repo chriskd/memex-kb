@@ -42,3 +42,4 @@ coverage.xml
 
 # Empty scripts directory
 scripts/
+_site/
