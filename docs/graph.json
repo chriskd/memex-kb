@@ -111,11 +111,11 @@
     },
     {
       "source": "guides/mcp-setup",
-      "target": "reference/cli"
+      "target": "guides/installation"
     },
     {
       "source": "guides/mcp-setup",
-      "target": "guides/installation"
+      "target": "reference/cli"
     },
     {
       "source": "guides/mcp-setup",
@@ -127,11 +127,11 @@
     },
     {
       "source": "guides/installation",
-      "target": "guides/mcp-setup"
+      "target": "guides/quick-start"
     },
     {
       "source": "guides/installation",
-      "target": "guides/quick-start"
+      "target": "guides/mcp-setup"
     },
     {
       "source": "reference/beads",
