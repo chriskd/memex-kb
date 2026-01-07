@@ -2,6 +2,7 @@
 title: AI Agent Integration
 tags: [ai, claude-code, codex, agents, integration]
 created: 2026-01-06
+updated: 2026-01-07
 description: How to use memex with AI coding assistants
 ---
 

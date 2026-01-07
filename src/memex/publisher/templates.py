@@ -24,6 +24,28 @@ def _escape_html(text: str) -> str:
     )
 
 
+def _format_date(value) -> str:
+    """Format a datetime for display in templates.
+
+    Args:
+        value: datetime object or None
+
+    Returns:
+        Formatted date string like "Jan 6, 2026" or empty string if None
+    """
+    if value is None:
+        return ""
+    try:
+        # Format as "Jan 6, 2026"
+        return value.strftime("%b %-d, %Y")
+    except (AttributeError, ValueError):
+        # Fall back to string representation if strftime fails (e.g., on Windows)
+        try:
+            return value.strftime("%b %d, %Y").replace(" 0", " ")
+        except (AttributeError, ValueError):
+            return str(value).split()[0] if value else ""
+
+
 def _safe(html: str) -> str:
     """Mark HTML as safe for Jinja2 (won't be escaped)."""
     from markupsafe import Markup
@@ -328,7 +350,10 @@ ENTRY_TEMPLATE = """
             <a href="{{ base_url }}/{{ entry.path }}.html" class="entry-path">{{ entry.path }}</a>
             <div class="entry-meta">
                 {% if entry.metadata.created %}
-                <div class="entry-meta-item">Created: <span>{{ entry.metadata.created }}</span></div>
+                <div class="entry-meta-item">Created: <span>{{ entry.metadata.created|datefmt }}</span></div>
+                {% endif %}
+                {% if entry.metadata.updated %}
+                <div class="entry-meta-item">Updated: <span>{{ entry.metadata.updated|datefmt }}</span></div>
                 {% endif %}
             </div>
             {% if entry.tags %}
@@ -357,7 +382,7 @@ INDEX_TEMPLATE = """
             <li>
                 <a href="{{ base_url }}/{{ entry.path }}.html">{{ entry.title }}</a>
                 {% if entry.metadata.created %}
-                <span class="entry-date">{{ entry.metadata.created }}</span>
+                <span class="entry-date">{{ entry.metadata.created|datefmt }}</span>
                 {% endif %}
             </li>
             {% endfor %}
@@ -386,7 +411,7 @@ TAG_TEMPLATE = """
         <li>
             <a href="{{ base_url }}/{{ entry.path }}.html">{{ entry.title }}</a>
             {% if entry.metadata.created %}
-            <span class="entry-date">{{ entry.metadata.created }}</span>
+            <span class="entry-date">{{ entry.metadata.created|datefmt }}</span>
             {% endif %}
         </li>
         {% endfor %}
@@ -397,11 +422,13 @@ TAG_TEMPLATE = """
 
 
 def _get_env() -> Environment:
-    """Create Jinja2 environment with autoescape enabled."""
-    return Environment(
+    """Create Jinja2 environment with autoescape enabled and custom filters."""
+    env = Environment(
         loader=BaseLoader(),
         autoescape=select_autoescape(default=True, default_for_string=True),
     )
+    env.filters["datefmt"] = _format_date
+    return env
 
 
 def render_entry_page(
