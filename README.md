@@ -1,259 +1,195 @@
 # Memex
 
-Personal knowledge base with hybrid search (keyword + semantic).
+Knowledge base for AI agents with hybrid search and context injection.
 
-## Features
+## Why Memex?
 
-- **Hybrid search** - Combines keyword (Whoosh) and semantic (ChromaDB + sentence-transformers) search
-- **CLI tool** - `mx` for token-efficient access from any environment
-- **MCP server** - For Claude Desktop and MCP-compatible tools
-- **Bidirectional links** - Obsidian-style `[[links]]` with backlink tracking
-- **Web explorer** - Visual knowledge browser with graph view
+AI agents lose context. Memex solves this:
+
+- **Hook integration** - Auto-inject KB awareness at session start/compact recovery
+- **Zero-token CLI** - `mx` uses ~0 tokens vs MCP's ~500+ token schema overhead
+- **Agent-optimized output** - `--json`, `--json-errors`, `--terse` modes for programmatic use
+- **Edit tool integration** - `mx patch`, `mx update --append` for surgical updates
+
+### Before/After: Agent Workflow
+
+```
+Without memex:
+  Agent starts → Searches codebase → Rediscovers same patterns → Forgets on compaction
+
+With memex:
+  Agent starts → SessionStart hook runs `mx prime` → Agent knows to check KB first
+  Agent discovers pattern → Adds to KB → Future agents find it immediately
+  Context compacts → PreCompact hook preserves KB awareness
+```
+
+## Quick Start
+
+```bash
+# Install
+uv tool install memex     # Keyword search only (~100MB)
+uv tool install "memex[semantic]"  # + Semantic search (~600MB)
+
+# Initialize
+mkdir -p kb && export MEMEX_KB_ROOT=$(pwd)/kb
+mx init
+
+# Use
+mx add --title="Auth Pattern" --tags="auth,patterns" --content="OAuth2 flow..."
+mx search "authentication"
+mx get patterns/auth-pattern.md
+```
+
+See [TUTORIAL.md](TUTORIAL.md) for complete walkthrough.
+
+## Agent Integration
+
+### Claude Code Hooks (Recommended)
+
+Add to `.claude/settings.local.json`:
+
+```json
+{
+  "permissions": { "allow": ["Bash(mx:*)"] },
+  "hooks": {
+    "SessionStart": [{ "command": "mx prime" }],
+    "PreCompact": [{ "command": "mx prime --compact" }]
+  }
+}
+```
+
+**`mx prime` output** (injected at session start):
+
+```
+# Memex Knowledge Base
+
+> Search organizational knowledge before reinventing. Add discoveries for future agents.
+
+**Use `mx` CLI instead of MCP tools** - CLI uses ~0 tokens vs MCP schema overhead.
+
+## Session Protocol
+
+**Before searching codebase**: Check if memex has project patterns first
+  `mx search "deployment"` or `mx whats-new --project=<project>`
+
+**After discovering patterns**: Consider adding to KB for future agents
+  `mx add --title="..." --tags="..." --content="..."`
+
+## CLI Quick Reference
+mx search "query"     # Hybrid keyword + semantic search
+mx get path/entry.md  # Read entry
+mx add --title="..." --tags="..." --content="..."
+mx whats-new --days=7 # Recent changes
+```
+
+The command auto-detects MCP mode and adapts output accordingly.
+
+### Other Agents (Codex, etc.)
+
+Any agent with shell access can use `mx`:
+
+```bash
+# Check KB before implementing
+mx search "rate limiting"
+
+# Add discoveries
+mx add --title="Redis Caching" --tags="redis,patterns" --content="..."
+
+# Project-aware recent changes
+mx whats-new --project=myapp --days=7
+```
+
+## CLI Reference
+
+```bash
+# Search
+mx search "deployment"              # Hybrid search
+mx search "docker" --tags=infra     # Filter by tag
+mx search "api" --mode=semantic     # Semantic only
+mx search "api" --terse             # Paths only (agent-friendly)
+
+# Read
+mx get tooling/notes.md             # Full entry
+mx get tooling/notes.md --metadata  # Just frontmatter
+mx get tooling/notes.md --json      # Structured output
+
+# Create/Update
+mx add --title="Entry" --tags="a,b" --content="..."
+mx update path.md --content="New section" --append --timestamp
+mx upsert --title="Log" --content="Append this" --append
+mx patch path.md --old="draft" --new="published"  # Surgical edit
+mx quick-add --stdin                # Auto-generate metadata
+
+# Browse
+mx tree                             # Directory structure
+mx list --tag=infrastructure        # Filter by tag
+mx whats-new --days=7               # Recent changes
+mx tags                             # All tags with counts
+mx info                             # KB configuration
+mx health                           # Audit for problems
+
+# Project context
+mx context init                     # Create .kbcontext
+mx prime                            # Session context injection
+mx prime --project=myapp -d 14      # Include recent project entries
+```
+
+### Agent-Optimized Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--json` | Structured output for parsing |
+| `--json-errors` | Machine-readable errors with codes |
+| `--terse` | Minimal output (paths only) |
+| `--dry-run` | Preview changes safely |
+
+## MCP Server
+
+For Claude Desktop or when structured responses are preferred:
+
+```json
+{
+  "mcpServers": {
+    "memex": { "type": "stdio", "command": "memex" }
+  }
+}
+```
+
+**CLI vs MCP trade-off:** CLI uses ~0 tokens, MCP uses ~500+ for tool schemas. Use CLI unless you need MCP's structured responses.
 
 ## Installation
 
-### Minimal Install (Keyword Search)
-
-Fast, lightweight installation with keyword search only:
+### Minimal (Keyword Search)
 
 ```bash
-# With uv (recommended)
-uv tool install memex
-
-# With pip
-pip install memex
-
-# Verify
+uv tool install memex    # or: pip install memex
 mx --version
 ```
 
-This gives you full CLI and MCP functionality with BM25 keyword search. No heavy ML dependencies.
-
-### Full Install (Semantic Search)
-
-Add semantic search for meaning-based queries:
+### Full (Semantic Search)
 
 ```bash
-# With uv
 uv tool install "memex[semantic]"
-
-# With pip
-pip install "memex[semantic]"
 ```
 
-Adds ~500MB of dependencies (ChromaDB, sentence-transformers with CPU-only PyTorch). First search will download the embedding model (~100MB).
+Adds ~500MB (ChromaDB, sentence-transformers). First search downloads embedding model (~100MB).
 
 ### From Source
 
 ```bash
 git clone https://github.com/chriskd/memex.git
 cd memex
-uv sync                    # Core dependencies only (~100MB)
-uv sync --all-extras       # With semantic search (~600MB total)
+uv sync                    # Core only (~100MB)
+uv sync --all-extras       # With semantic (~600MB)
 ```
 
-**Notes:**
-- PyTorch is configured for **CPU-only** by default, keeping the install small (~600MB vs 5GB+ with CUDA)
-- On ARM64 (Apple Silicon, etc.), ChromaDB is capped at <1.0.0 for onnxruntime compatibility
-
-#### GPU Support (Optional)
-
-If you have an NVIDIA GPU and want CUDA acceleration for embeddings:
+### GPU Support (Optional)
 
 ```bash
-# Override the CPU-only default with CUDA 12.4
 uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124
 ```
 
-## Quick Start
-
-```bash
-# Initialize a knowledge base
-mkdir -p kb
-export MEMEX_KB_ROOT=$(pwd)/kb
-mx init
-
-# Create your first entry
-mx add --title="My First Note" --tags="example" --category=notes --content="Hello, world!"
-
-# Search for entries
-mx search "hello"
-
-# View an entry
-mx get notes/my-first-note.md
-```
-
-**New to Memex?** See the [First 5 Minutes Tutorial](TUTORIAL.md) for a complete walkthrough.
-
-## CLI Reference
-
-The `mx` CLI is designed for token-efficient access from AI agents and humans alike.
-
-```bash
-# Search (hybrid keyword + semantic)
-mx search "deployment"              # Find entries
-mx search "docker" --tags=infra     # Filter by tag
-mx search "api" --mode=semantic     # Semantic only (requires [semantic])
-mx search "api" --mode=keyword      # Fast keyword-only search
-
-# Read entries
-mx get tooling/notes.md             # Full entry with content
-mx get tooling/notes.md --metadata  # Just metadata
-
-# Browse
-mx info                             # Show KB configuration
-mx tree                             # Directory structure
-mx list --tag=infrastructure        # Filter by tag
-mx whats-new --days=7               # Recent changes
-mx whats-new --project=myapp        # Recent changes for a project
-mx tags                             # List all tags with counts
-mx history                          # View search history
-
-# Create/update entries
-mx add --title="My Entry" --tags="foo,bar" --content="# Content..."
-mx add --title="..." --tags="..." --category=tooling --file=notes.md
-mx update path/entry.md --tags="new,tags"
-mx update path/entry.md --content="Append this" --append --timestamp
-mx upsert --title="Daily Log" --content="New entry" --append
-mx quick-add --stdin                # Auto-generate metadata from content
-mx patch path/entry.md --old="old text" --new="new text" --dry-run
-
-# Analysis
-mx hubs                             # Most connected entries
-mx suggest-links path/entry.md      # Find semantically related entries
-mx health                           # Audit for problems
-
-# Project context
-mx context init                     # Create .kbcontext for current project
-mx context show                     # Show active project context
-
-# Static site publishing
-mx publish -o docs                  # Generate HTML site
-mx publish -o docs --base-url /repo # For GitHub Pages subdirectory
-
-# Maintenance
-mx reindex                          # Rebuild search indices
-```
-
-## MCP Server
-
-Add to your Claude Code settings or MCP configuration:
-
-```json
-{
-  "mcpServers": {
-    "memex": {
-      "type": "stdio",
-      "command": "memex"
-    }
-  }
-}
-```
-
-### Available Tools
-
-| Tool | Description |
-|------|-------------|
-| `search` | Hybrid keyword + semantic search |
-| `get` | Retrieve entry with content and links |
-| `add` | Create new KB entry |
-| `update` | Modify existing entry |
-| `delete` | Remove an entry |
-| `list` | List entries by category/tag |
-| `whats_new` | Recently modified entries |
-| `tree` | Directory structure |
-| `tags` | List all tags |
-| `backlinks` | Find entries linking to a path |
-| `suggest_links` | Find semantically related entries |
-| `health` | KB audit |
-| `mkdir` | Create a directory |
-| `move` | Move/rename an entry |
-| `rmdir` | Remove an empty directory |
-| `quality` | Detailed quality report |
-
-## AI Agent Integration
-
-Memex is designed for AI coding assistants. **CLI is the recommended interface** - it uses ~0 tokens vs MCP's schema overhead.
-
-### Claude Code
-
-Add to your `.claude/settings.local.json`:
-
-```json
-{
-  "permissions": {
-    "allow": ["Bash(mx:*)"]
-  }
-}
-```
-
-Or use hooks for automatic context injection:
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{ "command": "mx prime" }]
-  }
-}
-```
-
-The `mx prime` command injects KB workflow guidance at session start and auto-detects whether MCP is configured.
-
-### Codex CLI
-
-Codex can use memex via shell commands:
-
-```bash
-# In your AGENTS.md or system prompt
-mx search "query"     # Search KB
-mx get path/entry.md  # Read entry
-mx add --title="..." --tags="..." --content="..."  # Add entry
-```
-
-### Other AI Agents
-
-Any agent with shell access can use the `mx` CLI. Key patterns:
-
-```bash
-# Check for relevant knowledge before implementing
-mx search "authentication patterns"
-
-# Add discoveries for future sessions
-mx add --title="API Rate Limiting" --tags="api,patterns" --content="..."
-
-# View recent project updates
-mx whats-new --project=myapp --days=7
-```
-
-### CLI vs MCP
-
-| Aspect | CLI (`mx`) | MCP Server |
-|--------|------------|------------|
-| Token cost | ~0 (shell command) | ~500+ (tool schema) |
-| Setup | Just install | Configure mcpServers |
-| Output | Human-readable | Structured JSON |
-| Best for | Most agents | Claude Desktop app |
-
-**Recommendation:** Use CLI unless you specifically need MCP's structured responses.
-
-## Web Explorer
-
-```bash
-# Start the web interface
-memex-web
-
-# Open http://localhost:8080 in your browser
-```
-
-Features:
-- Interactive search with live results
-- Graph visualization of entry connections
-- Directory tree navigation
-- Markdown rendering with syntax highlighting
-
 ## Entry Format
-
-Entries are Markdown files with YAML frontmatter:
 
 ```markdown
 ---
@@ -265,35 +201,26 @@ created: 2025-01-01
 # My Knowledge Entry
 
 Content with [[bidirectional links]] to other entries.
-
-Use `[[path/to/entry|Display Text]]` for custom link text.
 ```
 
 ## Configuration
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `MEMEX_KB_ROOT` | Knowledge base directory | `./kb` |
-| `MEMEX_INDEX_ROOT` | Search index directory | `./.indices` |
-| `MEMEX_PRELOAD` | Preload embedding model | `false` |
-| `MEMEX_LOG_LEVEL` | Log level (DEBUG, INFO, WARNING, ERROR) | `INFO` |
+| `MEMEX_KB_ROOT` | KB directory | `./kb` |
+| `MEMEX_INDEX_ROOT` | Index directory | `./.indices` |
+| `MX_JSON_ERRORS` | Always use JSON errors | `false` |
 
 ## Development
 
 ```bash
-# Clone and install
 git clone https://github.com/chriskd/memex.git
-cd memex
-uv sync --dev
-
-# Run tests
+cd memex && uv sync --dev
 uv run pytest
-
-# Lint
 uv run ruff check .
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
