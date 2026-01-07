@@ -1,48 +1,77 @@
-/* Memex Static Theme - Matching the webapp void aesthetic with 3-column layout */
+/* Memex Static Theme - Nord Color Scheme with Light/Dark Mode Support */
 
+/* ===== NORD COLOR PALETTE ===== */
 :root {
-    /* Deep void backgrounds */
-    --bg-abyss: #05060a;
-    --bg-void: #0a0c12;
-    --bg-deep: #0f1118;
-    --bg-surface: #151820;
-    --bg-elevated: #1a1e28;
-    --bg-hover: #1f2430;
+    /* Nord Polar Night (dark backgrounds) */
+    --nord0: #2e3440;
+    --nord1: #3b4252;
+    --nord2: #434c5e;
+    --nord3: #4c566a;
+
+    /* Nord Snow Storm (light backgrounds/text) */
+    --nord4: #d8dee9;
+    --nord5: #e5e9f0;
+    --nord6: #eceff4;
+
+    /* Nord Frost (accent colors) */
+    --nord7: #8fbcbb;
+    --nord8: #88c0d0;
+    --nord9: #81a1c1;
+    --nord10: #5e81ac;
+
+    /* Nord Aurora (semantic colors) */
+    --nord11: #bf616a;  /* red */
+    --nord12: #d08770;  /* orange */
+    --nord13: #ebcb8b;  /* yellow */
+    --nord14: #a3be8c;  /* green */
+    --nord15: #b48ead;  /* purple */
+
+    /* ===== DARK THEME (Default) ===== */
+    /* Background hierarchy */
+    --bg-abyss: #242933;
+    --bg-void: var(--nord0);
+    --bg-deep: var(--nord1);
+    --bg-surface: var(--nord2);
+    --bg-elevated: var(--nord3);
+    --bg-hover: #505868;
 
     /* Borders */
-    --border-void: #1e222e;
-    --border-subtle: #262b3a;
-    --border-focus: #3a4158;
+    --border-void: var(--nord1);
+    --border-subtle: var(--nord2);
+    --border-focus: var(--nord3);
 
     /* Text hierarchy */
-    --text-primary: #e8e6e3;
-    --text-secondary: #9ca3af;
-    --text-tertiary: #6b7280;
-    --text-muted: #4b5563;
+    --text-primary: var(--nord6);
+    --text-secondary: var(--nord4);
+    --text-tertiary: #a5abb8;
+    --text-muted: var(--nord3);
 
-    /* Ethereal cyan - primary accent */
-    --cyan-glow: #22d3ee;
-    --cyan-bright: #67e8f9;
-    --cyan-soft: #a5f3fc;
-    --cyan-muted: rgba(34, 211, 238, 0.15);
-    --cyan-ghost: rgba(34, 211, 238, 0.08);
+    /* Primary accent (Frost cyan) */
+    --accent-primary: var(--nord8);
+    --accent-bright: var(--nord7);
+    --accent-soft: var(--nord9);
+    --accent-muted: rgba(136, 192, 208, 0.15);
+    --accent-ghost: rgba(136, 192, 208, 0.08);
 
-    /* Warm amber - secondary accent */
-    --amber-glow: #f59e0b;
-    --amber-bright: #fbbf24;
-    --amber-soft: #fcd34d;
-    --amber-muted: rgba(245, 158, 11, 0.15);
-    --amber-ghost: rgba(245, 158, 11, 0.08);
+    /* Secondary accent (Aurora yellow/orange) */
+    --accent-secondary: var(--nord13);
+    --accent-secondary-bright: #f0d399;
+    --accent-secondary-soft: var(--nord12);
+    --accent-secondary-muted: rgba(235, 203, 139, 0.15);
+    --accent-secondary-ghost: rgba(235, 203, 139, 0.08);
 
-    /* Status colors */
-    --emerald: #10b981;
-    --rose: #f43f5e;
-    --rose-muted: rgba(244, 63, 94, 0.2);
-    --violet: #8b5cf6;
+    /* Status colors (Aurora) */
+    --success: var(--nord14);
+    --success-muted: rgba(163, 190, 140, 0.2);
+    --error: var(--nord11);
+    --error-muted: rgba(191, 97, 106, 0.2);
+    --warning: var(--nord13);
+    --purple: var(--nord15);
+    --purple-muted: rgba(180, 142, 173, 0.15);
 
     /* Shadows */
-    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-    --glow-cyan: 0 0 30px rgba(34, 211, 238, 0.2);
+    --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    --glow-accent: 0 0 30px rgba(136, 192, 208, 0.2);
 
     /* Typography */
     --font-display: 'Cormorant Garamond', Georgia, serif;
@@ -52,6 +81,60 @@
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --duration-fast: 150ms;
     --duration-normal: 250ms;
+
+    /* Color scheme hint for browser */
+    color-scheme: dark light;
+}
+
+/* ===== LIGHT THEME ===== */
+@media (prefers-color-scheme: light) {
+    :root {
+        /* Background hierarchy (inverted) */
+        --bg-abyss: var(--nord6);
+        --bg-void: var(--nord5);
+        --bg-deep: var(--nord6);
+        --bg-surface: #ffffff;
+        --bg-elevated: var(--nord5);
+        --bg-hover: var(--nord4);
+
+        /* Borders */
+        --border-void: var(--nord4);
+        --border-subtle: #c9d1dc;
+        --border-focus: var(--nord9);
+
+        /* Text hierarchy */
+        --text-primary: var(--nord0);
+        --text-secondary: var(--nord1);
+        --text-tertiary: var(--nord2);
+        --text-muted: var(--nord3);
+
+        /* Primary accent (darker for contrast) */
+        --accent-primary: var(--nord10);
+        --accent-bright: var(--nord9);
+        --accent-soft: var(--nord8);
+        --accent-muted: rgba(94, 129, 172, 0.15);
+        --accent-ghost: rgba(94, 129, 172, 0.08);
+
+        /* Secondary accent */
+        --accent-secondary: var(--nord12);
+        --accent-secondary-bright: var(--nord13);
+        --accent-secondary-soft: #c97b60;
+        --accent-secondary-muted: rgba(208, 135, 112, 0.15);
+        --accent-secondary-ghost: rgba(208, 135, 112, 0.08);
+
+        /* Status colors (slightly adjusted for light bg) */
+        --success: #8aab7a;
+        --success-muted: rgba(138, 171, 122, 0.2);
+        --error: #b5545e;
+        --error-muted: rgba(181, 84, 94, 0.2);
+        --warning: #d9a654;
+        --purple: #a6799a;
+        --purple-muted: rgba(166, 121, 154, 0.15);
+
+        /* Shadows (softer for light mode) */
+        --shadow-lg: 0 25px 50px -12px rgba(46, 52, 64, 0.15);
+        --glow-accent: 0 0 30px rgba(94, 129, 172, 0.15);
+    }
 }
 
 /* Reset */
@@ -75,7 +158,7 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Ambient background glow */
+/* Ambient background glow (subtle) */
 body::before {
     content: '';
     position: fixed;
@@ -84,11 +167,20 @@ body::before {
     width: 200%;
     height: 200%;
     background:
-        radial-gradient(ellipse at 20% 20%, rgba(34, 211, 238, 0.03) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.02) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 50%, rgba(245, 158, 11, 0.01) 0%, transparent 70%);
+        radial-gradient(ellipse at 20% 20%, rgba(136, 192, 208, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(180, 142, 173, 0.02) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(235, 203, 139, 0.01) 0%, transparent 70%);
     pointer-events: none;
     z-index: 0;
+}
+
+@media (prefers-color-scheme: light) {
+    body::before {
+        background:
+            radial-gradient(ellipse at 20% 20%, rgba(94, 129, 172, 0.05) 0%, transparent 50%),
+            radial-gradient(ellipse at 80% 80%, rgba(180, 142, 173, 0.03) 0%, transparent 50%),
+            radial-gradient(ellipse at 50% 50%, rgba(208, 135, 112, 0.02) 0%, transparent 70%);
+    }
 }
 
 /* ===== APP GRID LAYOUT ===== */
@@ -134,7 +226,7 @@ body::before {
     background: linear-gradient(90deg,
         transparent 0%,
         var(--border-subtle) 20%,
-        var(--cyan-glow) 50%,
+        var(--accent-primary) 50%,
         var(--border-subtle) 80%,
         transparent 100%
     );
@@ -162,7 +254,7 @@ body::before {
     content: '';
     position: absolute;
     inset: 0;
-    border: 1px solid var(--cyan-glow);
+    border: 1px solid var(--accent-primary);
     border-radius: 8px;
     opacity: 0.6;
     transform: rotate(45deg);
@@ -172,7 +264,7 @@ body::before {
     content: '';
     position: absolute;
     inset: 4px;
-    background: linear-gradient(135deg, var(--cyan-glow) 0%, var(--violet) 100%);
+    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--purple) 100%);
     border-radius: 4px;
     opacity: 0.8;
     transform: rotate(45deg);
@@ -218,9 +310,9 @@ body::before {
 }
 
 .nav-link.active {
-    background: var(--cyan-muted);
-    border-color: var(--cyan-glow);
-    color: var(--cyan-bright);
+    background: var(--accent-muted);
+    border-color: var(--accent-primary);
+    color: var(--accent-bright);
 }
 
 /* Search */
@@ -251,9 +343,9 @@ body::before {
 
 #search-input:focus {
     outline: none;
-    border-color: var(--cyan-glow);
+    border-color: var(--accent-primary);
     background: var(--bg-elevated);
-    box-shadow: 0 0 0 4px var(--cyan-muted), 0 0 40px var(--cyan-muted);
+    box-shadow: 0 0 0 4px var(--accent-muted), 0 0 40px var(--accent-muted);
 }
 
 #search-input::placeholder {
@@ -282,7 +374,7 @@ body::before {
     overflow-y: auto;
     z-index: 1000;
     display: none;
-    box-shadow: var(--shadow-lg), var(--glow-cyan);
+    box-shadow: var(--shadow-lg), var(--glow-accent);
 }
 
 #search-results.active {
@@ -308,7 +400,7 @@ body::before {
     font-family: var(--font-mono);
     font-size: 0.8125rem;
     font-weight: 500;
-    color: var(--cyan-bright);
+    color: var(--accent-bright);
     text-decoration: none;
 }
 
@@ -370,9 +462,9 @@ body::before {
 }
 
 .nav-tab.active {
-    background: var(--cyan-muted);
-    border-color: var(--cyan-glow);
-    color: var(--cyan-bright);
+    background: var(--accent-muted);
+    border-color: var(--accent-primary);
+    color: var(--accent-bright);
 }
 
 .sidebar-section {
@@ -401,11 +493,11 @@ body::before {
 }
 
 .tree-item.active {
-    background: var(--cyan-ghost);
+    background: var(--accent-ghost);
 }
 
 .tree-item.active .tree-label {
-    color: var(--cyan-bright);
+    color: var(--accent-bright);
 }
 
 .tree-icon {
@@ -416,11 +508,11 @@ body::before {
 }
 
 .tree-icon.folder {
-    color: var(--amber-glow);
+    color: var(--accent-secondary);
 }
 
 .tree-icon.file {
-    color: var(--cyan-glow);
+    color: var(--accent-primary);
     opacity: 0.6;
 }
 
@@ -459,7 +551,7 @@ body::before {
 
 .sidebar-footer a:hover {
     opacity: 1;
-    color: var(--cyan-glow);
+    color: var(--accent-primary);
 }
 
 .tree-folder-header {
@@ -515,7 +607,7 @@ body::before {
     left: 0;
     width: 80px;
     height: 1px;
-    background: var(--cyan-glow);
+    background: var(--accent-primary);
     opacity: 0.5;
 }
 
@@ -565,15 +657,15 @@ body::before {
     font-family: var(--font-mono);
     font-size: 0.625rem;
     font-weight: 400;
-    color: var(--cyan-bright);
+    color: var(--accent-bright);
     letter-spacing: 0.02em;
     text-decoration: none;
     transition: all var(--duration-fast) ease;
 }
 
 .tag:hover {
-    background: var(--cyan-ghost);
-    border-color: var(--cyan-glow);
+    background: var(--accent-ghost);
+    border-color: var(--accent-primary);
 }
 
 /* Entry content */
@@ -595,7 +687,7 @@ body::before {
 .entry-content h1 { font-size: 1.75rem; }
 .entry-content h2 {
     font-size: 1.375rem;
-    color: var(--cyan-bright);
+    color: var(--accent-bright);
 }
 .entry-content h3 { font-size: 1.125rem; }
 
@@ -604,20 +696,20 @@ body::before {
 }
 
 .entry-content a {
-    color: var(--cyan-glow);
+    color: var(--accent-primary);
     text-decoration: none;
     border-bottom: 1px solid transparent;
     transition: border-color var(--duration-fast) ease;
 }
 
 .entry-content a:hover {
-    border-bottom-color: var(--cyan-glow);
+    border-bottom-color: var(--accent-primary);
 }
 
 /* Wikilinks */
 .wikilink {
-    color: var(--amber-bright) !important;
-    background: var(--amber-ghost);
+    color: var(--accent-secondary-bright) !important;
+    background: var(--accent-secondary-ghost);
     padding: 2px 8px;
     border-radius: 4px;
     border-bottom: none !important;
@@ -627,13 +719,13 @@ body::before {
 }
 
 .wikilink:hover {
-    background: var(--amber-muted);
+    background: var(--accent-secondary-muted);
 }
 
 .wikilink-broken {
-    color: var(--rose) !important;
-    background: var(--rose-muted);
-    border-bottom: 1px dashed var(--rose) !important;
+    color: var(--error) !important;
+    background: var(--error-muted);
+    border-bottom: 1px dashed var(--error) !important;
 }
 
 /* Code */
@@ -643,7 +735,7 @@ body::before {
     background: var(--bg-surface);
     padding: 3px 8px;
     border-radius: 4px;
-    color: var(--amber-bright);
+    color: var(--accent-secondary-bright);
 }
 
 .entry-content pre {
@@ -675,7 +767,7 @@ body::before {
 
 /* Blockquotes */
 .entry-content blockquote {
-    border-left: 2px solid var(--cyan-glow);
+    border-left: 2px solid var(--accent-primary);
     padding-left: 24px;
     margin: 28px 0;
     color: var(--text-tertiary);
@@ -700,7 +792,7 @@ body::before {
 
 .entry-content th {
     background: var(--bg-surface);
-    color: var(--cyan-bright);
+    color: var(--accent-bright);
     font-weight: 500;
     text-transform: uppercase;
     font-size: 0.6875rem;
@@ -904,7 +996,7 @@ body::before {
 }
 
 .back-link a {
-    color: var(--cyan-glow);
+    color: var(--accent-primary);
     text-decoration: none;
     font-family: var(--font-mono);
     font-size: 0.75rem;
@@ -952,7 +1044,7 @@ body::before {
 }
 
 .graph-tooltip strong {
-    color: var(--cyan-bright);
+    color: var(--accent-bright);
 }
 
 /* Mermaid diagrams */

@@ -87,11 +87,11 @@
   "edges": [
     {
       "source": "guides/quick-start",
-      "target": "reference/cli"
+      "target": "reference/entry-format"
     },
     {
       "source": "guides/quick-start",
-      "target": "reference/entry-format"
+      "target": "reference/cli"
     },
     {
       "source": "guides/quick-start",
@@ -99,7 +99,7 @@
     },
     {
       "source": "guides/ai-integration",
-      "target": "guides/mcp-setup"
+      "target": "reference/entry-format"
     },
     {
       "source": "guides/ai-integration",
@@ -107,7 +107,7 @@
     },
     {
       "source": "guides/ai-integration",
-      "target": "reference/entry-format"
+      "target": "guides/mcp-setup"
     },
     {
       "source": "guides/mcp-setup",
@@ -123,6 +123,10 @@
     },
     {
       "source": "guides/installation",
+      "target": "reference/cli"
+    },
+    {
+      "source": "guides/installation",
       "target": "guides/mcp-setup"
     },
     {
@@ -130,24 +134,20 @@
       "target": "guides/quick-start"
     },
     {
-      "source": "guides/installation",
-      "target": "reference/cli"
+      "source": "reference/beads",
+      "target": "reference/entry-format"
     },
     {
       "source": "reference/beads",
       "target": "reference/cli"
     },
     {
-      "source": "reference/beads",
+      "source": "reference/templates",
       "target": "reference/entry-format"
     },
     {
       "source": "reference/templates",
       "target": "reference/cli"
-    },
-    {
-      "source": "reference/templates",
-      "target": "reference/entry-format"
     },
     {
       "source": "reference/entry-format",

@@ -13,54 +13,80 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
+        /* ===== NORD COLOR PALETTE ===== */
         :root {
-            /* Deep void backgrounds */
-            --bg-abyss: #05060a;
-            --bg-void: #0a0c12;
-            --bg-deep: #0f1118;
-            --bg-surface: #151820;
-            --bg-elevated: #1a1e28;
-            --bg-hover: #1f2430;
+            /* Nord Polar Night (dark backgrounds) */
+            --nord0: #2e3440;
+            --nord1: #3b4252;
+            --nord2: #434c5e;
+            --nord3: #4c566a;
 
-            /* Borders with subtle glow potential */
-            --border-void: #1e222e;
-            --border-subtle: #262b3a;
-            --border-focus: #3a4158;
+            /* Nord Snow Storm (light backgrounds/text) */
+            --nord4: #d8dee9;
+            --nord5: #e5e9f0;
+            --nord6: #eceff4;
+
+            /* Nord Frost (accent colors) */
+            --nord7: #8fbcbb;
+            --nord8: #88c0d0;
+            --nord9: #81a1c1;
+            --nord10: #5e81ac;
+
+            /* Nord Aurora (semantic colors) */
+            --nord11: #bf616a;
+            --nord12: #d08770;
+            --nord13: #ebcb8b;
+            --nord14: #a3be8c;
+            --nord15: #b48ead;
+
+            /* ===== DARK THEME (Default) ===== */
+            /* Background hierarchy */
+            --bg-abyss: #242933;
+            --bg-void: var(--nord0);
+            --bg-deep: var(--nord1);
+            --bg-surface: var(--nord2);
+            --bg-elevated: var(--nord3);
+            --bg-hover: #505868;
+
+            /* Borders */
+            --border-void: var(--nord1);
+            --border-subtle: var(--nord2);
+            --border-focus: var(--nord3);
 
             /* Text hierarchy */
-            --text-primary: #e8e6e3;
-            --text-secondary: #9ca3af;
-            --text-tertiary: #6b7280;
-            --text-muted: #4b5563;
+            --text-primary: var(--nord6);
+            --text-secondary: var(--nord4);
+            --text-tertiary: #a5abb8;
+            --text-muted: var(--nord3);
 
-            /* Ethereal cyan - primary accent */
-            --cyan-glow: #22d3ee;
-            --cyan-bright: #67e8f9;
-            --cyan-soft: #a5f3fc;
-            --cyan-muted: rgba(34, 211, 238, 0.15);
-            --cyan-ghost: rgba(34, 211, 238, 0.08);
+            /* Primary accent (Frost cyan) - aliased for compatibility */
+            --cyan-glow: var(--nord8);
+            --cyan-bright: var(--nord7);
+            --cyan-soft: var(--nord9);
+            --cyan-muted: rgba(136, 192, 208, 0.15);
+            --cyan-ghost: rgba(136, 192, 208, 0.08);
 
-            /* Warm amber - secondary accent */
-            --amber-glow: #f59e0b;
-            --amber-bright: #fbbf24;
-            --amber-soft: #fcd34d;
-            --amber-muted: rgba(245, 158, 11, 0.15);
-            --amber-ghost: rgba(245, 158, 11, 0.08);
+            /* Secondary accent (Aurora yellow) - aliased for compatibility */
+            --amber-glow: var(--nord13);
+            --amber-bright: #f0d399;
+            --amber-soft: var(--nord12);
+            --amber-muted: rgba(235, 203, 139, 0.15);
+            --amber-ghost: rgba(235, 203, 139, 0.08);
 
-            /* Status colors */
-            --emerald: #10b981;
-            --emerald-muted: rgba(16, 185, 129, 0.2);
-            --rose: #f43f5e;
-            --rose-muted: rgba(244, 63, 94, 0.2);
-            --violet: #8b5cf6;
-            --violet-muted: rgba(139, 92, 246, 0.15);
+            /* Status colors (Aurora) */
+            --emerald: var(--nord14);
+            --emerald-muted: rgba(163, 190, 140, 0.2);
+            --rose: var(--nord11);
+            --rose-muted: rgba(191, 97, 106, 0.2);
+            --violet: var(--nord15);
+            --violet-muted: rgba(180, 142, 173, 0.15);
 
             /* Shadows and glows */
-            --shadow-ambient: 0 0 80px rgba(34, 211, 238, 0.03);
-            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-            --shadow-xl: 0 35px 60px -15px rgba(0, 0, 0, 0.7);
-            --glow-cyan: 0 0 30px rgba(34, 211, 238, 0.2);
-            --glow-amber: 0 0 30px rgba(245, 158, 11, 0.2);
+            --shadow-ambient: 0 0 80px rgba(136, 192, 208, 0.03);
+            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+            --shadow-xl: 0 35px 60px -15px rgba(0, 0, 0, 0.5);
+            --glow-cyan: 0 0 30px rgba(136, 192, 208, 0.2);
+            --glow-amber: 0 0 30px rgba(235, 203, 139, 0.2);
 
             /* Typography */
             --font-display: 'Cormorant Garamond', Georgia, serif;
@@ -71,6 +97,62 @@
             --duration-fast: 150ms;
             --duration-normal: 250ms;
             --duration-slow: 400ms;
+
+            /* Color scheme hint */
+            color-scheme: dark light;
+        }
+
+        /* ===== LIGHT THEME ===== */
+        @media (prefers-color-scheme: light) {
+            :root {
+                /* Background hierarchy (inverted) */
+                --bg-abyss: var(--nord6);
+                --bg-void: var(--nord5);
+                --bg-deep: var(--nord6);
+                --bg-surface: #ffffff;
+                --bg-elevated: var(--nord5);
+                --bg-hover: var(--nord4);
+
+                /* Borders */
+                --border-void: var(--nord4);
+                --border-subtle: #c9d1dc;
+                --border-focus: var(--nord9);
+
+                /* Text hierarchy */
+                --text-primary: var(--nord0);
+                --text-secondary: var(--nord1);
+                --text-tertiary: var(--nord2);
+                --text-muted: var(--nord3);
+
+                /* Primary accent (darker for contrast) */
+                --cyan-glow: var(--nord10);
+                --cyan-bright: var(--nord9);
+                --cyan-soft: var(--nord8);
+                --cyan-muted: rgba(94, 129, 172, 0.15);
+                --cyan-ghost: rgba(94, 129, 172, 0.08);
+
+                /* Secondary accent */
+                --amber-glow: var(--nord12);
+                --amber-bright: var(--nord13);
+                --amber-soft: #c97b60;
+                --amber-muted: rgba(208, 135, 112, 0.15);
+                --amber-ghost: rgba(208, 135, 112, 0.08);
+
+                /* Status colors (slightly adjusted for light bg) */
+                --emerald: #8aab7a;
+                --emerald-muted: rgba(138, 171, 122, 0.2);
+                --rose: #b5545e;
+                --rose-muted: rgba(181, 84, 94, 0.2);
+                --violet: #a6799a;
+                --violet-muted: rgba(166, 121, 154, 0.15);
+
+                /* Shadows (softer for light mode) */
+                --shadow-ambient: 0 0 80px rgba(94, 129, 172, 0.05);
+                --shadow-lg: 0 25px 50px -12px rgba(46, 52, 64, 0.15);
+                --shadow-xl: 0 35px 60px -15px rgba(46, 52, 64, 0.2);
+                --glow-cyan: 0 0 30px rgba(94, 129, 172, 0.15);
+                --glow-amber: 0 0 30px rgba(208, 135, 112, 0.15);
+            }
         }
 
         * {
@@ -103,12 +185,21 @@
             width: 200%;
             height: 200%;
             background:
-                radial-gradient(ellipse at 20% 20%, rgba(34, 211, 238, 0.03) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.02) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(245, 158, 11, 0.01) 0%, transparent 70%);
+                radial-gradient(ellipse at 20% 20%, rgba(136, 192, 208, 0.03) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(180, 142, 173, 0.02) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(235, 203, 139, 0.01) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
             animation: ambient-drift 60s ease-in-out infinite alternate;
+        }
+
+        @media (prefers-color-scheme: light) {
+            body::before {
+                background:
+                    radial-gradient(ellipse at 20% 20%, rgba(94, 129, 172, 0.05) 0%, transparent 50%),
+                    radial-gradient(ellipse at 80% 80%, rgba(180, 142, 173, 0.03) 0%, transparent 50%),
+                    radial-gradient(ellipse at 50% 50%, rgba(208, 135, 112, 0.02) 0%, transparent 70%);
+            }
         }
 
         @keyframes ambient-drift {
@@ -2703,16 +2794,16 @@
             // Create gradient definitions for glowing nodes
             const defs = svg.append('defs');
 
-            // Create radial gradients for each category
+            // Create radial gradients for each category - Nord Aurora palette
             const categories = ['devops', 'infrastructure', 'projects', 'tooling', 'default', 'development', 'best-practices'];
             const colors = {
-                'devops': '#f59e0b',
-                'infrastructure': '#22d3ee',
-                'projects': '#10b981',
-                'tooling': '#f43f5e',
-                'default': '#8b5cf6',
-                'development': '#a78bfa',
-                'best-practices': '#f472b6'
+                'devops': '#d08770',        // nord12 - orange
+                'infrastructure': '#88c0d0', // nord8 - cyan
+                'projects': '#a3be8c',       // nord14 - green
+                'tooling': '#bf616a',        // nord11 - red
+                'default': '#81a1c1',        // nord9 - blue
+                'development': '#b48ead',    // nord15 - purple
+                'best-practices': '#ebcb8b'  // nord13 - yellow
             };
 
             categories.forEach(cat => {
