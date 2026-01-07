@@ -145,7 +145,7 @@ mx prime --project=myapp -d 14      # Include recent project entries
 
 ## MCP Server
 
-For Claude Desktop or when structured responses are preferred:
+Memex MCP is a **minimal core** for Claude Desktop and tools without shell access:
 
 ```json
 {
@@ -155,7 +155,9 @@ For Claude Desktop or when structured responses are preferred:
 }
 ```
 
-**CLI vs MCP trade-off:** CLI uses ~0 tokens, MCP uses ~500+ for tool schemas. Use CLI unless you need MCP's structured responses.
+**For AI agents (Claude Code, etc.)**: Use the CLI instead. It has ~0 token overhead vs MCP's ~500+ token schema cost.
+
+See [MCP Setup Guide](kb/guides/mcp-setup.md) for configuration details and tool documentation.
 
 ## Installation
 
