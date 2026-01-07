@@ -43,8 +43,8 @@
     /* Text hierarchy */
     --text-primary: var(--nord6);
     --text-secondary: var(--nord4);
-    --text-tertiary: #9199a8;
-    --text-muted: #6e7a8a;
+    --text-tertiary: #a0a8b5;
+    --text-muted: #8892a2;
 
     /* Primary accent (Frost cyan) */
     --accent-primary: var(--nord8);
