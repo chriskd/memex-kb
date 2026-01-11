@@ -14,7 +14,7 @@ import os
 import re
 import shutil
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -1072,7 +1072,7 @@ async def whats_new(
     else:
         search_path = kb_root
 
-    cutoff_datetime = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_date = date.today() - timedelta(days=days)
     candidates: list[dict] = []
 
     for md_file in search_path.rglob("*.md"):
@@ -1108,15 +1108,15 @@ async def whats_new(
             if not matches_project:
                 continue
 
-        # Determine activity type and datetime
+        # Determine activity type and date
         activity_type: str | None = None
-        activity_date: datetime | None = None
+        activity_date: date | None = None
 
         # Check updated first (takes precedence if both qualify)
-        if include_updated and metadata.updated and metadata.updated >= cutoff_datetime:
+        if include_updated and metadata.updated and metadata.updated >= cutoff_date:
             activity_type = "updated"
             activity_date = metadata.updated
-        elif include_created and metadata.created >= cutoff_datetime:
+        elif include_created and metadata.created >= cutoff_date:
             activity_type = "created"
             activity_date = metadata.created
 
@@ -1680,7 +1680,7 @@ async def health(
 
     # Collect all entries and their metadata
     all_entries: dict[str, dict] = {}  # path -> {title, tags, created, updated, links}
-    cutoff_datetime = datetime.now(timezone.utc) - timedelta(days=stale_days)
+    cutoff_date = date.today() - timedelta(days=stale_days)
 
     for md_file in kb_root.rglob("*.md"):
         if md_file.name.startswith("_"):
@@ -1745,8 +1745,8 @@ async def health(
     if check_stale:
         for path_key, entry in all_entries.items():
             last_activity = entry["updated"] or entry["created"]
-            if last_activity and last_activity < cutoff_datetime:
-                days_old = (datetime.now(timezone.utc) - last_activity).days
+            if last_activity and last_activity < cutoff_date:
+                days_old = (date.today() - last_activity).days
                 results["stale"].append({
                     "path": entry["path"],
                     "title": entry["title"],

@@ -11,8 +11,8 @@ class EntryMetadata(BaseModel):
 
     title: str
     tags: list[str] = Field(min_length=1)
-    created: datetime
-    updated: datetime | None = None
+    created: date
+    updated: date | None = None
     contributors: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     status: Literal["draft", "published", "archived"] = "published"
@@ -46,8 +46,8 @@ class SearchResult(BaseModel):
     score: float
     tags: list[str] = Field(default_factory=list)
     section: str | None = None
-    created: datetime | None = None
-    updated: datetime | None = None
+    created: date | None = None
+    updated: date | None = None
     token_count: int = 0
     content: str | None = None  # Full document content when requested
     source_project: str | None = None  # Project that created this entry
