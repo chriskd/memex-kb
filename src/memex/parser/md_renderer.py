@@ -14,6 +14,7 @@ from markdown_it import MarkdownIt
 from markdown_it.renderer import RendererHTML
 from markdown_it.rules_inline import StateInline
 
+
 # Pattern for [[target]] or [[target|alias]]
 # Groups: 1=target, 2=alias (optional, without the |)
 WIKILINK_PATTERN = re.compile(r"\[\[([^|\]\n]+)(?:\|([^\]\n]+))?\]\]")
@@ -92,7 +93,7 @@ def _extract_wikilinks(tokens: list) -> list[str]:
         for token in token_list:
             if token.type == "wikilink":
                 target = token.meta.get("target", "")
-                normalized = normalize_link(target)
+                normalized = _normalize_link(target)
                 if normalized and normalized not in seen:
                     seen.add(normalized)
                     links.append(normalized)
@@ -104,21 +105,12 @@ def _extract_wikilinks(tokens: list) -> list[str]:
     return links
 
 
-def normalize_link(link: str) -> str:
+def _normalize_link(link: str) -> str:
     """Normalize a link target.
-
-    This is the canonical link normalization function used throughout the parser.
 
     - Strips whitespace
     - Removes .md extension
-    - Normalizes path separators (backslash to forward slash)
-    - Removes leading/trailing slashes
-
-    Args:
-        link: Raw link target.
-
-    Returns:
-        Normalized link target.
+    - Normalizes path separators
     """
     link = link.strip()
 
@@ -178,8 +170,8 @@ def render_markdown(content: str) -> MarkdownResult:
 def extract_links_only(content: str) -> list[str]:
     """Extract wikilinks from markdown content (no HTML rendering).
 
-    This is optimized to only parse tokens and extract links,
-    avoiding the overhead of full HTML rendering.
+    For cases where only links are needed, this is equivalent to
+    render_markdown(content).links but more explicit.
 
     Args:
         content: Markdown content.
@@ -187,6 +179,4 @@ def extract_links_only(content: str) -> list[str]:
     Returns:
         List of normalized wikilink targets.
     """
-    md = _get_parser()
-    tokens = md.parse(content)
-    return _extract_wikilinks(tokens)
+    return render_markdown(content).links

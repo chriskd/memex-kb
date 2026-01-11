@@ -4,29 +4,24 @@ This module provides context-aware behavior when working within a project direct
 A .kbcontext file tells the KB which paths are most relevant for that project.
 
 Example .kbcontext file:
-    project_kb: ./kb             # Project-local KB for publishing (optional)
-    primary: projects/memex      # Default write directory in org KB
-    paths:                       # Boost these in search (supports globs)
+    primary: projects/memex    # Default write directory
+    paths:                           # Boost these in search (supports globs)
       - projects/memex
       - tooling/beads
       - infrastructure/*
-    default_tags:                # Suggested for new entries
+    default_tags:                    # Suggested for new entries
       - memex
 """
 
-import logging
 import os
-import subprocess
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from .config import MAX_CONTEXT_SEARCH_DEPTH
 
-log = logging.getLogger(__name__)
+import yaml
 
 # Context filename
 CONTEXT_FILENAME = ".kbcontext"
@@ -54,15 +49,6 @@ class KBContext:
     source_file: Path | None = None
     """Path to the .kbcontext file that was loaded."""
 
-    session_entry: str | None = None
-    """Path to session log entry (e.g., 'projects/myapp/sessions.md')."""
-
-    project_kb: str | None = None
-    """Path to project-local KB for publishing (relative to .kbcontext location)."""
-
-    publish_base_url: str | None = None
-    """Base URL for publishing (e.g., '/memex' for GitHub Pages subdirectory)."""
-
     @classmethod
     def from_dict(cls, data: dict[str, Any], source_file: Path | None = None) -> "KBContext":
         """Create KBContext from parsed YAML dict."""
@@ -72,9 +58,6 @@ class KBContext:
             default_tags=data.get("default_tags", []),
             project=data.get("project"),
             source_file=source_file,
-            session_entry=data.get("session_entry"),
-            project_kb=data.get("project_kb"),
-            publish_base_url=data.get("publish_base_url"),
         )
 
     def get_project_name(self) -> str | None:
@@ -205,20 +188,11 @@ def _load_context_file(context_path: Path) -> KBContext | None:
         data = yaml.safe_load(content)
 
         if not isinstance(data, dict):
-            log.warning(
-                "Invalid .kbcontext file %s: expected YAML dict, got %s",
-                context_path,
-                type(data).__name__,
-            )
             return None
 
         return KBContext.from_dict(data, source_file=context_path)
 
-    except OSError as e:
-        log.warning("Could not read .kbcontext file %s: %s", context_path, e)
-        return None
-    except yaml.YAMLError as e:
-        log.warning("Invalid YAML in .kbcontext file %s: %s", context_path, e)
+    except (OSError, yaml.YAMLError):
         return None
 
 
@@ -305,11 +279,7 @@ def create_default_context(project_name: str, kb_directory: str | None = None) -
     return f"""# .kbcontext - Project knowledge base context
 # This file tells memex which KB entries are relevant to this project.
 
-# Project-local KB for publishing (relative to this file)
-# Uncomment if this project has its own kb/ folder for documentation
-# project_kb: ./kb
-
-# Default directory for new entries created from this project (in org KB)
+# Default directory for new entries created from this project
 primary: {directory}
 
 # Boost these paths in search results (supports * and ** globs)
@@ -325,178 +295,3 @@ default_tags:
 # Override auto-detected project name (optional)
 # project: {project_name}
 """
-
-
-@dataclass
-class DetectedContext:
-    """Auto-detected project context when no .kbcontext exists.
-
-    Used to provide guidance on setting up context for a new project.
-    """
-
-    project_name: str | None = None
-    """Project name from git remote or directory."""
-
-    git_root: Path | None = None
-    """Git repository root directory."""
-
-    suggested_kb_directory: str | None = None
-    """Suggested KB directory (e.g., 'projects/myapp')."""
-
-    detection_method: str = "none"
-    """How project was detected: 'git_remote', 'git_root', 'cwd', or 'none'."""
-
-
-def _get_git_root(start_dir: Path | None = None) -> Path | None:
-    """Get the root directory of the current git repository.
-
-    Args:
-        start_dir: Directory to start from. Defaults to cwd.
-
-    Returns:
-        Path to git root, or None if not in a git repo.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            cwd=start_dir or Path.cwd(),
-            timeout=5,
-        )
-        if result.returncode == 0:
-            return Path(result.stdout.strip())
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
-    return None
-
-
-def _get_git_remote_name(git_root: Path) -> str | None:
-    """Extract project name from git remote URL.
-
-    Parses URLs like:
-    - git@github.com:user/project.git -> project
-    - https://github.com/user/project.git -> project
-    - https://github.com/user/project -> project
-
-    Args:
-        git_root: Git repository root directory.
-
-    Returns:
-        Project name, or None if no remote or can't parse.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            capture_output=True,
-            text=True,
-            cwd=git_root,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-
-        url = result.stdout.strip()
-
-        # Handle SSH format: git@github.com:user/project.git
-        if "@" in url and ":" in url:
-            # Split on : and take the path part (user/project.git)
-            path_part = url.split(":")[-1]
-            # Then get just the repo name (after the last /)
-            if "/" in path_part:
-                path_part = path_part.split("/")[-1]
-        # Handle HTTPS format: https://github.com/user/project.git
-        elif "/" in url:
-            path_part = url.split("/")[-1]
-        else:
-            return None
-
-        # Remove .git suffix if present
-        if path_part.endswith(".git"):
-            path_part = path_part[:-4]
-
-        return path_part if path_part else None
-
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return None
-
-
-def detect_project_context(start_dir: Path | None = None) -> DetectedContext:
-    """Auto-detect project context when no .kbcontext exists.
-
-    Detection order:
-    1. Git remote URL -> extract repo name
-    2. Git root directory name
-    3. Current working directory name
-
-    Args:
-        start_dir: Directory to start searching from. Defaults to cwd.
-
-    Returns:
-        DetectedContext with suggested values for bootstrap.
-    """
-    start = start_dir or Path.cwd()
-
-    # Try git-based detection
-    git_root = _get_git_root(start)
-
-    if git_root:
-        # Try git remote first (most reliable)
-        remote_name = _get_git_remote_name(git_root)
-        if remote_name:
-            return DetectedContext(
-                project_name=remote_name,
-                git_root=git_root,
-                suggested_kb_directory=f"projects/{remote_name}",
-                detection_method="git_remote",
-            )
-
-        # Fall back to git root directory name
-        return DetectedContext(
-            project_name=git_root.name,
-            git_root=git_root,
-            suggested_kb_directory=f"projects/{git_root.name}",
-            detection_method="git_root",
-        )
-
-    # Fall back to current directory name
-    cwd_name = start.resolve().name
-    if cwd_name:
-        return DetectedContext(
-            project_name=cwd_name,
-            git_root=None,
-            suggested_kb_directory=f"projects/{cwd_name}",
-            detection_method="cwd",
-        )
-
-    # Nothing detected
-    return DetectedContext()
-
-
-def get_session_entry_path(context: KBContext | None) -> str | None:
-    """Get the path for session logging from context.
-
-    Resolution order:
-    1. context.session_entry if set
-    2. {context.primary}/sessions.md if primary is set
-    3. None if no context or primary
-
-    Args:
-        context: KB context (may be None).
-
-    Returns:
-        Relative KB path for session entry, or None if can't determine.
-    """
-    if not context:
-        return None
-
-    # Explicit session_entry takes priority
-    if context.session_entry:
-        return context.session_entry
-
-    # Fall back to {primary}/sessions.md
-    if context.primary:
-        primary = context.primary.rstrip("/")
-        return f"{primary}/sessions.md"
-
-    return None

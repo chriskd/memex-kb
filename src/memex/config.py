@@ -117,15 +117,3 @@ TAG_SUGGESTION_MIN_SCORE = 0.3
 # Score weight for tags from semantically similar entries
 # Contributes to tag frequency ranking when suggesting tags for new entries
 SIMILAR_ENTRY_TAG_WEIGHT = 0.5
-
-
-# =============================================================================
-# Duplicate Detection
-# =============================================================================
-
-# Minimum semantic similarity score to flag potential duplicates
-# 0.7 = high similarity, reduces false positives for duplicate warnings
-DUPLICATE_DETECTION_MIN_SCORE = 0.7
-
-# Maximum number of potential duplicates to return
-DUPLICATE_DETECTION_LIMIT = 3

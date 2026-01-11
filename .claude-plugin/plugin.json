@@ -12,29 +12,5 @@
     "documentation",
     "personal-knowledge",
     "obsidian"
-  ],
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "mx prime"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "mx prime --compact"
-          }
-        ]
-      }
-    ]
-  }
+  ]
 }

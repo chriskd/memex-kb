@@ -12,7 +12,6 @@ build/
 
 # Search indices (rebuilt locally)
 .indices/
-.kb-indices/
 
 # IDE
 .idea/
@@ -29,17 +28,3 @@ Thumbs.db
 
 # uv
 .python-version
-.mcp.json
-
-# Local development artifacts
-.devcontainer/
-.vl-mail/
-
-# Test coverage artifacts
-htmlcov/
-.coverage
-coverage.xml
-
-# Empty scripts directory
-scripts/
-_site/
