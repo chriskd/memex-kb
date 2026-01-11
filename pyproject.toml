@@ -63,6 +63,9 @@ Issues = "https://github.com/voidlabs/memex/issues"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/memex"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
