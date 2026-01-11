@@ -74,7 +74,26 @@ mx health                           # Audit for problems
 mx reindex                          # Rebuild search indices
 ```
 
-## MCP Server
+## Claude Code Integration
+
+### Hooks (Recommended)
+
+Add to `.claude/settings.local.json`:
+
+```json
+{
+  "env": { "MEMEX_KB_ROOT": "/path/to/kb", "MEMEX_INDEX_ROOT": "/path/to/indices" },
+  "permissions": { "allow": ["Bash(mx:*)"] },
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx prime" }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "mx prime --compact" }] }]
+  }
+}
+```
+
+This automatically injects KB context at session start and before context compaction.
+
+### MCP Server
 
 Add to your Claude Code settings or MCP configuration:
 
