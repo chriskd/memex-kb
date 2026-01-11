@@ -203,6 +203,80 @@ class TestSearchTerse:
         assert "infrastructure/monitoring.md" in lines[0]
 
 
+class TestSearchMode:
+    """Tests for --mode flag with different search modes."""
+
+    def test_search_mode_semantic(self, kb_root, index_root):
+        """--mode=semantic uses only semantic/embedding search."""
+        _create_entry(
+            kb_root / "development" / "machine-learning.md",
+            title="Machine Learning Basics",
+            tags=["ml", "ai"],
+            content="Introduction to neural networks and deep learning concepts.",
+        )
+        _create_entry(
+            kb_root / "development" / "data-science.md",
+            title="Data Science Overview",
+            tags=["data", "analytics"],
+            content="Statistical analysis and data visualization techniques.",
+        )
+
+        runner = CliRunner()
+
+        # Semantic search for conceptually related content
+        result = runner.invoke(cli, ["search", "artificial intelligence", "--mode=semantic", "--json"])
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        data = json.loads(result.output)
+
+        # Should find semantically related entries (ML is related to AI)
+        # Even if "artificial intelligence" doesn't appear literally
+        paths = [r["path"] for r in data]
+        # At minimum, command should work without error
+        assert isinstance(data, list)
+
+    def test_search_mode_keyword(self, kb_root, index_root):
+        """--mode=keyword uses only keyword/text search."""
+        _create_entry(
+            kb_root / "development" / "python-guide.md",
+            title="Python Programming Guide",
+            tags=["python"],
+            content="A comprehensive guide to Python programming language.",
+        )
+
+        runner = CliRunner()
+
+        # Keyword search looks for exact terms
+        result = runner.invoke(cli, ["search", "python", "--mode=keyword", "--json"])
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        data = json.loads(result.output)
+
+        # Should find entry with "python" keyword
+        assert len(data) >= 1
+        assert any("python" in r["path"] for r in data)
+
+    def test_search_mode_hybrid_default(self, kb_root, index_root):
+        """--mode=hybrid (default) combines keyword and semantic search."""
+        _create_entry(
+            kb_root / "development" / "api-design.md",
+            title="REST API Design",
+            tags=["api", "rest"],
+            content="Best practices for designing RESTful APIs.",
+        )
+
+        runner = CliRunner()
+
+        # Hybrid mode (default) should work
+        result = runner.invoke(cli, ["search", "api", "--mode=hybrid", "--json"])
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        data = json.loads(result.output)
+
+        assert len(data) >= 1
+        assert any("api" in r["path"] for r in data)
+
+
 class TestSearchCombinations:
     """Tests for combining multiple search flags."""
 

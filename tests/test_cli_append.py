@@ -423,6 +423,112 @@ More content here."""
         assert "More content here." in updated
 
 
+class TestAppendMutualExclusivity:
+    """Tests for content source precedence.
+
+    Note: The CLI accepts multiple content sources with precedence order:
+    --stdin > --file > --content. These tests document this actual behavior.
+    """
+
+    def test_append_content_and_file_precedence(self, kb_root, index_root, tmp_path):
+        """When both --content and --file provided, --file takes precedence."""
+        entry_path = kb_root / "development" / "my-entry.md"
+        _create_entry(entry_path, "My Entry", ["python"], "Original.")
+
+        content_file = tmp_path / "content.md"
+        content_file.write_text("File content wins")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "append",
+                "My Entry",
+                "--content=Inline content ignored",
+                f"--file={content_file}",
+            ],
+        )
+
+        assert result.exit_code == 0
+        updated = entry_path.read_text()
+        assert "File content wins" in updated
+        assert "Inline content ignored" not in updated
+
+    def test_append_content_and_stdin_precedence(self, kb_root, index_root):
+        """When both --content and --stdin provided, --stdin takes precedence."""
+        entry_path = kb_root / "development" / "my-entry.md"
+        _create_entry(entry_path, "My Entry", ["python"], "Original.")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "append",
+                "My Entry",
+                "--content=Inline content ignored",
+                "--stdin",
+            ],
+            input="Stdin content wins",
+        )
+
+        assert result.exit_code == 0
+        updated = entry_path.read_text()
+        assert "Stdin content wins" in updated
+        assert "Inline content ignored" not in updated
+
+    def test_append_file_and_stdin_precedence(self, kb_root, index_root, tmp_path):
+        """When both --file and --stdin provided, --stdin takes precedence."""
+        entry_path = kb_root / "development" / "my-entry.md"
+        _create_entry(entry_path, "My Entry", ["python"], "Original.")
+
+        content_file = tmp_path / "content.md"
+        content_file.write_text("File content ignored")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "append",
+                "My Entry",
+                f"--file={content_file}",
+                "--stdin",
+            ],
+            input="Stdin content wins",
+        )
+
+        assert result.exit_code == 0
+        updated = entry_path.read_text()
+        assert "Stdin content wins" in updated
+        assert "File content ignored" not in updated
+
+    def test_append_all_three_content_sources_precedence(self, kb_root, index_root, tmp_path):
+        """When all three content sources provided, --stdin takes precedence."""
+        entry_path = kb_root / "development" / "my-entry.md"
+        _create_entry(entry_path, "My Entry", ["python"], "Original.")
+
+        content_file = tmp_path / "content.md"
+        content_file.write_text("File content ignored")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "append",
+                "My Entry",
+                "--content=Inline content ignored",
+                f"--file={content_file}",
+                "--stdin",
+            ],
+            input="Stdin content wins",
+        )
+
+        assert result.exit_code == 0
+        updated = entry_path.read_text()
+        assert "Stdin content wins" in updated
+        assert "File content ignored" not in updated
+        assert "Inline content ignored" not in updated
+
+
 class TestAppendEdgeCases:
     """Tests for edge cases and special content."""
 

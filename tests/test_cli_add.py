@@ -305,6 +305,125 @@ class TestAddValidation:
             # If validation is added, this is the expected path
             assert "tags" in result.output.lower() or "empty" in result.output.lower()
 
+    def test_add_content_and_file_precedence(self, kb_root, index_root, tmp_path):
+        """When both --content and --file provided, --file takes precedence.
+
+        Note: The CLI checks stdin first, then file, then content.
+        So precedence is: --stdin > --file > --content.
+        """
+        content_file = tmp_path / "content.md"
+        content_file.write_text("File content wins")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title=Test",
+                "--tags=test",
+                "--category=development",
+                "--content=Inline content ignored",
+                f"--file={content_file}",
+            ],
+        )
+
+        assert result.exit_code == 0
+
+        # Verify --file wins over --content
+        entry_path = kb_root / "development" / "test.md"
+        content = entry_path.read_text()
+        assert "File content wins" in content
+        assert "Inline content ignored" not in content
+
+    def test_add_content_and_stdin_precedence(self, kb_root, index_root):
+        """When both --content and --stdin provided, --stdin takes precedence.
+
+        Note: The CLI checks stdin first, so it wins over --content.
+        """
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title=Test2",
+                "--tags=test",
+                "--category=development",
+                "--content=Inline content ignored",
+                "--stdin",
+            ],
+            input="Stdin content wins",
+        )
+
+        assert result.exit_code == 0
+
+        # Verify --stdin wins over --content
+        entry_path = kb_root / "development" / "test2.md"
+        content = entry_path.read_text()
+        assert "Stdin content wins" in content
+        assert "Inline content ignored" not in content
+
+    def test_add_file_and_stdin_precedence(self, kb_root, index_root, tmp_path):
+        """When both --file and --stdin provided, --stdin takes precedence.
+
+        Note: The CLI checks stdin first, so it wins over --file.
+        """
+        content_file = tmp_path / "content.md"
+        content_file.write_text("File content ignored")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title=Test3",
+                "--tags=test",
+                "--category=development",
+                f"--file={content_file}",
+                "--stdin",
+            ],
+            input="Stdin content wins",
+        )
+
+        assert result.exit_code == 0
+
+        # Verify --stdin wins over --file
+        entry_path = kb_root / "development" / "test3.md"
+        content = entry_path.read_text()
+        assert "Stdin content wins" in content
+        assert "File content ignored" not in content
+
+    def test_add_all_three_content_sources_precedence(self, kb_root, index_root, tmp_path):
+        """When all three content sources provided, --stdin takes precedence.
+
+        Note: Precedence is --stdin > --file > --content.
+        """
+        content_file = tmp_path / "content.md"
+        content_file.write_text("File content ignored")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title=Test4",
+                "--tags=test",
+                "--category=development",
+                "--content=Inline content ignored",
+                f"--file={content_file}",
+                "--stdin",
+            ],
+            input="Stdin content wins",
+        )
+
+        assert result.exit_code == 0
+
+        # Verify --stdin wins over both
+        entry_path = kb_root / "development" / "test4.md"
+        content = entry_path.read_text()
+        assert "Stdin content wins" in content
+        assert "File content ignored" not in content
+        assert "Inline content ignored" not in content
+
 
 class TestAddJsonOutput:
     """Test mx add --json output format."""
