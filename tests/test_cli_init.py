@@ -152,3 +152,89 @@ class TestInitJsonOutput:
             data = json.loads(result.output)
             assert "error" in data
             assert "hint" in data
+
+
+class TestInitContentQuality:
+    """Test the quality of generated files."""
+
+    def test_readme_contains_usage_examples(self, runner, tmp_path):
+        """README includes practical usage examples."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            runner.invoke(cli, ["init"])
+
+            readme = (Path.cwd() / LOCAL_KB_DIR / "README.md").read_text()
+
+            # Should have code examples
+            assert "```bash" in readme
+            assert "mx add" in readme
+            assert "mx search" in readme
+
+    def test_config_is_valid_yaml_comment(self, runner, tmp_path):
+        """Config file has valid YAML structure (all commented)."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            runner.invoke(cli, ["init"])
+
+            config = (Path.cwd() / LOCAL_KB_DIR / LOCAL_KB_CONFIG_FILENAME).read_text()
+
+            # Should be commented YAML
+            assert "# " in config
+            assert "default_tags" in config
+            assert "exclude" in config
+
+    def test_config_includes_project_name(self, runner, tmp_path):
+        """Config suggests project name as default tag."""
+        import os
+
+        # Create a named directory and run init from there
+        project_dir = tmp_path / "my-cool-project"
+        project_dir.mkdir()
+
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(project_dir)
+            runner.invoke(cli, ["init"])
+
+            config = (project_dir / LOCAL_KB_DIR / LOCAL_KB_CONFIG_FILENAME).read_text()
+            assert "my-cool-project" in config
+        finally:
+            os.chdir(old_cwd)
+
+
+class TestInitEdgeCases:
+    """Test edge cases and error handling."""
+
+    def test_init_with_absolute_path(self, runner, tmp_path):
+        """Works with absolute path."""
+        target = tmp_path / "absolute" / "path" / "kb"
+
+        result = runner.invoke(cli, ["init", "--path", str(target)])
+
+        assert result.exit_code == 0
+        assert target.exists()
+        assert (target / "README.md").exists()
+
+    def test_init_preserves_existing_files_on_force(self, runner, tmp_path):
+        """Force reinit doesn't delete existing entries."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            kb_path = Path.cwd() / LOCAL_KB_DIR
+            kb_path.mkdir()
+
+            # Create an existing entry
+            entry = kb_path / "my-entry.md"
+            entry.write_text("# My Entry\n\nImportant content")
+
+            runner.invoke(cli, ["init", "--force"])
+
+            # Entry should still exist
+            assert entry.exists()
+            assert "Important content" in entry.read_text()
+
+    def test_init_help_shows_options(self, runner):
+        """Help text documents all options."""
+        result = runner.invoke(cli, ["init", "--help"])
+
+        assert result.exit_code == 0
+        assert "--path" in result.output
+        assert "--force" in result.output
+        assert "--json" in result.output
+        assert "kb/" in result.output  # Default mentioned

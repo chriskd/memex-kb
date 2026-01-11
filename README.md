@@ -27,19 +27,29 @@ mx --version
 
 ## Quick Start
 
+### Local Project KB (Recommended)
+
 ```bash
-# Initialize a knowledge base
-mkdir -p kb
-export MEMEX_KB_ROOT=$(pwd)/kb
+# Initialize a local KB in your project
+mx init
 
 # Create your first entry
-mx add --title="My First Note" --tags="example" --content="Hello, world!"
+mx add --title="My First Note" --tags="example" --category=kb --content="Hello, world!"
 
 # Search for entries
 mx search "hello"
+```
 
-# View an entry
-mx get example/my-first-note.md
+### Global KB
+
+```bash
+# Set up a global knowledge base
+mkdir -p ~/kb
+export MEMEX_KB_ROOT=~/kb
+export MEMEX_INDEX_ROOT=~/.kb-indices
+
+# Create an entry
+mx add --title="My First Note" --tags="example" --category=notes --content="Hello, world!"
 ```
 
 ## CLI Reference

@@ -285,11 +285,36 @@ mx whats-new --project=myapp      # Filter by project
 mx whats-new --limit=20           # More results
 ```
 
-## Context Commands
+## Project Setup Commands
+
+### mx init
+
+Initialize a local project KB. Creates a `kb/` directory for project-specific knowledge that stays with the project and is GitHub Pages compatible.
+
+```bash
+mx init                    # Create kb/ in current directory
+mx init --path docs/kb     # Custom location
+mx init --force            # Reinitialize existing
+mx init --json             # JSON output
+```
+
+**Options:**
+- `--path, -p`: Custom location for local KB (default: kb/)
+- `--force, -f`: Reinitialize existing local KB
+- `--json`: JSON output
+
+**What gets created:**
+- `kb/README.md` - Documentation for the local KB
+- `kb/.kbconfig` - Configuration file marking this as a memex KB
+
+**When to use:**
+- Starting a new project that needs project-specific documentation
+- Creating a knowledge base that should be versioned with the code
+- Setting up for GitHub Pages publishing
 
 ### mx context
 
-Manage project-specific KB context.
+Manage project-specific KB context (for routing to global KB).
 
 ```bash
 mx context                  # Show current context
@@ -298,6 +323,8 @@ mx context init --json      # JSON output
 mx context validate         # Validate context paths
 mx context validate --json  # JSON output
 ```
+
+**Note:** `mx init` creates a local `kb/` directory. `mx context init` creates a `.kbcontext` file that routes entries to the global KB.
 
 ## Publishing
 
