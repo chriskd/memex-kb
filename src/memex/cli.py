@@ -13,6 +13,7 @@ Usage:
 """
 
 import asyncio
+import difflib
 import json
 import sys
 from pathlib import Path
@@ -110,8 +111,26 @@ class JsonErrorGroup(click.Group):
     """Custom Click group that formats errors as JSON when --json-errors is set.
 
     This handles Click validation errors (bad option values, missing args, etc.)
-    that occur before the command callback is invoked.
+    that occur before the command callback is invoked. Also provides typo
+    suggestions for unknown commands.
     """
+
+    def resolve_command(self, ctx, args):
+        """Override to suggest similar commands for typos."""
+        try:
+            return super().resolve_command(ctx, args)
+        except UsageError as e:
+            # Check if this is a "No such command" error
+            cmd_name = args[0] if args else ""
+            if cmd_name and "No such command" in str(e):
+                matches = difflib.get_close_matches(
+                    cmd_name, self.list_commands(ctx), n=1, cutoff=0.6
+                )
+                if matches:
+                    raise UsageError(
+                        f"No such command '{cmd_name}'. Did you mean '{matches[0]}'?"
+                    )
+            raise
 
     def invoke(self, ctx):
         """Override invoke to catch and format errors."""
@@ -175,6 +194,16 @@ def cli(ctx, json_errors: bool):
       mx get tooling/beads.md    # Read an entry
       mx tree                    # Browse structure
       mx health                  # Check KB health
+
+    \b
+    Create content:
+      mx add --title="Title" --tags="a,b" --content="..."
+      mx append "Existing Title" --content="append this"
+
+    \b
+    Modify content:
+      mx patch path.md --find "old text" --replace "new text"
+      mx update path.md --tags="new,tags"
     """
     # Store json_errors in context for subcommands to access
     ctx.ensure_object(dict)
@@ -339,8 +368,9 @@ def _score_confidence_short(score: float) -> str:
 @click.option("--content", "-c", is_flag=True, help="Include full content in results")
 @click.option("--strict", is_flag=True, help="Disable semantic fallback for keyword mode")
 @click.option("--terse", is_flag=True, help="Output paths only (one per line)")
+@click.option("--full-titles", is_flag=True, help="Show full titles without truncation")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Optional[float], content: bool, strict: bool, terse: bool, as_json: bool):
+def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Optional[float], content: bool, strict: bool, terse: bool, full_titles: bool, as_json: bool):
     """Search the knowledge base.
 
     Scores are normalized to 0.0-1.0 (higher = better match):
@@ -393,7 +423,20 @@ def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Op
         filtered_results = [r for r in result.results if r.score >= min_score]
 
     if as_json:
-        output([{"path": r.path, "title": r.title, "score": r.score, "snippet": r.snippet, "confidence": _score_confidence(r.score)} for r in filtered_results], as_json=True)
+        results_data = []
+        for r in filtered_results:
+            item = {
+                "path": r.path,
+                "title": r.title,
+                "score": r.score,
+                "confidence": _score_confidence(r.score),
+            }
+            if content and r.content:
+                item["content"] = r.content
+            else:
+                item["snippet"] = r.snippet
+            results_data.append(item)
+        output(results_data, as_json=True)
     elif terse:
         for r in filtered_results:
             click.echo(r.path)
@@ -409,7 +452,20 @@ def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Op
             {"path": r.path, "title": r.title, "score": f"{r.score:.2f}", "conf": _score_confidence_short(r.score)}
             for r in filtered_results
         ]
-        click.echo(format_table(rows, ["path", "title", "score", "conf"], {"path": 40, "title": 30}))
+        title_width = 10000 if full_titles else 30
+        click.echo(format_table(rows, ["path", "title", "score", "conf"], {"path": 40, "title": title_width}))
+
+        # Show full content below table when --content flag is used
+        if content:
+            click.echo("\n" + "=" * 60)
+            for r in filtered_results:
+                click.echo(f"\n## {r.path}")
+                click.echo("-" * 40)
+                if r.content:
+                    click.echo(r.content)
+                else:
+                    click.echo(r.snippet)
+                click.echo()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -700,8 +756,9 @@ def tree(path: str, depth: int, as_json: bool):
 @click.option("--tag", "-t", help="Filter by tag")
 @click.option("--category", "-c", help="Filter by category")
 @click.option("--limit", "-n", default=20, help="Max results")
+@click.option("--full-titles", is_flag=True, help="Show full titles without truncation")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def list_entries(tag: Optional[str], category: Optional[str], limit: int, as_json: bool):
+def list_entries(tag: Optional[str], category: Optional[str], limit: int, full_titles: bool, as_json: bool):
     """List knowledge base entries.
 
     \b
@@ -739,7 +796,8 @@ def list_entries(tag: Optional[str], category: Optional[str], limit: int, as_jso
             return
 
         rows = [{"path": e["path"], "title": e["title"]} for e in result]
-        click.echo(format_table(rows, ["path", "title"], {"path": 45, "title": 40}))
+        title_width = 10000 if full_titles else 40
+        click.echo(format_table(rows, ["path", "title"], {"path": 45, "title": title_width}))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

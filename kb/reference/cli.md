@@ -25,6 +25,7 @@ mx search "query" --min-score=0.5    # Only confident results
 mx search "query" --content          # Include full content
 mx search "query" --strict           # No semantic fallback
 mx search "query" --terse            # Paths only
+mx search "query" --full-titles      # Show untruncated titles
 mx search "query" --json             # JSON output
 ```
 
@@ -33,10 +34,19 @@ mx search "query" --json             # JSON output
 - `--mode`: Search mode (hybrid, keyword, semantic)
 - `--limit, -n`: Maximum results (default: 10)
 - `--min-score`: Minimum score threshold (0.0-1.0)
-- `--content, -c`: Include full content in results
+- `--content, -c`: Include full document content in results (replaces snippet)
 - `--strict`: Disable semantic fallback
 - `--terse`: Output paths only
+- `--full-titles`: Show full titles without truncation
 - `--json`: JSON output
+
+**Content Flag Behavior:**
+
+When `--content` is used:
+- **JSON output**: Returns `content` field with full document text instead of `snippet`
+- **Table output**: Shows the standard results table followed by a content section displaying full text for each result
+
+Without `--content`, only a brief snippet is shown (default behavior).
 
 **Notes:**
 - Query cannot be empty. An error is returned for empty or whitespace-only queries.
@@ -111,6 +121,7 @@ mx list                        # All entries
 mx list --tag=infrastructure   # Filter by tag
 mx list --category=tooling     # Filter by category
 mx list --limit=50             # More results
+mx list --full-titles          # Show untruncated titles
 ```
 
 ### mx tree
