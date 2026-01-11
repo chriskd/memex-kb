@@ -4,30 +4,14 @@ This module provides functions to serialize EntryMetadata to YAML frontmatter.
 Extracted from core.py to reduce duplication in add_entry/update_entry.
 """
 
-from datetime import datetime, timezone
-
-import yaml
+from datetime import date
 
 from .models import EntryMetadata
-
-
-def _format_timestamp(dt: datetime) -> str:
-    """Format datetime as ISO 8601 string with seconds precision.
-
-    Args:
-        dt: Datetime to format.
-
-    Returns:
-        ISO 8601 formatted string (e.g., "2025-01-06T14:30:45").
-    """
-    # Strip microseconds and timezone for clean output
-    return dt.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def build_frontmatter(metadata: EntryMetadata) -> str:
     """Build YAML frontmatter string from metadata.
 
-    Uses yaml.safe_dump for correct escaping of special characters.
     Produces consistent, clean frontmatter by:
     - Always including required fields (title, tags, created)
     - Only including optional fields when they have non-default values
@@ -39,70 +23,77 @@ def build_frontmatter(metadata: EntryMetadata) -> str:
     Returns:
         Complete frontmatter string including --- delimiters and trailing newlines.
     """
-    # Build dict with only non-default fields
-    data: dict = {}
+    parts = ["---"]
 
     # Required fields
-    data["title"] = metadata.title
-    if metadata.description:
-        data["description"] = metadata.description
-    data["tags"] = list(metadata.tags)
-    data["created"] = _format_timestamp(metadata.created)
+    parts.append(f"title: {metadata.title}")
+    parts.append("tags:")
+    parts.append(_format_yaml_list(metadata.tags))
+    parts.append(f"created: {metadata.created.isoformat()}")
 
-    # Updated timestamp (present on updates, not on creation)
+    # Updated date (present on updates, not on creation)
     if metadata.updated:
-        data["updated"] = _format_timestamp(metadata.updated)
+        parts.append(f"updated: {metadata.updated.isoformat()}")
 
     # Contributors
     if metadata.contributors:
-        data["contributors"] = list(metadata.contributors)
+        parts.append("contributors:")
+        parts.append(_format_yaml_list(metadata.contributors))
 
     # Aliases
     if metadata.aliases:
-        data["aliases"] = list(metadata.aliases)
+        parts.append("aliases:")
+        parts.append(_format_yaml_list(metadata.aliases))
 
     # Status (only if not default)
     if metadata.status != "published":
-        data["status"] = metadata.status
+        parts.append(f"status: {metadata.status}")
 
     # Source project (where entry was created)
     if metadata.source_project:
-        data["source_project"] = metadata.source_project
+        parts.append(f"source_project: {metadata.source_project}")
 
     # Edit sources (projects that have edited this entry)
     if metadata.edit_sources:
-        data["edit_sources"] = list(metadata.edit_sources)
+        parts.append("edit_sources:")
+        parts.append(_format_yaml_list(metadata.edit_sources))
 
     # Breadcrumb metadata (agent/LLM provenance)
     if metadata.model:
-        data["model"] = metadata.model
+        parts.append(f"model: {metadata.model}")
     if metadata.git_branch:
-        data["git_branch"] = metadata.git_branch
+        parts.append(f"git_branch: {metadata.git_branch}")
     if metadata.last_edited_by:
-        data["last_edited_by"] = metadata.last_edited_by
+        parts.append(f"last_edited_by: {metadata.last_edited_by}")
 
     # Beads integration fields (preserved for backwards compatibility)
     if metadata.beads_issues:
-        data["beads_issues"] = list(metadata.beads_issues)
+        parts.append("beads_issues:")
+        parts.append(_format_yaml_list(metadata.beads_issues))
     if metadata.beads_project:
-        data["beads_project"] = metadata.beads_project
+        parts.append(f"beads_project: {metadata.beads_project}")
 
-    # Use yaml.safe_dump for correct escaping
-    yaml_content = yaml.safe_dump(
-        data,
-        default_flow_style=False,
-        allow_unicode=True,
-        sort_keys=False,
-    )
+    parts.append("---\n\n")
 
-    return f"---\n{yaml_content}---\n\n"
+    return "\n".join(parts)
+
+
+def _format_yaml_list(items: list[str]) -> str:
+    """Format a list as YAML list items with indentation.
+
+    Args:
+        items: List of strings to format.
+
+    Returns:
+        Multi-line string with "  - item" format, no trailing newline.
+    """
+    return "\n".join(f"  - {item}" for item in items)
 
 
 def create_new_metadata(
     title: str,
     tags: list[str],
     *,
-    description: str | None = None,
     source_project: str | None = None,
     contributor: str | None = None,
     model: str | None = None,
@@ -117,7 +108,6 @@ def create_new_metadata(
     Args:
         title: Entry title.
         tags: Entry tags (at least one required).
-        description: One-line summary of entry content.
         source_project: Project context where entry is being created.
         contributor: Contributor identity (name or "Name <email>").
         model: LLM model identifier if created by an agent.
@@ -129,9 +119,8 @@ def create_new_metadata(
     """
     return EntryMetadata(
         title=title,
-        description=description,
         tags=tags,
-        created=datetime.now(timezone.utc),
+        created=date.today(),
         updated=None,
         contributors=[contributor] if contributor else [],
         source_project=source_project,
@@ -145,7 +134,6 @@ def update_metadata_for_edit(
     metadata: EntryMetadata,
     *,
     new_tags: list[str] | None = None,
-    new_description: str | None = None,
     new_contributor: str | None = None,
     edit_source: str | None = None,
     model: str | None = None,
@@ -160,9 +148,8 @@ def update_metadata_for_edit(
     Args:
         metadata: Existing entry metadata.
         new_tags: Updated tags (or None to preserve existing).
-        new_description: Updated description (or None to preserve existing).
         new_contributor: New contributor to add to contributors list.
-        edit_source: Project making the edit (added to edit_sources if different).
+        edit_source: Project making the edit (added to edit_sources if different from source_project).
         model: LLM model identifier for the edit.
         git_branch: Current git branch.
         actor: Actor making the edit.
@@ -182,10 +169,9 @@ def update_metadata_for_edit(
 
     return EntryMetadata(
         title=metadata.title,
-        description=new_description if new_description is not None else metadata.description,
         tags=new_tags if new_tags is not None else list(metadata.tags),
         created=metadata.created,
-        updated=datetime.now(timezone.utc),
+        updated=date.today(),
         contributors=contributors,
         aliases=list(metadata.aliases),
         status=metadata.status,

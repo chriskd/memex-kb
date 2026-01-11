@@ -21,7 +21,7 @@ def _is_in_docker() -> bool:
         return True
     # Check cgroup for docker
     try:
-        with open("/proc/1/cgroup") as f:
+        with open("/proc/1/cgroup", "r") as f:
             return "docker" in f.read()
     except (FileNotFoundError, PermissionError):
         pass
@@ -204,7 +204,8 @@ class FileWatcher:
                     chunk.model_copy(update={"path": relative_path}) for chunk in chunks
                 ]
 
-                # Update index (both Whoosh and Chroma support upsert semantics)
+                # Update index
+                self._searcher.delete_document(relative_path)
                 self._searcher.index_chunks(normalized_chunks)
                 logger.debug(f"Re-indexed: {relative_path}")
                 refresh_backlinks = True

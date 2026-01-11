@@ -7,20 +7,21 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
+
+log = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from ..backlinks_cache import ensure_backlink_cache
-from ..beads_client import find_beads_db, get_comments, list_issues, show_issue
-from ..config import get_kb_root
-from ..indexer import HybridSearcher
-from ..models import SearchResult
-from ..parser import ParseError, extract_links, parse_entry, render_markdown
 from .events import Event, EventType, get_broadcaster
 
-log = logging.getLogger(__name__)
+from ..backlinks_cache import ensure_backlink_cache
+from ..config import get_kb_root
+from ..indexer import HybridSearcher
+from ..models import IndexStatus, KBEntry, SearchResult
+from ..parser import ParseError, extract_links, parse_entry, render_markdown
+
 
 app = FastAPI(
     title="Memex KB Explorer",
@@ -119,69 +120,6 @@ class StatsResponse(BaseModel):
     recent_entries: list[dict]
 
 
-# Beads integration models
-class BeadsConfigResponse(BaseModel):
-    """Beads availability config."""
-    available: bool
-    project_path: str | None = None
-
-
-class BeadsIssue(BaseModel):
-    """Issue summary for lists and kanban."""
-    id: str
-    title: str
-    description: str | None = None
-    status: str
-    priority: int
-    priority_label: str
-    issue_type: str
-    created_at: str | None = None
-    created_by: str | None = None
-    updated_at: str | None = None
-    closed_at: str | None = None
-    close_reason: str | None = None
-    dependency_count: int = 0
-    dependent_count: int = 0
-    dependents: list[dict] | None = None  # Child issues for epics
-
-
-class KanbanColumn(BaseModel):
-    """Column in kanban board."""
-    status: str
-    label: str
-    issues: list[BeadsIssue]
-
-
-class BeadsKanbanResponse(BaseModel):
-    """Full kanban board."""
-    project: str
-    total_issues: int
-    columns: list[KanbanColumn]
-
-
-class EntryBeadsResponse(BaseModel):
-    """Beads data for a specific entry."""
-    beads_project: str | None
-    beads_issues: list[str]
-    linked_issues: list[BeadsIssue]
-    project_issues: list[BeadsIssue] | None = None
-
-
-class BeadsComment(BaseModel):
-    """Comment on an issue."""
-    id: str
-    author: str
-    content: str
-    content_html: str
-    created_at: str
-
-
-class BeadsIssueDetailResponse(BaseModel):
-    """Full issue details with comments."""
-    issue: BeadsIssue
-    comments: list[BeadsComment]
-
-
 # API Routes
 
 
@@ -274,65 +212,6 @@ async def search(
     return SearchResponseAPI(results=results, total=len(results))
 
 
-# IMPORTANT: This route must come BEFORE /api/entries/{path:path} to match first
-@app.get("/api/entries/{path:path}/beads", response_model=EntryBeadsResponse)
-async def get_entry_beads(path: str):
-    """Get beads issues linked to an entry."""
-    kb_root = get_kb_root()
-
-    if not path.endswith(".md"):
-        path = f"{path}.md"
-
-    file_path = kb_root / path
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"Entry not found: {path}")
-
-    try:
-        metadata, _, _ = parse_entry(file_path)
-    except ParseError as e:
-        raise HTTPException(status_code=500, detail=f"Parse error: {e}")
-
-    beads_project = metadata.beads_project
-    beads_issues = list(metadata.beads_issues)
-    linked_issues: list[BeadsIssue] = []
-    project_issues: list[BeadsIssue] | None = None
-
-    # Determine which beads project to query
-    if beads_project:
-        project = find_beads_db(beads_project)
-    else:
-        project = _get_default_beads_project()
-
-    if not project:
-        return EntryBeadsResponse(
-            beads_project=beads_project,
-            beads_issues=beads_issues,
-            linked_issues=[],
-            project_issues=None,
-        )
-
-    # If specific issues are listed, fetch those
-    if beads_issues:
-        for issue_id in beads_issues:
-            raw = show_issue(project.db_path, issue_id)
-            if raw:
-                linked_issues.append(_normalize_issue(raw))
-
-    # If entry has beads_project but no specific issues, show all project issues
-    elif beads_project:
-        raw_issues = list_issues(project.db_path)
-        project_issues = [
-            _normalize_issue(i) for i in raw_issues if i.get("status") != "closed"
-        ]
-
-    return EntryBeadsResponse(
-        beads_project=beads_project,
-        beads_issues=beads_issues,
-        linked_issues=linked_issues,
-        project_issues=project_issues,
-    )
-
-
 @app.get("/api/entries/{path:path}", response_model=EntryResponse)
 async def get_entry(path: str):
     """Get a single KB entry."""
@@ -373,54 +252,56 @@ async def get_entry(path: str):
     )
 
 
-def _build_tree(path: Path, rel_path: str = "") -> list[TreeNode]:
-    """Build tree recursively (blocking I/O)."""
-    nodes = []
-    try:
-        items = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
-    except PermissionError:
-        return nodes
-
-    for item in items:
-        if item.name.startswith(".") or item.name.startswith("_"):
-            continue
-
-        item_rel = f"{rel_path}/{item.name}" if rel_path else item.name
-
-        if item.is_dir():
-            children = _build_tree(item, item_rel)
-            nodes.append(TreeNode(
-                name=item.name,
-                type="directory",
-                path=item_rel,
-                children=children,
-            ))
-        elif item.suffix == ".md":
-            title = None
-            try:
-                metadata, _, _ = parse_entry(item)
-                title = metadata.title
-            except ParseError as e:
-                log.debug("Could not parse %s for tree: %s", item, e)
-            nodes.append(TreeNode(
-                name=item.name,
-                type="file",
-                path=item_rel,
-                title=title,
-            ))
-
-    return nodes
-
-
 @app.get("/api/tree")
 async def get_tree():
     """Get the KB directory tree."""
     kb_root = get_kb_root()
-    return await asyncio.to_thread(_build_tree, kb_root)
+
+    def build_tree(path: Path, rel_path: str = "") -> list[TreeNode]:
+        nodes = []
+        try:
+            items = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name))
+        except PermissionError:
+            return nodes
+
+        for item in items:
+            if item.name.startswith(".") or item.name.startswith("_"):
+                continue
+
+            item_rel = f"{rel_path}/{item.name}" if rel_path else item.name
+
+            if item.is_dir():
+                children = build_tree(item, item_rel)
+                nodes.append(TreeNode(
+                    name=item.name,
+                    type="directory",
+                    path=item_rel,
+                    children=children,
+                ))
+            elif item.suffix == ".md":
+                title = None
+                try:
+                    metadata, _, _ = parse_entry(item)
+                    title = metadata.title
+                except ParseError as e:
+                    log.debug("Could not parse %s for tree: %s", item, e)
+                nodes.append(TreeNode(
+                    name=item.name,
+                    type="file",
+                    path=item_rel,
+                    title=title,
+                ))
+
+        return nodes
+
+    return build_tree(kb_root)
 
 
-def _build_graph(kb_root: Path) -> GraphData:
-    """Build the full knowledge graph (blocking I/O)."""
+@app.get("/api/graph", response_model=GraphData)
+async def get_graph():
+    """Get the full knowledge graph."""
+    kb_root = get_kb_root()
+
     nodes: list[GraphNode] = []
     edges: list[GraphEdge] = []
     seen_nodes: set[str] = set()
@@ -485,15 +366,11 @@ def _build_graph(kb_root: Path) -> GraphData:
     return GraphData(nodes=nodes, edges=edges)
 
 
-@app.get("/api/graph", response_model=GraphData)
-async def get_graph():
-    """Get the full knowledge graph."""
+@app.get("/api/stats", response_model=StatsResponse)
+async def get_stats():
+    """Get KB statistics."""
     kb_root = get_kb_root()
-    return await asyncio.to_thread(_build_graph, kb_root)
 
-
-def _compute_stats(kb_root: Path) -> StatsResponse:
-    """Compute KB statistics (blocking I/O)."""
     total_entries = 0
     all_tags: set[str] = set()
     total_links = 0
@@ -542,15 +419,10 @@ def _compute_stats(kb_root: Path) -> StatsResponse:
     )
 
 
-@app.get("/api/stats", response_model=StatsResponse)
-async def get_stats():
-    """Get KB statistics."""
+@app.get("/api/tags")
+async def get_tags():
+    """Get all tags with counts."""
     kb_root = get_kb_root()
-    return await asyncio.to_thread(_compute_stats, kb_root)
-
-
-def _collect_tags(kb_root: Path) -> list[dict]:
-    """Collect all tags with counts (blocking I/O)."""
     tag_counts: dict[str, int] = {}
 
     for md_file in kb_root.rglob("*.md"):
@@ -570,15 +442,10 @@ def _collect_tags(kb_root: Path) -> list[dict]:
     ]
 
 
-@app.get("/api/tags")
-async def get_tags():
-    """Get all tags with counts."""
+@app.get("/api/recent")
+async def get_recent(limit: int = 10):
+    """Get recently updated entries."""
     kb_root = get_kb_root()
-    return await asyncio.to_thread(_collect_tags, kb_root)
-
-
-def _get_recent_entries(kb_root: Path, limit: int) -> list[dict]:
-    """Get recently updated entries (blocking I/O)."""
     entries: list[dict] = []
 
     for md_file in kb_root.rglob("*.md"):
@@ -605,147 +472,6 @@ def _get_recent_entries(kb_root: Path, limit: int) -> list[dict]:
     )
 
     return entries[:limit]
-
-
-@app.get("/api/recent")
-async def get_recent(limit: int = 10):
-    """Get recently updated entries."""
-    kb_root = get_kb_root()
-    return await asyncio.to_thread(_get_recent_entries, kb_root, limit)
-
-
-# Beads integration helpers
-PRIORITY_LABELS = {
-    0: "critical",
-    1: "high",
-    2: "medium",
-    3: "low",
-    4: "backlog",
-}
-
-
-def _normalize_issue(raw: dict) -> BeadsIssue:
-    """Convert raw bd output to BeadsIssue model."""
-    priority = raw.get("priority", 3)
-    return BeadsIssue(
-        id=raw.get("id", ""),
-        title=raw.get("title", ""),
-        description=raw.get("description"),
-        status=raw.get("status", "open"),
-        priority=priority,
-        priority_label=PRIORITY_LABELS.get(priority, "medium"),
-        issue_type=raw.get("issue_type", "task"),
-        created_at=raw.get("created_at"),
-        created_by=raw.get("created_by"),
-        updated_at=raw.get("updated_at"),
-        closed_at=raw.get("closed_at"),
-        close_reason=raw.get("close_reason"),
-        dependency_count=raw.get("dependency_count", 0),
-        dependent_count=raw.get("dependent_count", 0),
-        dependents=raw.get("dependents"),  # Child issues for epics
-    )
-
-
-def _get_default_beads_project():
-    """Get beads project at KB root."""
-    kb_root = get_kb_root()
-    return find_beads_db(kb_root)
-
-
-@app.get("/api/beads/config", response_model=BeadsConfigResponse)
-async def get_beads_config():
-    """Check if beads is available for this KB."""
-    project = _get_default_beads_project()
-    if project:
-        return BeadsConfigResponse(
-            available=True,
-            project_path=str(project.path),
-        )
-    return BeadsConfigResponse(available=False)
-
-
-@app.get("/api/beads/kanban", response_model=BeadsKanbanResponse)
-async def get_beads_kanban(
-    project_path: str | None = Query(None, description="Optional beads project path"),
-):
-    """Get kanban board for a beads project."""
-    if project_path:
-        project = find_beads_db(project_path)
-        if not project:
-            raise HTTPException(
-                status_code=404, detail=f"No beads project found at: {project_path}",
-            )
-    else:
-        project = _get_default_beads_project()
-        if not project:
-            raise HTTPException(status_code=404, detail="No beads project found")
-
-    raw_issues = list_issues(project.db_path)
-    issues = [_normalize_issue(i) for i in raw_issues]
-
-    # Group by status
-    columns_data: dict[str, list[BeadsIssue]] = {
-        "open": [],
-        "in_progress": [],
-        "closed": [],
-    }
-
-    for issue in issues:
-        status = issue.status
-        if status in columns_data:
-            columns_data[status].append(issue)
-        elif status in ("blocked", "deferred"):
-            columns_data["open"].append(issue)  # Show with open
-
-    columns = [
-        KanbanColumn(status="open", label="Open", issues=columns_data["open"]),
-        KanbanColumn(status="in_progress", label="In Progress", issues=columns_data["in_progress"]),
-        KanbanColumn(status="closed", label="Closed", issues=columns_data["closed"]),
-    ]
-
-    return BeadsKanbanResponse(
-        project=project.path.name,
-        total_issues=len(issues),
-        columns=columns,
-    )
-
-
-@app.get("/api/beads/issues/{issue_id}", response_model=BeadsIssueDetailResponse)
-async def get_beads_issue(
-    issue_id: str,
-    project_path: str | None = Query(None, description="Optional beads project path"),
-):
-    """Get detailed issue info with comments."""
-    if project_path:
-        project = find_beads_db(project_path)
-        if not project:
-            raise HTTPException(
-                status_code=404, detail=f"No beads project found at: {project_path}",
-            )
-    else:
-        project = _get_default_beads_project()
-        if not project:
-            raise HTTPException(status_code=404, detail="No beads project found")
-
-    raw = show_issue(project.db_path, issue_id)
-    if not raw:
-        raise HTTPException(status_code=404, detail=f"Issue not found: {issue_id}")
-
-    issue = _normalize_issue(raw)
-
-    raw_comments = get_comments(project.db_path, issue_id)
-    comments = [
-        BeadsComment(
-            id=c.get("id", ""),
-            author=c.get("author", c.get("created_by", "unknown")),
-            content=c.get("content", ""),
-            content_html=render_markdown(c.get("content", "")).html,
-            created_at=c.get("created_at", ""),
-        )
-        for c in raw_comments
-    ]
-
-    return BeadsIssueDetailResponse(issue=issue, comments=comments)
 
 
 # Mount static files and serve index

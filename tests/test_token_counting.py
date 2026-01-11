@@ -6,11 +6,11 @@ from pathlib import Path
 import pytest
 import tiktoken
 
+from memex.models import DocumentChunk, EntryMetadata, SearchResult
+from memex.parser.markdown import _get_token_count, parse_entry
+from memex.indexer.whoosh_index import WhooshIndex
 from memex.indexer.chroma_index import ChromaIndex
 from memex.indexer.hybrid import HybridSearcher
-from memex.indexer.whoosh_index import WhooshIndex
-from memex.models import DocumentChunk, EntryMetadata
-from memex.parser.markdown import _get_token_count, parse_entry
 
 
 class TestTokenCountFunction:
@@ -143,7 +143,6 @@ class TestWhooshTokenCounts:
         assert token_counts == {10, 11, 12}
 
 
-@pytest.mark.semantic
 class TestChromaTokenCounts:
     """Tests for token counts in ChromaDB index."""
 
@@ -201,7 +200,6 @@ class TestChromaTokenCounts:
         assert token_counts == {20, 21, 22}
 
 
-@pytest.mark.semantic
 class TestHybridSearchTokenCounts:
     """Tests for token counts through hybrid search."""
 

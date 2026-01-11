@@ -12,9 +12,6 @@ from ..models import DocumentChunk, EntryMetadata
 # Cached encoder for token counting (cl100k_base is Claude/GPT-4 compatible)
 _encoder: tiktoken.Encoding | None = None
 
-# Pattern matches H2 headers (## Title) at the start of a line
-_H2_PATTERN = re.compile(r"^## (.+)$", re.MULTILINE)
-
 
 def _get_token_count(text: str) -> int:
     """Count tokens using cl100k_base encoding.
@@ -95,8 +92,11 @@ def _chunk_by_h2(path: str, content: str, metadata: EntryMetadata) -> list[Docum
     Returns:
         List of DocumentChunk objects.
     """
+    # Pattern matches H2 headers (## Title) at the start of a line
+    h2_pattern = re.compile(r"^## (.+)$", re.MULTILINE)
+
     chunks: list[DocumentChunk] = []
-    matches = list(_H2_PATTERN.finditer(content))
+    matches = list(h2_pattern.finditer(content))
 
     if not matches:
         # No H2 headers - entire content is one chunk

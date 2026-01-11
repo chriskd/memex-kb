@@ -5,7 +5,7 @@
 
 ---
 
-## Maximize Parallelization
+## 🚀 Maximize Parallelization
 
 **This environment is designed for parallel work.** Always look for opportunities to parallelize:
 

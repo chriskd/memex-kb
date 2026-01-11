@@ -3,8 +3,8 @@
 import re
 from pathlib import Path
 
-from .md_renderer import extract_links_only, normalize_link
-from .title_index import TitleIndex, build_title_index, resolve_link_target
+from .md_renderer import extract_links_only
+from .title_index import build_title_index, resolve_link_target
 
 
 def extract_links(content: str) -> list[str]:
@@ -27,14 +27,35 @@ def extract_links(content: str) -> list[str]:
 LINK_PATTERN = re.compile(r"\[\[([^\]]+)\]\]")
 
 
-# Backward compatibility alias - the canonical implementation is in md_renderer.py
-_normalize_link = normalize_link
+def _normalize_link(link: str) -> str:
+    """Normalize a link target.
+
+    - Strips whitespace
+    - Removes .md extension
+    - Normalizes path separators
+
+    Args:
+        link: Raw link target.
+
+    Returns:
+        Normalized link target.
+    """
+    link = link.strip()
+
+    # Remove .md extension if present
+    if link.endswith(".md"):
+        link = link[:-3]
+
+    # Normalize path separators (use forward slashes)
+    link = link.replace("\\", "/")
+
+    # Remove leading/trailing slashes
+    link = link.strip("/")
+
+    return link
 
 
-def resolve_backlinks(
-    kb_root: Path,
-    title_index: dict[str, str] | TitleIndex | None = None,
-) -> dict[str, list[str]]:
+def resolve_backlinks(kb_root: Path) -> dict[str, list[str]]:
     """Build a backlink index for all markdown files.
 
     Scans all .md files in the KB and builds an index mapping
@@ -45,9 +66,6 @@ def resolve_backlinks(
 
     Args:
         kb_root: Root directory of the knowledge base.
-        title_index: Optional pre-built title index. If None, builds one
-            internally with O(1) filename lookups. Can be a dict (legacy)
-            or TitleIndex (with filename index for O(1) lookups).
 
     Returns:
         Dict mapping entry paths (relative to kb_root, without .md) to
@@ -56,14 +74,12 @@ def resolve_backlinks(
     if not kb_root.exists() or not kb_root.is_dir():
         return {}
 
-    # Use provided title index or build one with filename index for O(1) lookups
-    if title_index is None:
-        title_index = build_title_index(kb_root, include_filename_index=True)
+    # Build title index for resolving title-style links
+    title_index = build_title_index(kb_root)
 
     # Collect all markdown files and their links
-    # Maps: normalized_path -> set of files that contain [[normalized_path]]
-    # Use sets for O(1) deduplication instead of O(n) list membership checks
-    backlinks: dict[str, set[str]] = {}
+    # Maps: normalized_path -> list of files that contain [[normalized_path]]
+    backlinks: dict[str, list[str]] = {}
 
     # First pass: collect all links from each file
     # forward_links: source_path -> list of raw link targets
@@ -97,11 +113,11 @@ def resolve_backlinks(
                 resolved = _resolve_relative_link(source, target)
 
             if resolved not in backlinks:
-                backlinks[resolved] = set()
-            backlinks[resolved].add(source)  # O(1) set add
+                backlinks[resolved] = []
+            if source not in backlinks[resolved]:
+                backlinks[resolved].append(source)
 
-    # Convert sets to lists for API compatibility
-    return {k: list(v) for k, v in backlinks.items()}
+    return backlinks
 
 
 def _resolve_relative_link(source: str, target: str) -> str:

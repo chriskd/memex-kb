@@ -8,8 +8,6 @@ import pytest
 from memex import core, server
 from memex.models import SearchResponse
 
-pytestmark = pytest.mark.semantic
-
 
 async def _call_tool(tool_obj, /, *args, **kwargs):
     """Invoke the wrapped coroutine behind an MCP FunctionTool."""
@@ -151,9 +149,7 @@ class TestSearchWithContent:
             )
 
         await core.reindex()
-        response = await _call_tool(
-            server.search_tool, "Search Entry", limit=10, include_content=True,
-        )
+        response = await _call_tool(server.search_tool, "Search Entry", limit=10, include_content=True)
 
         assert len(response.results) == 3
         for result in response.results:
@@ -200,9 +196,7 @@ class TestSearchContentLimit:
             )
 
         await core.reindex()
-        response = await _call_tool(
-            server.search_tool, "Under Limit", limit=5, include_content=True,
-        )
+        response = await _call_tool(server.search_tool, "Under Limit", limit=5, include_content=True)
 
         assert response.warnings == []
         assert len(response.results) == 3
@@ -233,9 +227,7 @@ class TestSearchContentEdgeCases:
     async def test_empty_results_no_error(self, kb_root, index_root):
         """No error when hydrating empty results."""
         await core.reindex()
-        response = await _call_tool(
-            server.search_tool, "nonexistent query xyz", include_content=True,
-        )
+        response = await _call_tool(server.search_tool, "nonexistent query xyz", include_content=True)
 
         assert response.results == []
         assert response.warnings == []

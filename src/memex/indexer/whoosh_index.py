@@ -1,7 +1,7 @@
 """Whoosh-based BM25 keyword search index."""
 
 import logging
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 from whoosh import index
@@ -12,28 +12,6 @@ from ..config import get_index_root
 from ..models import DocumentChunk, SearchResult
 
 log = logging.getLogger(__name__)
-
-
-def _parse_datetime_str(s: str) -> datetime | None:
-    """Parse ISO datetime string, handling both full datetime and date-only formats.
-
-    Args:
-        s: ISO format string (e.g., "2025-01-06T14:30:45" or "2025-01-06")
-
-    Returns:
-        datetime object or None if string is empty/invalid
-    """
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(s)
-    except ValueError:
-        # Try date-only format
-        try:
-            d = date.fromisoformat(s)
-            return datetime(d.year, d.month, d.day, 0, 0, 0)
-        except ValueError:
-            return None
 
 
 class WhooshIndex:
@@ -178,11 +156,11 @@ class WhooshIndex:
                 tags = hit.get("tags", "")
                 tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
-                # Parse datetimes from stored ISO strings
+                # Parse dates from stored ISO strings
                 created_str = hit.get("created")
                 updated_str = hit.get("updated")
-                created_datetime = _parse_datetime_str(created_str) if created_str else None
-                updated_datetime = _parse_datetime_str(updated_str) if updated_str else None
+                created_date = date.fromisoformat(created_str) if created_str else None
+                updated_date = date.fromisoformat(updated_str) if updated_str else None
 
                 search_results.append(
                     SearchResult(
@@ -192,8 +170,8 @@ class WhooshIndex:
                         score=hit.score / max_score,
                         tags=tag_list,
                         section=hit.get("section") or None,
-                        created=created_datetime,
-                        updated=updated_datetime,
+                        created=created_date,
+                        updated=updated_date,
                         token_count=hit.get("token_count") or 0,
                         source_project=hit.get("source_project") or None,
                     )
@@ -230,22 +208,4 @@ class WhooshIndex:
         ix = self._ensure_index()
         writer = ix.writer()
         writer.delete_by_term("path", path)
-        writer.commit()
-
-    def delete_documents(self, paths: list[str]) -> None:
-        """Delete all chunks for multiple document paths in a single transaction.
-
-        More efficient than calling delete_document() in a loop as it uses
-        a single writer context for all deletions.
-
-        Args:
-            paths: List of document paths to delete.
-        """
-        if not paths:
-            return
-
-        ix = self._ensure_index()
-        writer = ix.writer()
-        for path in paths:
-            writer.delete_by_term("path", path)
         writer.commit()
