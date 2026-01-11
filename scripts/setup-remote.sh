@@ -14,11 +14,11 @@ echo "Setting up remote environment..."
 
 # Install memex CLI via pip
 echo "Installing memex (mx)..."
-pip install --quiet memex-kb
+pip install --quiet memex
 
-# Install beads CLI via go
+# Install beads CLI via npm
 echo "Installing beads (bd)..."
-go install github.com/steveyegge/beads/cmd/bd@latest
+npm install -g @beads/bd --silent
 
 # Persist environment variables for subsequent commands
 if [ -n "$CLAUDE_ENV_FILE" ]; then
@@ -27,8 +27,8 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
     # Set KB root to project-local kb/ directory
     echo "export MEMEX_KB_ROOT=\"\$CLAUDE_PROJECT_DIR/kb\"" >> "$CLAUDE_ENV_FILE"
 
-    # Ensure Go bin is in PATH
-    echo 'export PATH="$PATH:$(go env GOPATH)/bin"' >> "$CLAUDE_ENV_FILE"
+    # Ensure npm global bin is in PATH
+    echo 'export PATH="$PATH:$(npm prefix -g)/bin"' >> "$CLAUDE_ENV_FILE"
 fi
 
 echo "Remote setup complete!"
