@@ -1,6 +1,6 @@
 """Tests for KB listing MCP tools (whats_new)."""
 
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -47,8 +47,8 @@ def _create_entry(
     path: Path,
     title: str,
     tags: list[str],
-    created: date,
-    updated: date | None = None,
+    created: datetime,
+    updated: datetime | None = None,
     source_project: str | None = None,
 ):
     """Helper to create a KB entry with frontmatter."""
@@ -76,7 +76,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_returns_recent_entries(self, kb_root):
         """Returns entries created/updated within days window."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
         old_date = today - timedelta(days=60)
 
         _create_entry(
@@ -101,7 +101,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_prefers_updated_over_created(self, kb_root):
         """Updated date takes precedence when both qualify."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "updated.md",
@@ -120,7 +120,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_sorts_by_activity_date(self, kb_root):
         """Results are sorted by activity_date descending."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "older.md",
@@ -149,7 +149,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_filters_by_category(self, kb_root):
         """Category filter restricts results (via core function)."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "dev.md",
@@ -173,7 +173,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_filters_by_tag(self, kb_root):
         """Tag filter restricts results (via core function)."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "python.md",
@@ -197,7 +197,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_respects_limit(self, kb_root):
         """Result count is limited."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         for i in range(5):
             _create_entry(
@@ -214,7 +214,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_include_flags(self, kb_root):
         """include_created and include_updated flags work (via core function)."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "new.md",
@@ -247,7 +247,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_filters_by_project_path(self, kb_root):
         """Project filter matches entries in projects/{project}/ directory."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         # Create projects directory structure
         (kb_root / "projects" / "myapp").mkdir(parents=True)
@@ -273,7 +273,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_filters_by_project_source_project(self, kb_root):
         """Project filter matches entries with source_project metadata."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "myapp-guide.md",
@@ -298,7 +298,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_filters_by_project_tag(self, kb_root):
         """Project filter matches entries with project name in tags."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "myapp-tips.md",
@@ -321,7 +321,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_project_filter_case_insensitive(self, kb_root):
         """Project filter is case-insensitive."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "entry.md",
@@ -339,7 +339,7 @@ class TestWhatsNewTool:
     @pytest.mark.asyncio
     async def test_whats_new_includes_source_project_in_results(self, kb_root):
         """Results include source_project field."""
-        today = date.today()
+        today = datetime.now(timezone.utc)
 
         _create_entry(
             kb_root / "development" / "entry.md",
@@ -367,7 +367,7 @@ class TestGetToolViewTracking:
             kb_root / "development" / "entry.md",
             "Test Entry",
             ["python"],
-            created=date.today(),
+            created=datetime.now(timezone.utc),
         )
 
         # Call get_tool

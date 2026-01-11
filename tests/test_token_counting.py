@@ -1,6 +1,6 @@
 """Tests for token counting in search results."""
 
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -104,7 +104,7 @@ class TestWhooshTokenCounts:
             metadata=EntryMetadata(
                 title="Test Doc",
                 tags=["test"],
-                created=date(2024, 1, 1),
+                created=datetime(2024, 1, 1, tzinfo=timezone.utc),
             ),
             token_count=7,  # Pre-calculated
         )
@@ -128,7 +128,7 @@ class TestWhooshTokenCounts:
                 metadata=EntryMetadata(
                     title=f"Doc {i}",
                     tags=["test"],
-                    created=date(2024, 1, 1),
+                    created=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 ),
                 token_count=10 + i,
             )
@@ -161,7 +161,7 @@ class TestChromaTokenCounts:
             metadata=EntryMetadata(
                 title="Test Doc",
                 tags=["test"],
-                created=date(2024, 1, 1),
+                created=datetime(2024, 1, 1, tzinfo=timezone.utc),
             ),
             token_count=9,
         )
@@ -185,7 +185,7 @@ class TestChromaTokenCounts:
                 metadata=EntryMetadata(
                     title=f"Doc {i}",
                     tags=["test"],
-                    created=date(2024, 1, 1),
+                    created=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 ),
                 token_count=20 + i,
             )
@@ -219,7 +219,7 @@ class TestHybridSearchTokenCounts:
             metadata=EntryMetadata(
                 title="Python Guide",
                 tags=["python"],
-                created=date(2024, 1, 1),
+                created=datetime(2024, 1, 1, tzinfo=timezone.utc),
             ),
             token_count=42,
         )
@@ -240,7 +240,7 @@ class TestHybridSearchTokenCounts:
                 metadata=EntryMetadata(
                     title="Test Doc",
                     tags=["test"],
-                    created=date(2024, 1, 1),
+                    created=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 ),
                 token_count=100,
             ),
@@ -251,7 +251,7 @@ class TestHybridSearchTokenCounts:
                 metadata=EntryMetadata(
                     title="Test Doc",
                     tags=["test"],
-                    created=date(2024, 1, 1),
+                    created=datetime(2024, 1, 1, tzinfo=timezone.utc),
                 ),
                 token_count=200,
             ),
