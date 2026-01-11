@@ -329,6 +329,117 @@ def prime(full: bool, mcp: bool, as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Init Command - Local KB Setup
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Default local KB directory name
+LOCAL_KB_DIR = "kb"
+
+
+@cli.command()
+@click.option("--path", "-p", type=click.Path(), help="Custom location for local KB (default: kb/)")
+@click.option("--force", "-f", is_flag=True, help="Reinitialize existing local KB")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def init(path: Optional[str], force: bool, as_json: bool):
+    """Initialize a local project KB.
+
+    Creates a kb/ directory (or custom path) for project-specific knowledge.
+    Local KB entries are searched first and stay with the project.
+
+    \b
+    Examples:
+      mx init                    # Create kb/ in current directory
+      mx init --path docs/kb     # Custom location
+      mx init --force            # Reinitialize existing
+    """
+    from .context import LOCAL_KB_CONFIG_FILENAME
+
+    # Determine target directory
+    kb_path = Path(path) if path else Path.cwd() / LOCAL_KB_DIR
+
+    # Check if already exists
+    if kb_path.exists():
+        if not force:
+            if as_json:
+                output({
+                    "error": f"Local KB already exists at {kb_path}",
+                    "hint": "Use --force to reinitialize"
+                }, as_json=True)
+            else:
+                click.echo(f"Error: Local KB already exists at {kb_path}", err=True)
+                click.echo("Use --force to reinitialize.", err=True)
+            sys.exit(1)
+
+    # Create directory structure
+    kb_path.mkdir(parents=True, exist_ok=True)
+
+    # Create README
+    readme_path = kb_path / "README.md"
+    readme_content = f"""# Local Knowledge Base
+
+This directory contains project-specific knowledge base entries managed by `mx`.
+
+## Usage
+
+```bash
+mx add --title="Entry" --tags="tag1,tag2" --content="..." --local
+mx search "query"   # Searches local KB first, then global
+mx list --local     # List only local entries
+```
+
+## Structure
+
+Entries are Markdown files with YAML frontmatter:
+
+```markdown
+---
+title: Entry Title
+tags: [tag1, tag2]
+created: 2024-01-15
+---
+
+# Entry Title
+
+Your content here.
+```
+
+## Integration
+
+Local KB entries take precedence over global KB entries in search results.
+This keeps project-specific knowledge close to the code.
+"""
+    readme_path.write_text(readme_content, encoding="utf-8")
+
+    # Create config file
+    config_path = kb_path / LOCAL_KB_CONFIG_FILENAME
+    config_content = f"""# Local KB Configuration
+# This file marks this directory as a local memex knowledge base
+
+# Optional: default tags for entries created here
+# default_tags:
+#   - {Path.cwd().name}
+
+# Optional: exclude patterns (glob)
+# exclude:
+#   - "*.draft.md"
+"""
+    config_path.write_text(config_content, encoding="utf-8")
+
+    if as_json:
+        output({
+            "created": str(kb_path),
+            "files": ["README.md", LOCAL_KB_CONFIG_FILENAME],
+            "hint": "Use 'mx add --local' to add entries to this KB"
+        }, as_json=True)
+    else:
+        click.echo(f"✓ Initialized local KB at {kb_path}")
+        click.echo()
+        click.echo("Next steps:")
+        click.echo("  mx add --title=\"Entry\" --tags=\"...\" --content=\"...\" --local")
+        click.echo("  mx search \"query\"   # Searches local KB first")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Score Confidence Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1786,6 +1897,25 @@ def _build_schema() -> dict:
                     "mx prime",
                     "mx prime --full",
                     "mx prime --mcp",
+                ],
+            },
+            "init": {
+                "description": "Initialize a local project KB (creates kb/ directory)",
+                "aliases": [],
+                "arguments": [],
+                "options": [
+                    {"name": "--path", "short": "-p", "type": "path", "description": "Custom location for local KB (default: kb/)"},
+                    {"name": "--force", "short": "-f", "type": "flag", "description": "Reinitialize existing local KB"},
+                    {"name": "--json", "type": "flag", "description": "Output as JSON"},
+                ],
+                "related": ["context", "add"],
+                "common_mistakes": {
+                    "confusing with context init": "mx init creates a local kb/ directory. mx context init creates a .kbcontext file for global KB routing.",
+                },
+                "examples": [
+                    "mx init",
+                    "mx init --path docs/kb",
+                    "mx init --force",
                 ],
             },
             "reindex": {

@@ -23,8 +23,14 @@ from .config import MAX_CONTEXT_SEARCH_DEPTH
 
 import yaml
 
-# Context filename
+# Context filename (for global KB routing)
 CONTEXT_FILENAME = ".kbcontext"
+
+# Local KB config filename (marks a directory as a local KB)
+LOCAL_KB_CONFIG_FILENAME = ".kbconfig"
+
+# Default local KB directory name
+LOCAL_KB_DIR = "kb"
 
 # Cache for context discovery (per-session)
 _context_cache: dict[str, "KBContext | None"] = {}
