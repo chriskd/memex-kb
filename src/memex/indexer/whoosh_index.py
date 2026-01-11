@@ -1,7 +1,7 @@
 """Whoosh-based BM25 keyword search index."""
 
 import logging
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 
 from whoosh import index
@@ -156,11 +156,11 @@ class WhooshIndex:
                 tags = hit.get("tags", "")
                 tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
-                # Parse dates from stored ISO strings
+                # Parse datetimes from stored ISO strings
                 created_str = hit.get("created")
                 updated_str = hit.get("updated")
-                created_date = date.fromisoformat(created_str) if created_str else None
-                updated_date = date.fromisoformat(updated_str) if updated_str else None
+                created_date = datetime.fromisoformat(created_str) if created_str else None
+                updated_date = datetime.fromisoformat(updated_str) if updated_str else None
 
                 search_results.append(
                     SearchResult(
