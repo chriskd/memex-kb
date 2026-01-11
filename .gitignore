@@ -33,3 +33,4 @@ Thumbs.db
 .beads/daemon-error
 .beads/bd.sock
 .beads/beads.db
+.beads/last-touched
