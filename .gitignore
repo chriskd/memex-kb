@@ -28,9 +28,3 @@ Thumbs.db
 
 # uv
 .python-version
-
-# Beads daemon files (transient)
-.beads/daemon-error
-.beads/bd.sock
-.beads/beads.db
-.beads/last-touched
