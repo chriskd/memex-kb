@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/memex/assets/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>window.BASE_URL = "/memex";</script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="/memex/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="/memex/" class="nav-link active">Reader</a>
+                <a href="/memex/graph.html" class="nav-link">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="tree">Browse</button>
+                <button class="nav-tab" data-tab="recent">Recent</button>
+            </div>
+
+            <div class="sidebar-section" id="tree-section">
+                <div class="sidebar-header">Categories</div>
+                <div class="tree" id="tree">
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">development</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/development/memex/markdown-it-py-ast-parser.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Markdown-it-py AST Parser</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">devops</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/devops/voidlabs-cicd-automation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs CI/CD Automation</span>
+                    </a>
+                    <a href="/memex/devops/voidlabs-provisioning-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Provisioning Workflow</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">infrastructure</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/infrastructure/common-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Common Patterns</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/deployment-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Deployment Guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Docker CP Permission Patterns in Dokploy</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Compose Deployment Lessons</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-container-management.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Container Management</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Network Recovery After VM Restart</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Python CLI Reference</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Service Naming and DATABASE_URL</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy VM Crash Recovery and Traefik Troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/garage-s3-object-storage.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Garage S3 Object Storage</span>
+                    </a>
+                    <a href="/memex/infrastructure/memex-knowledge-base.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Memex Knowledge Base</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Proxmox VM Filesystem Recovery with fsck</span>
+                    </a>
+                    <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">VirtioFS Limitations and Troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-infrastructure-overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Infrastructure Overview</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-networking-and-dns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Networking and DNS</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-storage-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Storage Architecture</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">projects</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/projects/concordance-datopt-import-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Concordance DAT/OPT Import Patterns</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-deployment-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Deployment Architecture</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-local-development-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Local Development Workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-naming-conventions.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Naming Conventions</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/dataset-ingestion-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Dataset Ingestion Workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-production-database-access.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Production Database Access</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Project</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer (Epstein Project)</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/status-and-recovery-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Project Status &amp; Recovery Plan</span>
+                    </a>
+                    <a href="/memex/projects/sightline-5ightline.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">SightLine (5ightline Project)</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">TG Scrape - Social Media Astroturfing Analysis</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">reference</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/reference/session-log.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Session Log Feature</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">tooling</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/tooling/beads-issue-tracker.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Beads Issue Tracker</span>
+                    </a>
+                    <a href="/memex/tooling/project-template-sync-pbs.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Project Template Sync (pbs)</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-agent-messaging.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail Agent Messaging</span>
+                    </a>
+                    <a href="/memex/tooling/voidlabs-devtools.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Devtools</span>
+                    </a>
+                </div>
+            </div></div>
+            </div>
+
+            <div class="sidebar-section" id="recent-section" style="display: none;">
+                <div class="sidebar-header">Recent Updates</div>
+                <div class="tree" id="recent-list">
+            <a href="/memex/reference/session-log.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Session Log Feature</span>
+            </a>
+            <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">TG Scrape - Social Media Astroturfing Analysis</span>
+            </a>
+            <a href="/memex/projects/docviewer-local-development-workflow.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Local Development Workflow</span>
+            </a>
+            <a href="/memex/projects/concordance-datopt-import-patterns.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Concordance DAT/OPT Import Patterns</span>
+            </a>
+            <a href="/memex/projects/docviewer-deployment-architecture.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Deployment Architecture</span>
+            </a>
+            <a href="/memex/projects/docviewer-naming-conventions.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Naming Conventions</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox VM Filesystem Recovery with fsck</span>
+            </a>
+            <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">VirtioFS Limitations and Troubleshooting</span>
+            </a>
+            <a href="/memex/infrastructure/garage-s3-object-storage.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Garage S3 Object Storage</span>
+            </a>
+            <a href="/memex/tooling/project-template-sync-pbs.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Project Template Sync (pbs)</span>
+            </a>
+            <a href="/memex/tooling/vl-mail-agent-messaging.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">vl-mail Agent Messaging</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/deployment-guide.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Deployment Guide</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Python CLI Reference</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Service Naming and DATABASE_URL</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Compose Deployment Lessons</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Network Recovery After VM Restart</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy VM Crash Recovery and Traefik Troubleshooting</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Docker CP Permission Patterns in Dokploy</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-container-management.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Container Management</span>
+            </a>
+            <a href="/memex/projects/docviewer/docviewer-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Project</span>
+            </a></div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="https://github.com/chriskd/memex" target="_blank" rel="noopener">Powered by memex</a>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            
+<div class="index-container">
+    <h1>Knowledge Base</h1>
+    <section class="index-section">
+        <h2>Recent Entries</h2>
+        <ul class="entry-list">
+            
+            <li>
+                <a href="/memex/reference/session-log.html">Session Log Feature</a>
+                
+                <span class="entry-date">Jan 11, 2026</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html">TG Scrape - Social Media Astroturfing Analysis</a>
+                
+                <span class="entry-date">Dec 30, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/projects/docviewer-local-development-workflow.html">DocViewer Local Development Workflow</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/projects/concordance-datopt-import-patterns.html">Concordance DAT/OPT Import Patterns</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/projects/docviewer-deployment-architecture.html">DocViewer Deployment Architecture</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/projects/docviewer-naming-conventions.html">DocViewer Naming Conventions</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html">Proxmox VM Filesystem Recovery with fsck</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html">VirtioFS Limitations and Troubleshooting</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/garage-s3-object-storage.html">Garage S3 Object Storage</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/tooling/project-template-sync-pbs.html">Project Template Sync (pbs)</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/tooling/vl-mail-agent-messaging.html">vl-mail Agent Messaging</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/deployment-guide.html">Dokploy Deployment Guide</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html">Dokploy Python CLI Reference</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html">Dokploy Service Naming and DATABASE_URL</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html">Dokploy Compose Deployment Lessons</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html">Dokploy Network Recovery After VM Restart</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html">Dokploy VM Crash Recovery and Traefik Troubleshooting</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html">Docker CP Permission Patterns in Dokploy</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/infrastructure/dokploy/dokploy-container-management.html">Dokploy Container Management</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+            <li>
+                <a href="/memex/projects/docviewer/docviewer-project.html">DocViewer Project</a>
+                
+                <span class="entry-date">Dec 22, 2025</span>
+                
+            </li>
+            
+        </ul>
+    </section>
+    <section class="index-section">
+        <h2>Tags</h2>
+        <div class="tags-cloud">
+            
+            <a href="/memex/tags/dokploy.html" class="tag">
+                dokploy (11)
+            </a>
+            
+            <a href="/memex/tags/infrastructure.html" class="tag">
+                infrastructure (11)
+            </a>
+            
+            <a href="/memex/tags/docviewer.html" class="tag">
+                docviewer (8)
+            </a>
+            
+            <a href="/memex/tags/troubleshooting.html" class="tag">
+                troubleshooting (8)
+            </a>
+            
+            <a href="/memex/tags/docker.html" class="tag">
+                docker (6)
+            </a>
+            
+            <a href="/memex/tags/project.html" class="tag">
+                project (5)
+            </a>
+            
+            <a href="/memex/tags/deployment.html" class="tag">
+                deployment (4)
+            </a>
+            
+            <a href="/memex/tags/proxmox.html" class="tag">
+                proxmox (4)
+            </a>
+            
+            <a href="/memex/tags/s3.html" class="tag">
+                s3 (4)
+            </a>
+            
+            <a href="/memex/tags/tooling.html" class="tag">
+                tooling (4)
+            </a>
+            
+            <a href="/memex/tags/workflow.html" class="tag">
+                workflow (4)
+            </a>
+            
+            <a href="/memex/tags/memex.html" class="tag">
+                memex (3)
+            </a>
+            
+            <a href="/memex/tags/networking.html" class="tag">
+                networking (3)
+            </a>
+            
+            <a href="/memex/tags/nfs.html" class="tag">
+                nfs (3)
+            </a>
+            
+            <a href="/memex/tags/recovery.html" class="tag">
+                recovery (3)
+            </a>
+            
+            <a href="/memex/tags/traefik.html" class="tag">
+                traefik (3)
+            </a>
+            
+            <a href="/memex/tags/ai-agents.html" class="tag">
+                ai-agents (2)
+            </a>
+            
+            <a href="/memex/tags/ansible.html" class="tag">
+                ansible (2)
+            </a>
+            
+            <a href="/memex/tags/api.html" class="tag">
+                api (2)
+            </a>
+            
+            <a href="/memex/tags/architecture.html" class="tag">
+                architecture (2)
+            </a>
+            
+            <a href="/memex/tags/containers.html" class="tag">
+                containers (2)
+            </a>
+            
+            <a href="/memex/tags/database.html" class="tag">
+                database (2)
+            </a>
+            
+            <a href="/memex/tags/devcontainer.html" class="tag">
+                devcontainer (2)
+            </a>
+            
+            <a href="/memex/tags/dns.html" class="tag">
+                dns (2)
+            </a>
+            
+            <a href="/memex/tags/documentation.html" class="tag">
+                documentation (2)
+            </a>
+            
+            <a href="/memex/tags/fastapi.html" class="tag">
+                fastapi (2)
+            </a>
+            
+            <a href="/memex/tags/postgresql.html" class="tag">
+                postgresql (2)
+            </a>
+            
+            <a href="/memex/tags/react.html" class="tag">
+                react (2)
+            </a>
+            
+            <a href="/memex/tags/reference.html" class="tag">
+                reference (2)
+            </a>
+            
+            <a href="/memex/tags/storage.html" class="tag">
+                storage (2)
+            </a>
+            
+            <a href="/memex/tags/terraform.html" class="tag">
+                terraform (2)
+            </a>
+            
+            <a href="/memex/tags/virtiofs.html" class="tag">
+                virtiofs (2)
+            </a>
+            
+            <a href="/memex/tags/vm-restart.html" class="tag">
+                vm-restart (2)
+            </a>
+            
+            <a href="/memex/tags/zfs.html" class="tag">
+                zfs (2)
+            </a>
+            
+            <a href="/memex/tags/503-error.html" class="tag">
+                503-error (1)
+            </a>
+            
+            <a href="/memex/tags/504-error.html" class="tag">
+                504-error (1)
+            </a>
+            
+            <a href="/memex/tags/ai-integration.html" class="tag">
+                ai-integration (1)
+            </a>
+            
+            <a href="/memex/tags/apify.html" class="tag">
+                apify (1)
+            </a>
+            
+            <a href="/memex/tags/ast.html" class="tag">
+                ast (1)
+            </a>
+            
+            <a href="/memex/tags/astroturfing.html" class="tag">
+                astroturfing (1)
+            </a>
+            
+            <a href="/memex/tags/automation.html" class="tag">
+                automation (1)
+            </a>
+            
+            <a href="/memex/tags/aws-rekognition.html" class="tag">
+                aws-rekognition (1)
+            </a>
+            
+            <a href="/memex/tags/bad-gateway.html" class="tag">
+                bad-gateway (1)
+            </a>
+            
+            <a href="/memex/tags/beads.html" class="tag">
+                beads (1)
+            </a>
+            
+            <a href="/memex/tags/best-practices.html" class="tag">
+                best-practices (1)
+            </a>
+            
+            <a href="/memex/tags/boot-loop.html" class="tag">
+                boot-loop (1)
+            </a>
+            
+            <a href="/memex/tags/caddy.html" class="tag">
+                caddy (1)
+            </a>
+            
+            <a href="/memex/tags/cicd.html" class="tag">
+                cicd (1)
+            </a>
+            
+            <a href="/memex/tags/claude-code.html" class="tag">
+                claude-code (1)
+            </a>
+            
+            <a href="/memex/tags/cli.html" class="tag">
+                cli (1)
+            </a>
+            
+            <a href="/memex/tags/compose.html" class="tag">
+                compose (1)
+            </a>
+            
+            <a href="/memex/tags/concordance.html" class="tag">
+                concordance (1)
+            </a>
+            
+            <a href="/memex/tags/configuration.html" class="tag">
+                configuration (1)
+            </a>
+            
+            <a href="/memex/tags/connection-error.html" class="tag">
+                connection-error (1)
+            </a>
+            
+            <a href="/memex/tags/connection-refused.html" class="tag">
+                connection-refused (1)
+            </a>
+            
+            <a href="/memex/tags/container-not-running.html" class="tag">
+                container-not-running (1)
+            </a>
+            
+            <a href="/memex/tags/conventions.html" class="tag">
+                conventions (1)
+            </a>
+            
+            <a href="/memex/tags/corruption.html" class="tag">
+                corruption (1)
+            </a>
+            
+            <a href="/memex/tags/cross-project.html" class="tag">
+                cross-project (1)
+            </a>
+            
+            <a href="/memex/tags/dat-opt.html" class="tag">
+                dat-opt (1)
+            </a>
+            
+            <a href="/memex/tags/data-import.html" class="tag">
+                data-import (1)
+            </a>
+            
+            <a href="/memex/tags/database-url.html" class="tag">
+                database-url (1)
+            </a>
+            
+            <a href="/memex/tags/datasets.html" class="tag">
+                datasets (1)
+            </a>
+            
+            <a href="/memex/tags/debugging.html" class="tag">
+                debugging (1)
+            </a>
+            
+            <a href="/memex/tags/developer-experience.html" class="tag">
+                developer-experience (1)
+            </a>
+            
+            <a href="/memex/tags/developer-guide.html" class="tag">
+                developer-guide (1)
+            </a>
+            
+            <a href="/memex/tags/development.html" class="tag">
+                development (1)
+            </a>
+            
+            <a href="/memex/tags/dhcp.html" class="tag">
+                dhcp (1)
+            </a>
+            
+            <a href="/memex/tags/disk-repair.html" class="tag">
+                disk-repair (1)
+            </a>
+            
+            <a href="/memex/tags/docker-compose.html" class="tag">
+                docker-compose (1)
+            </a>
+            
+            <a href="/memex/tags/docker-swarm.html" class="tag">
+                docker-swarm (1)
+            </a>
+            
+            <a href="/memex/tags/document-search.html" class="tag">
+                document-search (1)
+            </a>
+            
+            <a href="/memex/tags/e2fsck.html" class="tag">
+                e2fsck (1)
+            </a>
+            
+            <a href="/memex/tags/efta.html" class="tag">
+                efta (1)
+            </a>
+            
+            <a href="/memex/tags/epstein.html" class="tag">
+                epstein (1)
+            </a>
+            
+            <a href="/memex/tags/ext4.html" class="tag">
+                ext4 (1)
+            </a>
+            
+            <a href="/memex/tags/facebook.html" class="tag">
+                facebook (1)
+            </a>
+            
+            <a href="/memex/tags/facial-recognition.html" class="tag">
+                facial-recognition (1)
+            </a>
+            
+            <a href="/memex/tags/filesystem.html" class="tag">
+                filesystem (1)
+            </a>
+            
+            <a href="/memex/tags/fsck.html" class="tag">
+                fsck (1)
+            </a>
+            
+            <a href="/memex/tags/garage.html" class="tag">
+                garage (1)
+            </a>
+            
+            <a href="/memex/tags/gateway-timeout.html" class="tag">
+                gateway-timeout (1)
+            </a>
+            
+            <a href="/memex/tags/git.html" class="tag">
+                git (1)
+            </a>
+            
+            <a href="/memex/tags/github-actions.html" class="tag">
+                github-actions (1)
+            </a>
+            
+            <a href="/memex/tags/homelab.html" class="tag">
+                homelab (1)
+            </a>
+            
+            <a href="/memex/tags/host-not-found.html" class="tag">
+                host-not-found (1)
+            </a>
+            
+            <a href="/memex/tags/index.html" class="tag">
+                index (1)
+            </a>
+            
+            <a href="/memex/tags/ingestion.html" class="tag">
+                ingestion (1)
+            </a>
+            
+            <a href="/memex/tags/investigation.html" class="tag">
+                investigation (1)
+            </a>
+            
+            <a href="/memex/tags/isolated-deployments.html" class="tag">
+                isolated-deployments (1)
+            </a>
+            
+            <a href="/memex/tags/isolated-network.html" class="tag">
+                isolated-network (1)
+            </a>
+            
+            <a href="/memex/tags/issue-tracking.html" class="tag">
+                issue-tracking (1)
+            </a>
+            
+            <a href="/memex/tags/journal.html" class="tag">
+                journal (1)
+            </a>
+            
+            <a href="/memex/tags/journald.html" class="tag">
+                journald (1)
+            </a>
+            
+            <a href="/memex/tags/lambda.html" class="tag">
+                lambda (1)
+            </a>
+            
+            <a href="/memex/tags/legal-discovery.html" class="tag">
+                legal-discovery (1)
+            </a>
+            
+            <a href="/memex/tags/local-dev.html" class="tag">
+                local-dev (1)
+            </a>
+            
+            <a href="/memex/tags/logging.html" class="tag">
+                logging (1)
+            </a>
+            
+            <a href="/memex/tags/markdown.html" class="tag">
+                markdown (1)
+            </a>
+            
+            <a href="/memex/tags/markdown-it-py.html" class="tag">
+                markdown-it-py (1)
+            </a>
+            
+            <a href="/memex/tags/mcp.html" class="tag">
+                mcp (1)
+            </a>
+            
+            <a href="/memex/tags/messaging.html" class="tag">
+                messaging (1)
+            </a>
+            
+            <a href="/memex/tags/name-resolution.html" class="tag">
+                name-resolution (1)
+            </a>
+            
+            <a href="/memex/tags/naming.html" class="tag">
+                naming (1)
+            </a>
+            
+            <a href="/memex/tags/object-storage.html" class="tag">
+                object-storage (1)
+            </a>
+            
+            <a href="/memex/tags/opnsense.html" class="tag">
+                opnsense (1)
+            </a>
+            
+            <a href="/memex/tags/parsing.html" class="tag">
+                parsing (1)
+            </a>
+            
+            <a href="/memex/tags/patterns.html" class="tag">
+                patterns (1)
+            </a>
+            
+            <a href="/memex/tags/permissions.html" class="tag">
+                permissions (1)
+            </a>
+            
+            <a href="/memex/tags/persistent-logging.html" class="tag">
+                persistent-logging (1)
+            </a>
+            
+            <a href="/memex/tags/plugins.html" class="tag">
+                plugins (1)
+            </a>
+            
+            <a href="/memex/tags/production.html" class="tag">
+                production (1)
+            </a>
+            
+            <a href="/memex/tags/provisioning.html" class="tag">
+                provisioning (1)
+            </a>
+            
+            <a href="/memex/tags/python.html" class="tag">
+                python (1)
+            </a>
+            
+            <a href="/memex/tags/qm.html" class="tag">
+                qm (1)
+            </a>
+            
+            <a href="/memex/tags/read-only.html" class="tag">
+                read-only (1)
+            </a>
+            
+            <a href="/memex/tags/releases.html" class="tag">
+                releases (1)
+            </a>
+            
+            <a href="/memex/tags/restart-policy.html" class="tag">
+                restart-policy (1)
+            </a>
+            
+            <a href="/memex/tags/scraping.html" class="tag">
+                scraping (1)
+            </a>
+            
+            <a href="/memex/tags/semantic-search.html" class="tag">
+                semantic-search (1)
+            </a>
+            
+            <a href="/memex/tags/service-discovery.html" class="tag">
+                service-discovery (1)
+            </a>
+            
+            <a href="/memex/tags/sessions.html" class="tag">
+                sessions (1)
+            </a>
+            
+            <a href="/memex/tags/sqlite.html" class="tag">
+                sqlite (1)
+            </a>
+            
+            <a href="/memex/tags/status.html" class="tag">
+                status (1)
+            </a>
+            
+            <a href="/memex/tags/systemd.html" class="tag">
+                systemd (1)
+            </a>
+            
+            <a href="/memex/tags/testing.html" class="tag">
+                testing (1)
+            </a>
+            
+            <a href="/memex/tags/tg-scrape.html" class="tag">
+                tg-scrape (1)
+            </a>
+            
+            <a href="/memex/tags/vm.html" class="tag">
+                vm (1)
+            </a>
+            
+            <a href="/memex/tags/vm-crash.html" class="tag">
+                vm-crash (1)
+            </a>
+            
+            <a href="/memex/tags/voidlabs-devtools.html" class="tag">
+                voidlabs-devtools (1)
+            </a>
+            
+            <a href="/memex/tags/zvol.html" class="tag">
+                zvol (1)
+            </a>
+            
+        </div>
+    </section>
+</div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            
+        <div class="panel-section">
+            <div class="panel-header">Welcome</div>
+            <p class="empty-state">Select an entry to view its connections</p>
+        </div>
+    
+        </aside>
+    </div>
+
+    <script src="/memex/assets/search.js"></script>
+    <script src="/memex/assets/sidebar.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+</body>
+</html>

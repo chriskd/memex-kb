@@ -1,0 +1,712 @@
+{
+  "nodes": [
+    {
+      "id": "reference/session-log",
+      "title": "Session Log Feature",
+      "tags": [
+        "memex",
+        "sessions",
+        "logging",
+        "ai-integration"
+      ],
+      "url": "reference/session-log.html"
+    },
+    {
+      "id": "projects/docviewer-local-development-workflow",
+      "title": "DocViewer Local Development Workflow",
+      "tags": [
+        "docviewer",
+        "development",
+        "workflow",
+        "local-dev",
+        "s3"
+      ],
+      "url": "projects/docviewer-local-development-workflow.html"
+    },
+    {
+      "id": "projects/sightline-5ightline",
+      "title": "SightLine (5ightline Project)",
+      "tags": [
+        "project",
+        "facial-recognition",
+        "aws-rekognition",
+        "fastapi",
+        "react",
+        "lambda"
+      ],
+      "url": "projects/sightline-5ightline.html"
+    },
+    {
+      "id": "projects/concordance-datopt-import-patterns",
+      "title": "Concordance DAT/OPT Import Patterns",
+      "tags": [
+        "docviewer",
+        "concordance",
+        "legal-discovery",
+        "data-import",
+        "dat-opt",
+        "s3"
+      ],
+      "url": "projects/concordance-datopt-import-patterns.html"
+    },
+    {
+      "id": "projects/docviewer-deployment-architecture",
+      "title": "DocViewer Deployment Architecture",
+      "tags": [
+        "docviewer",
+        "deployment",
+        "docker",
+        "dokploy",
+        "architecture"
+      ],
+      "url": "projects/docviewer-deployment-architecture.html"
+    },
+    {
+      "id": "projects/docviewer-naming-conventions",
+      "title": "DocViewer Naming Conventions",
+      "tags": [
+        "docviewer",
+        "naming",
+        "conventions",
+        "documentation"
+      ],
+      "url": "projects/docviewer-naming-conventions.html"
+    },
+    {
+      "id": "infrastructure/voidlabs-networking-and-dns",
+      "title": "Voidlabs Networking and DNS",
+      "tags": [
+        "networking",
+        "dns",
+        "dhcp",
+        "caddy",
+        "opnsense",
+        "infrastructure"
+      ],
+      "url": "infrastructure/voidlabs-networking-and-dns.html"
+    },
+    {
+      "id": "infrastructure/voidlabs-storage-architecture",
+      "title": "Voidlabs Storage Architecture",
+      "tags": [
+        "storage",
+        "zfs",
+        "nfs",
+        "virtiofs",
+        "infrastructure"
+      ],
+      "url": "infrastructure/voidlabs-storage-architecture.html"
+    },
+    {
+      "id": "infrastructure/voidlabs-infrastructure-overview",
+      "title": "Voidlabs Infrastructure Overview",
+      "tags": [
+        "infrastructure",
+        "proxmox",
+        "homelab",
+        "ansible",
+        "terraform",
+        "architecture"
+      ],
+      "url": "infrastructure/voidlabs-infrastructure-overview.html"
+    },
+    {
+      "id": "infrastructure/proxmox-vm-filesystem-recovery-with-fsck",
+      "title": "Proxmox VM Filesystem Recovery with fsck",
+      "tags": [
+        "proxmox",
+        "filesystem",
+        "recovery",
+        "fsck",
+        "ext4",
+        "troubleshooting",
+        "vm",
+        "read-only",
+        "journal",
+        "disk-repair",
+        "qm",
+        "zfs",
+        "zvol",
+        "e2fsck",
+        "corruption"
+      ],
+      "url": "infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html"
+    },
+    {
+      "id": "infrastructure/memex-knowledge-base",
+      "title": "Memex Knowledge Base",
+      "tags": [
+        "infrastructure",
+        "plugins",
+        "documentation",
+        "claude-code",
+        "mcp",
+        "memex"
+      ],
+      "url": "infrastructure/memex-knowledge-base.html"
+    },
+    {
+      "id": "infrastructure/virtiofs-limitations-and-troubleshooting",
+      "title": "VirtioFS Limitations and Troubleshooting",
+      "tags": [
+        "infrastructure",
+        "virtiofs",
+        "nfs",
+        "troubleshooting",
+        "proxmox",
+        "storage"
+      ],
+      "url": "infrastructure/virtiofs-limitations-and-troubleshooting.html"
+    },
+    {
+      "id": "infrastructure/common-patterns",
+      "title": "Voidlabs Common Patterns",
+      "tags": [
+        "infrastructure",
+        "patterns",
+        "best-practices",
+        "developer-guide"
+      ],
+      "url": "infrastructure/common-patterns.html"
+    },
+    {
+      "id": "infrastructure/garage-s3-object-storage",
+      "title": "Garage S3 Object Storage",
+      "tags": [
+        "infrastructure",
+        "s3",
+        "garage",
+        "object-storage",
+        "dokploy"
+      ],
+      "url": "infrastructure/garage-s3-object-storage.html"
+    },
+    {
+      "id": "devops/voidlabs-provisioning-workflow",
+      "title": "Voidlabs Provisioning Workflow",
+      "tags": [
+        "provisioning",
+        "ansible",
+        "terraform",
+        "workflow",
+        "infrastructure"
+      ],
+      "url": "devops/voidlabs-provisioning-workflow.html"
+    },
+    {
+      "id": "devops/voidlabs-cicd-automation",
+      "title": "Voidlabs CI/CD Automation",
+      "tags": [
+        "cicd",
+        "github-actions",
+        "automation",
+        "testing",
+        "releases"
+      ],
+      "url": "devops/voidlabs-cicd-automation.html"
+    },
+    {
+      "id": "tooling/voidlabs-devtools",
+      "title": "Voidlabs Devtools",
+      "tags": [
+        "tooling",
+        "devcontainer",
+        "developer-experience",
+        "project"
+      ],
+      "url": "tooling/voidlabs-devtools.html"
+    },
+    {
+      "id": "tooling/project-template-sync-pbs",
+      "title": "Project Template Sync (pbs)",
+      "tags": [
+        "tooling",
+        "devcontainer",
+        "workflow"
+      ],
+      "url": "tooling/project-template-sync-pbs.html"
+    },
+    {
+      "id": "tooling/vl-mail-agent-messaging",
+      "title": "vl-mail Agent Messaging",
+      "tags": [
+        "tooling",
+        "ai-agents",
+        "messaging",
+        "beads",
+        "cross-project",
+        "voidlabs-devtools"
+      ],
+      "url": "tooling/vl-mail-agent-messaging.html"
+    },
+    {
+      "id": "tooling/beads-issue-tracker",
+      "title": "Beads Issue Tracker",
+      "tags": [
+        "tooling",
+        "issue-tracking",
+        "ai-agents",
+        "git"
+      ],
+      "url": "tooling/beads-issue-tracker.html"
+    },
+    {
+      "id": "infrastructure/dokploy/deployment-guide",
+      "title": "Dokploy Deployment Guide",
+      "tags": [
+        "dokploy",
+        "deployment",
+        "api",
+        "docker",
+        "infrastructure"
+      ],
+      "url": "infrastructure/dokploy/deployment-guide.html"
+    },
+    {
+      "id": "infrastructure/dokploy/dokploy-python-cli-reference",
+      "title": "Dokploy Python CLI Reference",
+      "tags": [
+        "dokploy",
+        "cli",
+        "python",
+        "api",
+        "deployment",
+        "reference"
+      ],
+      "url": "infrastructure/dokploy/dokploy-python-cli-reference.html"
+    },
+    {
+      "id": "infrastructure/dokploy/dokploy-service-naming-and-database-url",
+      "title": "Dokploy Service Naming and DATABASE_URL",
+      "tags": [
+        "dokploy",
+        "database",
+        "docker-swarm",
+        "configuration",
+        "troubleshooting",
+        "postgresql",
+        "database-url",
+        "service-discovery",
+        "dns",
+        "connection-error",
+        "host-not-found",
+        "name-resolution"
+      ],
+      "url": "infrastructure/dokploy/dokploy-service-naming-and-database-url.html"
+    },
+    {
+      "id": "infrastructure/dokploy/dokploy-compose-deployment-lessons",
+      "title": "Dokploy Compose Deployment Lessons",
+      "tags": [
+        "dokploy",
+        "networking",
+        "compose",
+        "traefik",
+        "isolated-deployments",
+        "troubleshooting",
+        "reference"
+      ],
+      "url": "infrastructure/dokploy/dokploy-compose-deployment-lessons.html"
+    },
+    {
+      "id": "infrastructure/dokploy/dokploy-network-recovery-after-vm-restart",
+      "title": "Dokploy Network Recovery After VM Restart",
+      "tags": [
+        "dokploy",
+        "traefik",
+        "networking",
+        "troubleshooting",
+        "docker",
+        "recovery",
+        "504-error",
+        "gateway-timeout",
+        "isolated-network",
+        "vm-restart",
+        "docker-compose",
+        "bad-gateway"
+      ],
+      "url": "infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html"
+    },
+    {
+      "id": "infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting",
+      "title": "Dokploy VM Crash Recovery and Traefik Troubleshooting",
+      "tags": [
+        "dokploy",
+        "traefik",
+        "vm-crash",
+        "troubleshooting",
+        "docker",
+        "nfs",
+        "systemd",
+        "proxmox",
+        "503-error",
+        "connection-refused",
+        "container-not-running",
+        "restart-policy",
+        "persistent-logging",
+        "journald",
+        "boot-loop",
+        "recovery",
+        "infrastructure",
+        "vm-restart"
+      ],
+      "url": "infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html"
+    },
+    {
+      "id": "infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy",
+      "title": "Docker CP Permission Patterns in Dokploy",
+      "tags": [
+        "dokploy",
+        "docker",
+        "permissions",
+        "troubleshooting",
+        "containers"
+      ],
+      "url": "infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html"
+    },
+    {
+      "id": "infrastructure/dokploy/dokploy-container-management",
+      "title": "Dokploy Container Management",
+      "tags": [
+        "dokploy",
+        "docker",
+        "containers",
+        "debugging",
+        "infrastructure"
+      ],
+      "url": "infrastructure/dokploy/dokploy-container-management.html"
+    },
+    {
+      "id": "projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis",
+      "title": "TG Scrape - Social Media Astroturfing Analysis",
+      "tags": [
+        "project",
+        "tg-scrape",
+        "apify",
+        "facebook",
+        "scraping",
+        "astroturfing",
+        "sqlite",
+        "investigation"
+      ],
+      "url": "projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html"
+    },
+    {
+      "id": "projects/docviewer/docviewer-project",
+      "title": "DocViewer Project",
+      "tags": [
+        "index",
+        "docviewer",
+        "project"
+      ],
+      "url": "projects/docviewer/docviewer-project.html"
+    },
+    {
+      "id": "projects/docviewer/status-and-recovery-plan",
+      "title": "DocViewer Project Status & Recovery Plan",
+      "tags": [
+        "docviewer",
+        "efta",
+        "epstein",
+        "deployment",
+        "status"
+      ],
+      "url": "projects/docviewer/status-and-recovery-plan.html"
+    },
+    {
+      "id": "projects/docviewer/overview",
+      "title": "DocViewer (Epstein Project)",
+      "tags": [
+        "project",
+        "document-search",
+        "semantic-search",
+        "fastapi",
+        "react"
+      ],
+      "url": "projects/docviewer/overview.html"
+    },
+    {
+      "id": "projects/docviewer/docviewer-production-database-access",
+      "title": "DocViewer Production Database Access",
+      "tags": [
+        "docviewer",
+        "database",
+        "production",
+        "dokploy",
+        "postgresql",
+        "troubleshooting"
+      ],
+      "url": "projects/docviewer/docviewer-production-database-access.html"
+    },
+    {
+      "id": "projects/docviewer/dataset-ingestion-workflow",
+      "title": "DocViewer Dataset Ingestion Workflow",
+      "tags": [
+        "docviewer",
+        "ingestion",
+        "workflow",
+        "datasets",
+        "s3"
+      ],
+      "url": "projects/docviewer/dataset-ingestion-workflow.html"
+    },
+    {
+      "id": "development/memex/markdown-it-py-ast-parser",
+      "title": "Markdown-it-py AST Parser",
+      "tags": [
+        "memex",
+        "markdown",
+        "parsing",
+        "ast",
+        "markdown-it-py"
+      ],
+      "url": "development/memex/markdown-it-py-ast-parser.html"
+    }
+  ],
+  "edges": [
+    {
+      "source": "projects/docviewer-local-development-workflow",
+      "target": "projects/docviewer-deployment-architecture"
+    },
+    {
+      "source": "projects/docviewer-local-development-workflow",
+      "target": "projects/docviewer/dataset-ingestion-workflow"
+    },
+    {
+      "source": "projects/docviewer-local-development-workflow",
+      "target": "tooling/voidlabs-devtools"
+    },
+    {
+      "source": "projects/sightline-5ightline",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "projects/docviewer-deployment-architecture",
+      "target": "infrastructure/common-patterns"
+    },
+    {
+      "source": "projects/docviewer-deployment-architecture",
+      "target": "infrastructure/garage-s3-object-storage"
+    },
+    {
+      "source": "projects/docviewer-naming-conventions",
+      "target": "projects/docviewer-deployment-architecture"
+    },
+    {
+      "source": "projects/docviewer-naming-conventions",
+      "target": "infrastructure/common-patterns"
+    },
+    {
+      "source": "infrastructure/voidlabs-networking-and-dns",
+      "target": "devops/voidlabs-provisioning-workflow"
+    },
+    {
+      "source": "infrastructure/voidlabs-networking-and-dns",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "infrastructure/voidlabs-storage-architecture",
+      "target": "devops/voidlabs-provisioning-workflow"
+    },
+    {
+      "source": "infrastructure/voidlabs-storage-architecture",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "infrastructure/voidlabs-storage-architecture",
+      "target": "infrastructure/virtiofs-limitations-and-troubleshooting"
+    },
+    {
+      "source": "infrastructure/voidlabs-storage-architecture",
+      "target": "infrastructure/garage-s3-object-storage"
+    },
+    {
+      "source": "infrastructure/voidlabs-infrastructure-overview",
+      "target": "devops/voidlabs-provisioning-workflow"
+    },
+    {
+      "source": "infrastructure/voidlabs-infrastructure-overview",
+      "target": "infrastructure/voidlabs-storage-architecture"
+    },
+    {
+      "source": "infrastructure/voidlabs-infrastructure-overview",
+      "target": "infrastructure/voidlabs-networking-and-dns"
+    },
+    {
+      "source": "infrastructure/virtiofs-limitations-and-troubleshooting",
+      "target": "infrastructure/voidlabs-storage-architecture"
+    },
+    {
+      "source": "infrastructure/virtiofs-limitations-and-troubleshooting",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "infrastructure/virtiofs-limitations-and-troubleshooting",
+      "target": "infrastructure/garage-s3-object-storage"
+    },
+    {
+      "source": "infrastructure/common-patterns",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "infrastructure/common-patterns",
+      "target": "tooling/voidlabs-devtools"
+    },
+    {
+      "source": "infrastructure/common-patterns",
+      "target": "tooling/beads-issue-tracker"
+    },
+    {
+      "source": "infrastructure/garage-s3-object-storage",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "infrastructure/garage-s3-object-storage",
+      "target": "infrastructure/virtiofs-limitations-and-troubleshooting"
+    },
+    {
+      "source": "infrastructure/garage-s3-object-storage",
+      "target": "infrastructure/dokploy/dokploy-container-management"
+    },
+    {
+      "source": "infrastructure/garage-s3-object-storage",
+      "target": "infrastructure/voidlabs-storage-architecture"
+    },
+    {
+      "source": "devops/voidlabs-provisioning-workflow",
+      "target": "infrastructure/voidlabs-storage-architecture"
+    },
+    {
+      "source": "devops/voidlabs-provisioning-workflow",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "devops/voidlabs-provisioning-workflow",
+      "target": "infrastructure/voidlabs-networking-and-dns"
+    },
+    {
+      "source": "devops/voidlabs-cicd-automation",
+      "target": "devops/voidlabs-provisioning-workflow"
+    },
+    {
+      "source": "devops/voidlabs-cicd-automation",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "tooling/voidlabs-devtools",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "tooling/voidlabs-devtools",
+      "target": "tooling/beads-issue-tracker"
+    },
+    {
+      "source": "tooling/beads-issue-tracker",
+      "target": "tooling/voidlabs-devtools"
+    },
+    {
+      "source": "infrastructure/dokploy/deployment-guide",
+      "target": "infrastructure/common-patterns"
+    },
+    {
+      "source": "infrastructure/dokploy/deployment-guide",
+      "target": "infrastructure/dokploy/dokploy-python-cli-reference"
+    },
+    {
+      "source": "infrastructure/dokploy/deployment-guide",
+      "target": "projects/docviewer/docviewer-project"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-python-cli-reference",
+      "target": "infrastructure/common-patterns"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-compose-deployment-lessons",
+      "target": "projects/docviewer-deployment-architecture"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting",
+      "target": "infrastructure/dokploy/dokploy-container-management"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting",
+      "target": "infrastructure/dokploy/dokploy-compose-deployment-lessons"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting",
+      "target": "infrastructure/dokploy/dokploy-network-recovery-after-vm-restart"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting",
+      "target": "infrastructure/proxmox-vm-filesystem-recovery-with-fsck"
+    },
+    {
+      "source": "infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy",
+      "target": "projects/docviewer-deployment-architecture"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-container-management",
+      "target": "infrastructure/dokploy/deployment-guide"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-container-management",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "infrastructure/dokploy/dokploy-container-management",
+      "target": "infrastructure/garage-s3-object-storage"
+    },
+    {
+      "source": "projects/docviewer/docviewer-project",
+      "target": "infrastructure/virtiofs-limitations-and-troubleshooting"
+    },
+    {
+      "source": "projects/docviewer/docviewer-project",
+      "target": "projects/docviewer/dataset-ingestion-workflow"
+    },
+    {
+      "source": "projects/docviewer/docviewer-project",
+      "target": "projects/docviewer/overview"
+    },
+    {
+      "source": "projects/docviewer/docviewer-project",
+      "target": "projects/docviewer/status-and-recovery-plan"
+    },
+    {
+      "source": "projects/docviewer/docviewer-project",
+      "target": "infrastructure/garage-s3-object-storage"
+    },
+    {
+      "source": "projects/docviewer/status-and-recovery-plan",
+      "target": "infrastructure/voidlabs-storage-architecture"
+    },
+    {
+      "source": "projects/docviewer/status-and-recovery-plan",
+      "target": "infrastructure/garage-s3-object-storage"
+    },
+    {
+      "source": "projects/docviewer/overview",
+      "target": "infrastructure/voidlabs-infrastructure-overview"
+    },
+    {
+      "source": "projects/docviewer/docviewer-production-database-access",
+      "target": "projects/docviewer-deployment-architecture"
+    },
+    {
+      "source": "projects/docviewer/docviewer-production-database-access",
+      "target": "infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy"
+    },
+    {
+      "source": "projects/docviewer/dataset-ingestion-workflow",
+      "target": "infrastructure/voidlabs-storage-architecture"
+    },
+    {
+      "source": "projects/docviewer/dataset-ingestion-workflow",
+      "target": "infrastructure/garage-s3-object-storage"
+    },
+    {
+      "source": "development/memex/markdown-it-py-ast-parser",
+      "target": "infrastructure/memex-knowledge-base"
+    }
+  ]
+}

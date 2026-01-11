@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tag: cicd - Memex</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/memex/assets/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>window.BASE_URL = "/memex";</script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <a href="/memex/" class="logo">
+                <div class="logo-mark"></div>
+                <div class="logo-text">Memex<span> / knowledge</span></div>
+            </a>
+
+            <div class="search-container">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="search-input" placeholder="Search knowledge base..." autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+
+            <div class="header-nav">
+                <a href="/memex/" class="nav-link active">Reader</a>
+                <a href="/memex/graph.html" class="nav-link">Graph</a>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="tree">Browse</button>
+                <button class="nav-tab" data-tab="recent">Recent</button>
+            </div>
+
+            <div class="sidebar-section" id="tree-section">
+                <div class="sidebar-header">Categories</div>
+                <div class="tree" id="tree">
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">development</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/development/memex/markdown-it-py-ast-parser.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Markdown-it-py AST Parser</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">devops</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/devops/voidlabs-cicd-automation.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs CI/CD Automation</span>
+                    </a>
+                    <a href="/memex/devops/voidlabs-provisioning-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Provisioning Workflow</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">infrastructure</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/infrastructure/common-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Common Patterns</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/deployment-guide.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Deployment Guide</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Docker CP Permission Patterns in Dokploy</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Compose Deployment Lessons</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-container-management.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Container Management</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Network Recovery After VM Restart</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Python CLI Reference</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy Service Naming and DATABASE_URL</span>
+                    </a>
+                    <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Dokploy VM Crash Recovery and Traefik Troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/garage-s3-object-storage.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Garage S3 Object Storage</span>
+                    </a>
+                    <a href="/memex/infrastructure/memex-knowledge-base.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Memex Knowledge Base</span>
+                    </a>
+                    <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Proxmox VM Filesystem Recovery with fsck</span>
+                    </a>
+                    <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">VirtioFS Limitations and Troubleshooting</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-infrastructure-overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Infrastructure Overview</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-networking-and-dns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Networking and DNS</span>
+                    </a>
+                    <a href="/memex/infrastructure/voidlabs-storage-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Storage Architecture</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">projects</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/projects/concordance-datopt-import-patterns.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Concordance DAT/OPT Import Patterns</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-deployment-architecture.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Deployment Architecture</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-local-development-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Local Development Workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer-naming-conventions.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Naming Conventions</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/dataset-ingestion-workflow.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Dataset Ingestion Workflow</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-production-database-access.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Production Database Access</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/docviewer-project.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Project</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/overview.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer (Epstein Project)</span>
+                    </a>
+                    <a href="/memex/projects/docviewer/status-and-recovery-plan.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">DocViewer Project Status &amp; Recovery Plan</span>
+                    </a>
+                    <a href="/memex/projects/sightline-5ightline.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">SightLine (5ightline Project)</span>
+                    </a>
+                    <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">TG Scrape - Social Media Astroturfing Analysis</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">reference</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/reference/session-log.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Session Log Feature</span>
+                    </a>
+                </div>
+            </div>
+            <div class="tree-folder">
+                <div class="tree-folder-header">
+                    <span class="tree-icon folder">📁</span>
+                    <span class="tree-label">tooling</span>
+                </div>
+                <div class="tree-children">
+                    <a href="/memex/tooling/beads-issue-tracker.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Beads Issue Tracker</span>
+                    </a>
+                    <a href="/memex/tooling/project-template-sync-pbs.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Project Template Sync (pbs)</span>
+                    </a>
+                    <a href="/memex/tooling/vl-mail-agent-messaging.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">vl-mail Agent Messaging</span>
+                    </a>
+                    <a href="/memex/tooling/voidlabs-devtools.html" class="tree-item">
+                        <span class="tree-icon file">◇</span>
+                        <span class="tree-label">Voidlabs Devtools</span>
+                    </a>
+                </div>
+            </div></div>
+            </div>
+
+            <div class="sidebar-section" id="recent-section" style="display: none;">
+                <div class="sidebar-header">Recent Updates</div>
+                <div class="tree" id="recent-list">
+            <a href="/memex/reference/session-log.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Session Log Feature</span>
+            </a>
+            <a href="/memex/projects/tg-scrape/tg-scrape-social-media-astroturfing-analysis.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">TG Scrape - Social Media Astroturfing Analysis</span>
+            </a>
+            <a href="/memex/projects/docviewer-local-development-workflow.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Local Development Workflow</span>
+            </a>
+            <a href="/memex/projects/concordance-datopt-import-patterns.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Concordance DAT/OPT Import Patterns</span>
+            </a>
+            <a href="/memex/projects/docviewer-deployment-architecture.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Deployment Architecture</span>
+            </a>
+            <a href="/memex/projects/docviewer-naming-conventions.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Naming Conventions</span>
+            </a>
+            <a href="/memex/infrastructure/proxmox-vm-filesystem-recovery-with-fsck.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Proxmox VM Filesystem Recovery with fsck</span>
+            </a>
+            <a href="/memex/infrastructure/virtiofs-limitations-and-troubleshooting.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">VirtioFS Limitations and Troubleshooting</span>
+            </a>
+            <a href="/memex/infrastructure/garage-s3-object-storage.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Garage S3 Object Storage</span>
+            </a>
+            <a href="/memex/tooling/project-template-sync-pbs.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Project Template Sync (pbs)</span>
+            </a>
+            <a href="/memex/tooling/vl-mail-agent-messaging.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">vl-mail Agent Messaging</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/deployment-guide.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Deployment Guide</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-python-cli-reference.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Python CLI Reference</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-service-naming-and-database-url.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Service Naming and DATABASE_URL</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-compose-deployment-lessons.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Compose Deployment Lessons</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-network-recovery-after-vm-restart.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Network Recovery After VM Restart</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-vm-crash-recovery-and-traefik-troubleshooting.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy VM Crash Recovery and Traefik Troubleshooting</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/docker-cp-permission-patterns-in-dokploy.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Docker CP Permission Patterns in Dokploy</span>
+            </a>
+            <a href="/memex/infrastructure/dokploy/dokploy-container-management.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">Dokploy Container Management</span>
+            </a>
+            <a href="/memex/projects/docviewer/docviewer-project.html" class="tree-item">
+                <span class="tree-icon file">◇</span>
+                <span class="tree-label">DocViewer Project</span>
+            </a></div>
+            </div>
+            <div class="sidebar-footer">
+                <a href="https://github.com/chriskd/memex" target="_blank" rel="noopener">Powered by memex</a>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+            
+<div class="tag-page-container">
+    <h1>Tag: cicd</h1>
+    <p class="tag-count">1 entries</p>
+    <ul class="entry-list">
+        
+        <li>
+            <a href="/memex/devops/voidlabs-cicd-automation.html">Voidlabs CI/CD Automation</a>
+            
+            <span class="entry-date">Dec 20, 2025</span>
+            
+        </li>
+        
+    </ul>
+    <p class="back-link"><a href="/memex/">← Back to index</a></p>
+</div>
+        </main>
+
+        <!-- Right panel -->
+        <aside class="panel">
+            
+        <div class="panel-section">
+            <div class="panel-header">Tag Info</div>
+            <p class="empty-state">Entries tagged with this topic</p>
+        </div>
+    
+        </aside>
+    </div>
+
+    <script src="/memex/assets/search.js"></script>
+    <script src="/memex/assets/sidebar.js"></script>
+    <script>hljs.highlightAll(); mermaid.initialize({startOnLoad: true, theme: 'dark'});</script>
+</body>
+</html>
