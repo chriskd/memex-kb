@@ -50,10 +50,11 @@ Add to `.claude/settings.local.json`:
 
 ```json
 {
+  "env": { "MEMEX_KB_ROOT": "/path/to/kb", "MEMEX_INDEX_ROOT": "/path/to/indices" },
   "permissions": { "allow": ["Bash(mx:*)"] },
   "hooks": {
-    "SessionStart": [{ "command": "mx prime" }],
-    "PreCompact": [{ "command": "mx prime --compact" }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx prime" }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "mx prime --compact" }] }]
   }
 }
 ```
@@ -187,8 +188,10 @@ uv sync --all-extras       # With semantic (~600MB)
 
 ### GPU Support (Optional)
 
+Requires source install. Edit `pyproject.toml` to change `pytorch-cpu` to `pytorch-gpu` in `[tool.uv.sources]` and update the index URL to `https://download.pytorch.org/whl/cu124`, then:
+
 ```bash
-uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124
+uv sync --all-extras
 ```
 
 ## Entry Format
