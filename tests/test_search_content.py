@@ -1,6 +1,6 @@
 """Tests for search include_content feature."""
 
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -51,7 +51,7 @@ def _create_entry(path: Path, title: str, content_body: str, tags: list[str] | N
 title: {title}
 tags:
 {tags_yaml}
-created: {date.today().isoformat()}
+created: {datetime.now(timezone.utc).isoformat()}
 ---
 
 {content_body}
