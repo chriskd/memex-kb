@@ -587,7 +587,7 @@ mx get tooling/beads.md --metadata  # Just metadata
 mx tree                             # Directory structure
 mx list --tag=infrastructure        # Filter by tag
 mx whats-new --days=7               # Recent changes
-mx whats-new --project=myapp        # Recent changes for a project
+mx whats-new --scope=project        # Project KB only
 
 # Contribute
 mx add --title="My Entry" --tags="foo,bar" --content="..."
@@ -936,8 +936,9 @@ def _score_confidence_short(score: float) -> str:
 @click.option("--strict", is_flag=True, help="Disable semantic fallback for keyword mode")
 @click.option("--terse", is_flag=True, help="Output paths only (one per line)")
 @click.option("--full-titles", is_flag=True, help="Show full titles without truncation")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Optional[float], content: bool, strict: bool, terse: bool, full_titles: bool, as_json: bool):
+def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Optional[float], content: bool, strict: bool, terse: bool, full_titles: bool, scope: Optional[str], as_json: bool):
     """Search the knowledge base.
 
     Scores are normalized to 0.0-1.0 (higher = better match):
@@ -965,7 +966,7 @@ def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Op
       mx search "api" --mode=semantic --limit=5
       mx search "config" --min-score=0.5          # Only confident results
       mx search "query" --strict                  # No semantic fallback
-      mx search "query" --terse                   # Paths only
+      mx search "query" --scope=project           # Project KB only
 
     \b
     See also:
@@ -987,6 +988,7 @@ def search(query: str, tags: Optional[str], mode: str, limit: int, min_score: Op
         tags=tag_list,
         include_content=content,
         strict=strict,
+        scope=scope,
     ))
 
     # Apply min_score filter if specified
@@ -1420,18 +1422,20 @@ def format_tree(tree_data: dict, prefix: str = "") -> str:
 @cli.command()
 @click.argument("path", default="")
 @click.option("--depth", "-d", default=3, help="Max depth")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def tree(path: str, depth: int, as_json: bool):
+def tree(path: str, depth: int, scope: Optional[str], as_json: bool):
     """Display knowledge base directory structure.
 
     \b
     Examples:
       mx tree
       mx tree tooling --depth=2
+      mx tree --scope=project              # Project KB only
     """
     from .core import tree as core_tree
 
-    result = run_async(core_tree(path=path, depth=depth))
+    result = run_async(core_tree(path=path, depth=depth, scope=scope))
 
     if as_json:
         output(result, as_json=True)
@@ -1452,8 +1456,9 @@ def tree(path: str, depth: int, as_json: bool):
 @click.option("--category", "-c", help="Filter by category")
 @click.option("--limit", "-n", default=20, help="Max results")
 @click.option("--full-titles", is_flag=True, help="Show full titles without truncation")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def list_entries(tag: Optional[str], category: Optional[str], limit: int, full_titles: bool, as_json: bool):
+def list_entries(tag: Optional[str], category: Optional[str], limit: int, full_titles: bool, scope: Optional[str], as_json: bool):
     """List knowledge base entries.
 
     \b
@@ -1461,11 +1466,12 @@ def list_entries(tag: Optional[str], category: Optional[str], limit: int, full_t
       mx list
       mx list --tag=tooling
       mx list --category=infrastructure --limit=10
+      mx list --scope=project              # Project KB only
     """
     from .core import get_valid_categories, list_entries as core_list_entries
 
     try:
-        result = run_async(core_list_entries(tag=tag, category=category, limit=limit))
+        result = run_async(core_list_entries(tag=tag, category=category, limit=limit, scope=scope))
     except ValueError as e:
         # Handle invalid category with helpful error message
         error_msg = str(e)
@@ -1503,29 +1509,26 @@ def list_entries(tag: Optional[str], category: Optional[str], limit: int, full_t
 @cli.command("whats-new")
 @click.option("--days", "-d", default=30, help="Look back N days")
 @click.option("--limit", "-n", default=10, help="Max results")
-@click.option("--project", "-p", help="Filter by project name (matches path, source_project, or tags)")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def whats_new(days: int, limit: int, project: Optional[str], as_json: bool):
+def whats_new(days: int, limit: int, scope: Optional[str], as_json: bool):
     """Show recently created or updated entries.
 
     \b
     Examples:
       mx whats-new
       mx whats-new --days=7 --limit=5
-      mx whats-new --project=docviewer  # Filter by project
+      mx whats-new --scope=project       # Project KB only
     """
     from .core import whats_new as core_whats_new
 
-    result = run_async(core_whats_new(days=days, limit=limit, project=project))
+    result = run_async(core_whats_new(days=days, limit=limit, scope=scope))
 
     if as_json:
         output(result, as_json=True)
     else:
         if not result:
-            if project:
-                click.echo(f"No entries for project '{project}' in the last {days} days.")
-            else:
-                click.echo(f"No entries created or updated in the last {days} days.")
+            click.echo(f"No entries created or updated in the last {days} days.")
             return
 
         rows = [
@@ -1709,34 +1712,33 @@ def suggest_links(path: str, limit: int, as_json: bool):
 
 
 @cli.command()
-@click.option("--project-only", is_flag=True, help="Only index project KB (exclude user KB)")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def reindex(project_only: bool, as_json: bool):
+def reindex(scope: Optional[str], as_json: bool):
     """Rebuild search indices from all markdown files.
 
     By default, indexes entries from both project and user KBs.
-    Use --project-only to restrict to project KB only.
 
     \b
     Examples:
-      mx reindex                # Index project + user KBs
-      mx reindex --project-only # Index project KB only
+      mx reindex                # Index all KBs
+      mx reindex --scope=project # Index project KB only
       mx reindex --json
     """
     from .core import reindex as core_reindex
 
     if not as_json:
-        scope_msg = "project KB" if project_only else "all KBs"
+        scope_msg = f"{scope} KB" if scope else "all KBs"
         click.echo(f"Reindexing {scope_msg}...")
 
-    result = run_async(core_reindex(project_only=project_only))
+    result = run_async(core_reindex(scope=scope))
 
     if as_json:
         output({
             "kb_files": result.kb_files,
             "whoosh_docs": result.whoosh_docs,
             "chroma_docs": result.chroma_docs,
-            "project_only": project_only,
+            "scope": scope,
         }, as_json=True)
     else:
         click.echo(f"✓ Indexed {result.kb_files} entries, {result.whoosh_docs} keyword docs, {result.chroma_docs} semantic docs")
@@ -2832,6 +2834,7 @@ def _build_schema() -> dict:
                     {"name": "--strict", "type": "flag", "description": "Disable semantic fallback for keyword mode"},
                     {"name": "--terse", "type": "flag", "description": "Output paths only (one per line)"},
                     {"name": "--full-titles", "type": "flag", "description": "Show full titles without truncation"},
+                    {"name": "--scope", "type": "choice", "choices": ["project", "user"], "description": "Limit to specific KB scope"},
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
                 "related": ["get", "list"],
@@ -2842,7 +2845,7 @@ def _build_schema() -> dict:
                 "examples": [
                     "mx search \"deployment\"",
                     "mx search \"docker\" --tags=infrastructure",
-                    "mx search \"api\" --mode=semantic --limit=5",
+                    "mx search \"api\" --scope=project",
                 ],
             },
             "get": {
@@ -2997,6 +3000,7 @@ def _build_schema() -> dict:
                     {"name": "--category", "short": "-c", "type": "string", "description": "Filter by category"},
                     {"name": "--limit", "short": "-n", "type": "integer", "default": 20, "description": "Max results"},
                     {"name": "--full-titles", "type": "flag", "description": "Show full titles without truncation"},
+                    {"name": "--scope", "type": "choice", "choices": ["project", "user"], "description": "Limit to specific KB scope"},
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
                 "related": ["search", "tree", "tags"],
@@ -3006,7 +3010,7 @@ def _build_schema() -> dict:
                 "examples": [
                     "mx list",
                     "mx list --tag=infrastructure",
-                    "mx list --category=tooling --limit=10",
+                    "mx list --scope=project",
                 ],
             },
             "tree": {
@@ -3017,6 +3021,7 @@ def _build_schema() -> dict:
                 ],
                 "options": [
                     {"name": "--depth", "short": "-d", "type": "integer", "default": 3, "description": "Max depth"},
+                    {"name": "--scope", "type": "choice", "choices": ["project", "user"], "description": "Limit to specific KB scope"},
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
                 "related": ["list"],
@@ -3024,6 +3029,7 @@ def _build_schema() -> dict:
                 "examples": [
                     "mx tree",
                     "mx tree tooling --depth=2",
+                    "mx tree --scope=project",
                 ],
             },
             "tags": {
@@ -3093,7 +3099,7 @@ def _build_schema() -> dict:
                 "options": [
                     {"name": "--days", "short": "-d", "type": "integer", "default": 30, "description": "Look back N days"},
                     {"name": "--limit", "short": "-n", "type": "integer", "default": 10, "description": "Max results"},
-                    {"name": "--project", "short": "-p", "type": "string", "description": "Filter by project name"},
+                    {"name": "--scope", "type": "choice", "choices": ["project", "user"], "description": "Limit to specific KB scope"},
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
                 "related": ["list", "search"],
@@ -3101,7 +3107,7 @@ def _build_schema() -> dict:
                 "examples": [
                     "mx whats-new",
                     "mx whats-new --days=7 --limit=5",
-                    "mx whats-new --project=myapp",
+                    "mx whats-new --scope=project",
                 ],
             },
             "prime": {
@@ -3144,13 +3150,17 @@ def _build_schema() -> dict:
                 "description": "Rebuild search indices from all markdown files",
                 "aliases": [],
                 "arguments": [],
-                "options": [],
+                "options": [
+                    {"name": "--scope", "type": "choice", "choices": ["project", "user"], "description": "Limit to specific KB scope"},
+                    {"name": "--json", "type": "flag", "description": "Output as JSON"},
+                ],
                 "related": ["search"],
                 "common_mistakes": {
                     "running unnecessarily": "Only needed after bulk imports or if search seems stale. Normal operations auto-index.",
                 },
                 "examples": [
                     "mx reindex",
+                    "mx reindex --scope=project",
                 ],
             },
             "context": {
