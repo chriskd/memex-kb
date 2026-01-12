@@ -1136,6 +1136,7 @@ def get(path: Optional[str], by_title: Optional[str], as_json: bool, metadata: b
 @click.option("--content", help="Content (or use --file/--stdin)")
 @click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
 @click.option("--stdin", is_flag=True, help="Read content from stdin")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Target KB scope (default: auto-detect)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def add(
     title: str,
@@ -1144,6 +1145,7 @@ def add(
     content: Optional[str],
     file_path: Optional[str],
     stdin: bool,
+    scope: Optional[str],
     as_json: bool,
 ):
     """Create a new knowledge base entry.
@@ -1153,6 +1155,17 @@ def add(
       mx add --title="My Entry" --tags="foo,bar" --content="# Content here"
       mx add --title="My Entry" --tags="foo,bar" --file=content.md
       cat content.md | mx add --title="My Entry" --tags="foo,bar" --stdin
+
+    \b
+    Scope Selection:
+      --scope=project  Write to project KB (./kb/)
+      --scope=user     Write to user KB (~/.memex/kb/)
+      (default)        Auto-detect based on current directory
+
+    \b
+    When to use each scope:
+      project: Team knowledge, infra docs, shared patterns
+      user:    Personal notes, experiments, drafts
 
     \b
     See also:
@@ -1178,15 +1191,20 @@ def add(
     tag_list = [t.strip() for t in tags.split(",")]
 
     try:
-        result = run_async(add_entry(title=title, content=content, tags=tag_list, category=category))
+        result = run_async(add_entry(title=title, content=content, tags=tag_list, category=category, scope=scope))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
     if as_json:
+        # Include scope in JSON output if explicitly set
+        if scope:
+            result['scope'] = scope
         output(result, as_json=True)
     else:
-        click.echo(f"Created: {result['path']}")
+        # Show path with scope prefix if explicitly set
+        path_display = f"@{scope}/{result['path']}" if scope else result['path']
+        click.echo(f"Created: {path_display}")
         if result.get('suggested_links'):
             click.echo("\nSuggested links:")
             for link in result['suggested_links'][:5]:

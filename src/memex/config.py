@@ -73,6 +73,37 @@ def get_kb_roots(project_only: bool = False) -> list[Path]:
     return roots
 
 
+def get_kb_root_by_scope(scope: str) -> Path:
+    """Get a specific KB root by scope name.
+
+    Args:
+        scope: Either "project" or "user".
+
+    Returns:
+        Path to the requested KB.
+
+    Raises:
+        ConfigurationError: If the requested scope KB doesn't exist.
+        ValueError: If scope is not "project" or "user".
+    """
+    if scope == "project":
+        kb_root = get_project_kb_root()
+        if not kb_root:
+            raise ConfigurationError(
+                "No project KB found. Run 'mx init' in your project to create one."
+            )
+        return kb_root
+    elif scope == "user":
+        kb_root = get_user_kb_root()
+        if not kb_root:
+            raise ConfigurationError(
+                "No user KB found. Run 'mx init --user' to create one at ~/.memex/kb/"
+            )
+        return kb_root
+    else:
+        raise ValueError(f"Invalid scope '{scope}'. Must be 'project' or 'user'.")
+
+
 def get_kb_root() -> Path:
     """Get the primary knowledge base root directory.
 

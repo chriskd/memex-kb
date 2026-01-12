@@ -2,9 +2,7 @@
 name: kb-add
 description: Add a new entry to the knowledge base
 allowed-tools:
-  - mcp__memex__add
-  - mcp__memex__search
-  - mcp__memex__list
+  - Bash
   - AskUserQuestion
 argument-hint: "[title]"
 ---
@@ -15,12 +13,23 @@ Interactive workflow to add a new knowledge base entry.
 
 ### 1. Check for Duplicates
 If a title is provided, search for similar entries first:
-```
-mcp__memex__search(query=<title>)
+```bash
+mx search "<title>"
 ```
 If duplicates found, ask user if they want to continue or update existing.
 
-### 2. Gather Entry Details
+### 2. Determine Scope
+
+Ask user which KB to use (if both project and user KBs exist):
+
+| Scope | Use For |
+|-------|---------|
+| `project` | Team knowledge, infra docs, shared patterns, API docs |
+| `user` | Personal notes, experiments, drafts, individual workflow tips |
+
+If only one KB exists, use it automatically.
+
+### 3. Gather Entry Details
 
 Use `AskUserQuestion` to collect:
 
@@ -45,18 +54,32 @@ Use `AskUserQuestion` to collect:
 - Comma-separated list
 - Helps with search and discovery
 
-### 3. Create the Entry
-```
-mcp__memex__add(
-  title=<title>,
-  category=<category>,
-  content=<content>,
-  tags=<tags>
-)
+### 4. Create the Entry
+
+```bash
+mx add \
+  --title="<title>" \
+  --tags="<tags>" \
+  --category="<category>" \
+  --scope=<project|user> \
+  --content="<content>"
 ```
 
-### 4. Suggest Related Links
-After creation, search for related entries and suggest linking them.
+Or with file input:
+```bash
+mx add \
+  --title="<title>" \
+  --tags="<tags>" \
+  --category="<category>" \
+  --scope=<project|user> \
+  --file=<path>
+```
+
+### 5. Suggest Related Links
+After creation, search for related entries and suggest linking them:
+```bash
+mx suggest-links <created-path>
+```
 
 ## Example Session
 
@@ -64,8 +87,14 @@ After creation, search for related entries and suggest linking them.
 User: /kb-add Nginx reverse proxy setup
 
 Claude: Let me check for similar entries...
-[searches]
+$ mx search "Nginx reverse proxy"
 No duplicates found.
+
+Which scope should I use?
+- project (shared with team)
+- user (personal notes)
+
+User: project
 
 Which category?
 - infrastructure, devops, development, troubleshooting, architecture, patterns
@@ -80,5 +109,27 @@ Claude: Any tags? (comma-separated, or skip)
 
 User: nginx, proxy, web
 
-Claude: Created: infrastructure/nginx-reverse-proxy-setup.md
+Claude:
+$ mx add --title="Nginx reverse proxy setup" --tags="nginx,proxy,web" \
+    --category="infrastructure" --scope=project --content="..."
+
+Created: @project/infrastructure/nginx-reverse-proxy-setup.md
 ```
+
+## Scope Selection Heuristics
+
+When the user doesn't specify, suggest based on content type:
+
+**Suggest `project` scope for:**
+- Infrastructure documentation
+- API references
+- Team workflows
+- Debugging guides for shared systems
+- Architecture decisions
+
+**Suggest `user` scope for:**
+- Personal notes or drafts
+- Experimental findings
+- Individual productivity tips
+- Work-in-progress content
+- Content mentioning "my", "personal", "draft"

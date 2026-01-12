@@ -29,6 +29,7 @@ from .config import (
     SIMILAR_ENTRY_TAG_WEIGHT,
     TAG_SUGGESTION_MIN_SCORE,
     get_kb_root,
+    get_kb_root_by_scope,
 )
 from .context import KBContext, get_kb_context, get_kbconfig, get_session_entry_path
 from .frontmatter import build_frontmatter, create_new_metadata, update_metadata_for_edit
@@ -787,6 +788,7 @@ async def add_entry(
     directory: str | None = None,
     links: list[str] | None = None,
     kb_context: KBContext | None = None,
+    scope: str | None = None,
 ) -> dict:
     """Create a new KB entry.
 
@@ -801,12 +803,18 @@ async def add_entry(
         links: Optional list of paths to link to using [[link]] syntax.
         kb_context: Optional project context. If not provided, auto-discovered from cwd.
                    Used for default directory (primary) and tag suggestions (default_tags).
+        scope: Optional scope for KB selection ("project" or "user").
+               If not provided, uses auto-discovery (project KB if in project, else user KB).
 
     Returns:
         Dict with 'path' of created file, 'suggested_links' to consider adding,
         and 'suggested_tags' based on content similarity and existing taxonomy.
     """
-    kb_root = get_kb_root()
+    # Determine KB root based on scope parameter or auto-discovery
+    if scope:
+        kb_root = get_kb_root_by_scope(scope)
+    else:
+        kb_root = get_kb_root()
 
     # Auto-discover KB context if not provided
     if kb_context is None:

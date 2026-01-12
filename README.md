@@ -73,6 +73,28 @@ Results from different KBs use scope prefixes when both exist:
 - `@project/guides/setup.md` - Entry from project KB
 - `@user/personal/notes.md` - Entry from user KB
 
+### Explicit Scope for Writes
+
+When adding entries, use `--scope` to explicitly choose which KB:
+
+```bash
+# Add to project KB (shared with team)
+mx add --title="API Guide" --tags="api" --scope=project --content="..."
+
+# Add to user KB (personal notes)
+mx add --title="My Notes" --tags="personal" --scope=user --content="..."
+
+# Auto-detect (default): project KB if in project, else user KB
+mx add --title="Note" --tags="test" --content="..."
+```
+
+**When to use each scope:**
+
+| Scope | Use For |
+|-------|---------|
+| `project` | Team knowledge, infra docs, shared patterns, API docs |
+| `user` | Personal notes, experiments, drafts, individual workflow tips |
+
 ### Global KB
 
 ```bash
@@ -105,6 +127,7 @@ mx tags                             # List all tags with counts
 
 # Create/update entries
 mx add --title="My Entry" --tags="foo,bar" --content="# Content..."
+mx add --title="Personal Note" --tags="draft" --scope=user --content="..."
 mx replace path/entry.md --tags="new,tags"
 mx patch path/entry.md --find="old text" --replace="new text"
 

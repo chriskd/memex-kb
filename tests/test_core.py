@@ -242,6 +242,125 @@ class TestAddEntry:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Config Tests (get_kb_root_by_scope)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestGetKBRootByScope:
+    """Tests for get_kb_root_by_scope config function."""
+
+    def test_scope_project_returns_project_kb(self, tmp_path, monkeypatch):
+        """scope='project' returns project KB root."""
+        from memex import config
+
+        project_kb = tmp_path / "project" / "kb"
+        project_kb.mkdir(parents=True)
+        (project_kb / ".kbconfig").write_text("")
+
+        monkeypatch.setattr(config, "get_project_kb_root", lambda: project_kb)
+
+        result = config.get_kb_root_by_scope("project")
+        assert result == project_kb
+
+    def test_scope_user_returns_user_kb(self, tmp_path, monkeypatch):
+        """scope='user' returns user KB root."""
+        from memex import config
+
+        user_kb = tmp_path / "user" / "kb"
+        user_kb.mkdir(parents=True)
+        (user_kb / ".kbconfig").write_text("")
+
+        monkeypatch.setattr(config, "get_user_kb_root", lambda: user_kb)
+
+        result = config.get_kb_root_by_scope("user")
+        assert result == user_kb
+
+    def test_scope_project_raises_if_not_found(self, monkeypatch):
+        """scope='project' raises ConfigurationError if no project KB."""
+        from memex import config
+        from memex.config import ConfigurationError
+
+        monkeypatch.setattr(config, "get_project_kb_root", lambda: None)
+
+        with pytest.raises(ConfigurationError, match="No project KB found"):
+            config.get_kb_root_by_scope("project")
+
+    def test_scope_user_raises_if_not_found(self, monkeypatch):
+        """scope='user' raises ConfigurationError if no user KB."""
+        from memex import config
+        from memex.config import ConfigurationError
+
+        monkeypatch.setattr(config, "get_user_kb_root", lambda: None)
+
+        with pytest.raises(ConfigurationError, match="No user KB found"):
+            config.get_kb_root_by_scope("user")
+
+    def test_invalid_scope_raises_value_error(self):
+        """Invalid scope raises ValueError."""
+        from memex import config
+
+        with pytest.raises(ValueError, match="Invalid scope 'invalid'"):
+            config.get_kb_root_by_scope("invalid")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Add Entry with Scope Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestAddEntryWithScope:
+    """Tests for add_entry with scope parameter."""
+
+    @pytest.mark.asyncio
+    async def test_add_entry_with_scope_uses_specified_kb(self, tmp_path, monkeypatch):
+        """add_entry with scope writes to the specified KB."""
+        # Create a project KB and user KB
+        project_kb = tmp_path / "project_kb"
+        project_kb.mkdir()
+        (project_kb / "general").mkdir()
+
+        user_kb = tmp_path / "user_kb"
+        user_kb.mkdir()
+        (user_kb / "personal").mkdir()
+
+        # Mock scope resolution - patch at the usage site (core module)
+        monkeypatch.setattr(core, "get_kb_root_by_scope", lambda s: project_kb if s == "project" else user_kb)
+        monkeypatch.setattr(core, "get_kb_root", lambda: project_kb)
+        monkeypatch.setattr(core, "get_searcher", lambda: DummySearcher())
+
+        # Set MEMEX_KB_ROOT to avoid discovery issues
+        monkeypatch.setenv("MEMEX_KB_ROOT", str(project_kb))
+
+        result = await core.add_entry(
+            title="Scoped Entry",
+            content="Test content",
+            tags=["test"],
+            category="general",
+            scope="project",
+        )
+
+        assert result["path"] == "general/scoped-entry.md"
+        assert (project_kb / "general/scoped-entry.md").exists()
+        assert not (user_kb / "general/scoped-entry.md").exists()
+
+    @pytest.mark.asyncio
+    async def test_add_entry_without_scope_uses_default_discovery(self, tmp_kb, monkeypatch):
+        """add_entry without scope uses normal KB discovery."""
+        monkeypatch.setattr(core, "get_searcher", lambda: DummySearcher())
+
+        result = await core.add_entry(
+            title="Default Entry",
+            content="Test content",
+            tags=["test"],
+            category="general",
+            scope=None,  # Explicitly None
+        )
+
+        assert result["path"] == "general/default-entry.md"
+        assert (tmp_kb / "general/default-entry.md").exists()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Get Entry Tests
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -341,6 +341,101 @@ class TestAddCommand:
         assert result.exit_code == 1
         assert "Error" in result.output
 
+    @patch("memex.cli.run_async")
+    def test_add_with_scope_project(self, mock_run_async, runner):
+        """Add with --scope=project passes scope to add_entry."""
+        mock_run_async.return_value = {
+            "path": "notes/entry.md",
+            "suggested_links": [],
+            "suggested_tags": [],
+        }
+
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Test",
+            "--tags", "tag1",
+            "--content", "Content",
+            "--scope", "project",
+        ])
+
+        assert result.exit_code == 0
+        assert "Created: @project/notes/entry.md" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_add_with_scope_user(self, mock_run_async, runner):
+        """Add with --scope=user passes scope to add_entry."""
+        mock_run_async.return_value = {
+            "path": "personal/note.md",
+            "suggested_links": [],
+            "suggested_tags": [],
+        }
+
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Personal Note",
+            "--tags", "personal",
+            "--content", "My notes",
+            "--scope", "user",
+        ])
+
+        assert result.exit_code == 0
+        assert "Created: @user/personal/note.md" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_add_with_scope_json_output(self, mock_run_async, runner):
+        """Add with --scope includes scope in JSON output."""
+        mock_run_async.return_value = {
+            "path": "notes/entry.md",
+            "suggested_links": [],
+            "suggested_tags": [],
+        }
+
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Test",
+            "--tags", "tag1",
+            "--content", "Content",
+            "--scope", "user",
+            "--json",
+        ])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["scope"] == "user"
+        assert data["path"] == "notes/entry.md"
+
+    def test_add_invalid_scope(self, runner):
+        """Add rejects invalid scope values."""
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Test",
+            "--tags", "tag1",
+            "--content", "Content",
+            "--scope", "invalid",
+        ])
+
+        assert result.exit_code != 0
+        assert "Invalid value for '--scope'" in result.output
+
+    @patch("memex.cli.run_async")
+    def test_add_scope_error_no_user_kb(self, mock_run_async, runner):
+        """Add with --scope=user fails if user KB doesn't exist."""
+        from memex.config import ConfigurationError
+        mock_run_async.side_effect = ConfigurationError(
+            "No user KB found. Run 'mx init --user' to create one at ~/.memex/kb/"
+        )
+
+        result = runner.invoke(cli, [
+            "add",
+            "--title", "Test",
+            "--tags", "tag1",
+            "--content", "Content",
+            "--scope", "user",
+        ])
+
+        assert result.exit_code == 1
+        assert "No user KB found" in result.output
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Append Command Tests
