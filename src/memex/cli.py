@@ -535,7 +535,7 @@ def cli(ctx: click.Context, json_errors: bool, quiet: bool):
     \b
     Modify content:
       mx patch path.md --find "old text" --replace "new text"
-      mx update path.md --tags="new,tags"
+      mx replace path.md --tags="new,tags"
 
     \b
     For programmatic error handling:
@@ -1211,7 +1211,7 @@ def append(
     \b
     See also:
       mx patch  - Apply surgical find-replace edits to an entry
-      mx update - Update entry metadata or replace content entirely
+      mx replace - Replace entry content or tags entirely
       mx add    - Create a new entry (never appends)
     """
     from .core import append_entry
@@ -1266,19 +1266,19 @@ def append(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Update Command
+# Replace Command (formerly 'update')
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@cli.command()
+@cli.command(name="replace")
 @click.argument("path")
 @click.option("--tags", help="New tags (comma-separated)")
-@click.option("--content", help="New content")
+@click.option("--content", help="New content (replaces existing)")
 @click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
 @click.option("--find", "find_flag", hidden=True, help="(Intent detection)")
 @click.option("--replace", "replace_flag", hidden=True, help="(Intent detection)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def update(
+def replace_cmd(
     path: str,
     tags: Optional[str],
     content: Optional[str],
@@ -1287,17 +1287,20 @@ def update(
     replace_flag: Optional[str],
     as_json: bool,
 ):
-    """Update an existing knowledge base entry.
+    """Replace content or tags in a knowledge base entry.
+
+    Overwrites entire content or tags. For surgical edits, use 'mx patch'.
 
     \b
     Examples:
-      mx update path/entry.md --tags="new,tags"
-      mx update path/entry.md --file=updated-content.md
+      mx replace path/entry.md --tags="new,tags"
+      mx replace path/entry.md --content="New content here"
+      mx replace path/entry.md --file=updated-content.md
 
     \b
     See also:
-      mx patch  - Apply surgical find-replace edits to an entry
-      mx append - Append content to existing entry (or create new)
+      mx patch  - Apply surgical find-replace edits (keeps rest of content)
+      mx append - Add content to end of entry (doesn't overwrite)
     """
     from .cli_intent import detect_update_intent_mismatch
     from .core import update_entry
@@ -1326,7 +1329,20 @@ def update(
     if as_json:
         output(result, as_json=True)
     else:
-        click.echo(f"Updated: {result['path']}")
+        click.echo(f"Replaced: {result['path']}")
+
+
+# Hidden alias for backwards compatibility
+@cli.command(name="update", hidden=True)
+@click.argument("path")
+@click.option("--tags", help="New tags (comma-separated)")
+@click.option("--content", help="New content")
+@click.option("--file", "-f", "file_path", type=click.Path(exists=True), help="Read content from file")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def update_alias(ctx, path, tags, content, file_path, as_json):
+    """(Deprecated: use 'mx replace' instead)"""
+    ctx.invoke(replace_cmd, path=path, tags=tags, content=content, file_path=file_path, as_json=as_json)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1894,7 +1910,7 @@ def patch(
     \b
     See also:
       mx append  - Append content to existing entry (or create new)
-      mx update  - Update entry metadata or replace content entirely
+      mx replace - Replace entry content or tags entirely
     """
     from .cli_intent import detect_patch_intent_mismatch
     from .core import patch_entry
@@ -2813,9 +2829,9 @@ def _build_schema() -> dict:
                     "mx append \"API Docs\" --file=api.md --tags=\"api,docs\"",
                 ],
             },
-            "update": {
-                "description": "Update metadata or replace content of an existing entry",
-                "aliases": [],
+            "replace": {
+                "description": "Replace content or tags in an existing entry (overwrites)",
+                "aliases": ["update"],
                 "arguments": [
                     {"name": "path", "required": True, "description": "Path to entry relative to KB root"}
                 ],
@@ -2827,12 +2843,12 @@ def _build_schema() -> dict:
                 ],
                 "related": ["patch", "append"],
                 "common_mistakes": {
-                    "confusing with append": "update replaces content. Use 'mx append' to add to existing content.",
-                    "confusing with patch": "update replaces entire content. Use 'mx patch' for surgical find-replace.",
+                    "confusing with append": "replace overwrites content. Use 'mx append' to add to existing content.",
+                    "confusing with patch": "replace overwrites entire content. Use 'mx patch' for surgical find-replace.",
                 },
                 "examples": [
-                    "mx update path/entry.md --tags=\"new,tags\"",
-                    "mx update path/entry.md --file=updated-content.md",
+                    "mx replace path/entry.md --tags=\"new,tags\"",
+                    "mx replace path/entry.md --file=updated-content.md",
                 ],
             },
             "patch": {
@@ -2851,7 +2867,7 @@ def _build_schema() -> dict:
                     {"name": "--backup", "type": "flag", "description": "Create .bak backup before patching"},
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
-                "related": ["update", "append"],
+                "related": ["replace", "append"],
                 "common_mistakes": {
                     "--find without --replace": "Both --find and --replace are required",
                     "multiple matches without --replace-all": "If text matches multiple times, use --replace-all or provide more context in --find",

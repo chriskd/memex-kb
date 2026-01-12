@@ -1,0 +1,10 @@
+# Project KB Configuration
+# This file marks this directory as a project memex knowledge base
+
+# Default tags for entries created in this KB
+default_tags:
+  - memex
+
+# Exclude patterns (glob)
+# exclude:
+#   - "*.draft.md"

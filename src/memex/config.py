@@ -17,31 +17,88 @@ class ConfigurationError(Exception):
 def get_kb_root() -> Path:
     """Get the knowledge base root directory.
 
+    Discovery order:
+    1. MEMEX_KB_ROOT environment variable (explicit override)
+    2. Walk up from cwd looking for kb/.kbconfig (project scope)
+    3. ~/.memex/kb/ if it exists with .kbconfig (user scope)
+    4. Error with helpful message
+
     Raises:
-        ConfigurationError: If MEMEX_KB_ROOT is not set.
+        ConfigurationError: If no KB can be found.
     """
+    # 1. Explicit env var takes precedence
     root = os.environ.get("MEMEX_KB_ROOT")
-    if not root:
-        raise ConfigurationError(
-            "MEMEX_KB_ROOT environment variable is not set. "
-            "Set it to the path of your knowledge base directory."
-        )
-    return Path(root)
+    if root:
+        return Path(root)
+
+    # 2. Look for project-scope KB (walk up from cwd)
+    project_kb = _discover_project_kb()
+    if project_kb:
+        return project_kb
+
+    # 3. Check for user-scope KB
+    user_kb = Path.home() / ".memex" / "kb"
+    if (user_kb / ".kbconfig").exists():
+        return user_kb
+
+    # 4. No KB found
+    raise ConfigurationError(
+        "No knowledge base found. Options:\n"
+        "  1. Run 'mx init' to create a project KB at ./kb/\n"
+        "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
+        "  3. Set MEMEX_KB_ROOT to an existing KB directory"
+    )
+
+
+def _discover_project_kb(start_dir: Path | None = None, max_depth: int = 10) -> Path | None:
+    """Walk up from start_dir looking for kb/.kbconfig.
+
+    Args:
+        start_dir: Directory to start from (defaults to cwd)
+        max_depth: Maximum directories to traverse up
+
+    Returns:
+        Path to KB root if found, None otherwise.
+    """
+    current = Path(start_dir or os.getcwd()).resolve()
+
+    for _ in range(max_depth):
+        kb_dir = current / "kb"
+        if (kb_dir / ".kbconfig").exists():
+            return kb_dir
+
+        parent = current.parent
+        if parent == current:  # Reached filesystem root
+            break
+        current = parent
+
+    return None
 
 
 def get_index_root() -> Path:
     """Get the search index root directory.
 
+    Discovery order:
+    1. MEMEX_INDEX_ROOT environment variable (explicit override)
+    2. {kb_root}/.indices/ for discovered KBs
+
     Raises:
-        ConfigurationError: If MEMEX_INDEX_ROOT is not set.
+        ConfigurationError: If no index root can be determined.
     """
+    # 1. Explicit env var takes precedence
     root = os.environ.get("MEMEX_INDEX_ROOT")
-    if not root:
+    if root:
+        return Path(root)
+
+    # 2. Use .indices/ inside KB root
+    try:
+        kb_root = get_kb_root()
+        return kb_root / ".indices"
+    except ConfigurationError:
         raise ConfigurationError(
-            "MEMEX_INDEX_ROOT environment variable is not set. "
+            "MEMEX_INDEX_ROOT environment variable is not set and no KB found. "
             "Set it to the path where search indices should be stored."
         )
-    return Path(root)
 
 
 # =============================================================================

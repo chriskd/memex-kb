@@ -31,7 +31,7 @@ ALL_COMMANDS = [
     "get",
     "add",
     "append",
-    "update",
+    "replace",
     "delete",
     "list",
     "tree",
@@ -56,7 +56,7 @@ JSON_COMMANDS = [
     "search",
     "get",
     "add",
-    "update",
+    "replace",
     "delete",
     "list",
     "tree",
@@ -376,40 +376,40 @@ class TestAppendCommand:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Update Command Tests
+# Replace Command Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestUpdateCommand:
-    """Tests for 'mx update' command."""
+class TestReplaceCommand:
+    """Tests for 'mx replace' command."""
 
     @patch("memex.cli.run_async")
-    def test_update_tags(self, mock_run_async, runner):
-        """Update modifies entry tags."""
+    def test_replace_tags(self, mock_run_async, runner):
+        """Replace modifies entry tags."""
         mock_run_async.return_value = {"path": "test.md", "updated": True}
 
-        result = runner.invoke(cli, ["update", "test.md", "--tags", "new,tags"])
+        result = runner.invoke(cli, ["replace", "test.md", "--tags", "new,tags"])
 
         assert result.exit_code == 0
-        assert "Updated" in result.output or "test.md" in result.output
+        assert "Replaced" in result.output or "test.md" in result.output
 
     @patch("memex.cli.run_async")
-    def test_update_json_output(self, mock_run_async, runner):
-        """Update --json outputs valid JSON."""
+    def test_replace_json_output(self, mock_run_async, runner):
+        """Replace --json outputs valid JSON."""
         mock_run_async.return_value = {"path": "test.md", "updated": True}
 
-        result = runner.invoke(cli, ["update", "test.md", "--tags", "new", "--json"])
+        result = runner.invoke(cli, ["replace", "test.md", "--tags", "new", "--json"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["path"] == "test.md"
 
     @patch("memex.cli.run_async")
-    def test_update_not_found(self, mock_run_async, runner):
-        """Update fails for nonexistent entry."""
+    def test_replace_not_found(self, mock_run_async, runner):
+        """Replace fails for nonexistent entry."""
         mock_run_async.side_effect = FileNotFoundError("Entry not found")
 
-        result = runner.invoke(cli, ["update", "nonexistent.md", "--tags", "new"])
+        result = runner.invoke(cli, ["replace", "nonexistent.md", "--tags", "new"])
 
         assert result.exit_code == 1
         assert "Error" in result.output
