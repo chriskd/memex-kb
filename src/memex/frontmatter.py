@@ -27,6 +27,11 @@ def build_frontmatter(metadata: EntryMetadata) -> str:
 
     # Required fields
     parts.append(f"title: {metadata.title}")
+
+    # Description (one-line summary for search results)
+    if metadata.description:
+        parts.append(f"description: {metadata.description}")
+
     parts.append("tags:")
     parts.append(_format_yaml_list(metadata.tags))
     parts.append(f"created: {metadata.created.isoformat()}")
@@ -169,6 +174,7 @@ def update_metadata_for_edit(
 
     return EntryMetadata(
         title=metadata.title,
+        description=metadata.description,
         tags=new_tags if new_tags is not None else list(metadata.tags),
         created=metadata.created,
         updated=datetime.now(timezone.utc),
