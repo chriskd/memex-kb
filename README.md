@@ -6,7 +6,6 @@ Personal knowledge base with hybrid search (keyword + semantic).
 
 - **Hybrid search** - Keyword (Whoosh) + semantic (ChromaDB) search
 - **CLI tool** - `mx` command for terminal and agent workflows
-- **MCP server** - For Claude Desktop and MCP-compatible tools
 - **Bidirectional links** - Obsidian-style `[[links]]` with backlink tracking
 
 ## Installation
@@ -55,12 +54,44 @@ By default, searches include both KBs. Results show prefixes when both exist:
 - `@project/guides/setup.md`
 - `@user/notes/ideas.md`
 
-To target a specific KB:
+### Additive Scope (Default)
+
+By default, operations span **both** project and user KBs:
+
 ```bash
-mx add --title="Note" --scope=project   # Add to project KB
-mx add --title="Note" --scope=user      # Add to user KB
-mx search "query" --project-only        # Search project KB only
+# Search finds entries from project KB AND user KB
+mx search "deployment"
+
+# Restrict to project KB only
+mx search "deployment" --scope=project
+mx list --scope=project
 ```
+
+Results from different KBs use scope prefixes when both exist:
+- `@project/guides/setup.md` - Entry from project KB
+- `@user/personal/notes.md` - Entry from user KB
+
+### Explicit Scope for Writes
+
+When adding entries, use `--scope` to explicitly choose which KB:
+
+```bash
+# Add to project KB (shared with team)
+mx add --title="API Guide" --tags="api" --scope=project --content="..."
+
+# Add to user KB (personal notes)
+mx add --title="My Notes" --tags="personal" --scope=user --content="..."
+
+# Auto-detect (default): project KB if in project, else user KB
+mx add --title="Note" --tags="test" --content="..."
+```
+
+**When to use each scope:**
+
+| Scope | Use For |
+|-------|---------|
+| `project` | Team knowledge, infra docs, shared patterns, API docs |
+| `user` | Personal notes, experiments, drafts, individual workflow tips |
 
 ## CLI Reference
 
@@ -99,16 +130,6 @@ Add to `.claude/settings.local.json`:
   "permissions": { "allow": ["Bash(mx:*)"] },
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx prime" }] }]
-  }
-}
-```
-
-Or use the MCP server in `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "memex": { "type": "stdio", "command": "memex" }
   }
 }
 ```

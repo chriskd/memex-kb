@@ -281,7 +281,7 @@ Show recently modified entries.
 ```bash
 mx whats-new                      # Last 30 days
 mx whats-new --days=7             # Last week
-mx whats-new --project=myapp      # Filter by project
+mx whats-new --scope=project      # Project KB only
 mx whats-new --limit=20           # More results
 ```
 

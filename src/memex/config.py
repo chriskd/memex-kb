@@ -39,14 +39,13 @@ def get_user_kb_root() -> Path | None:
     return None
 
 
-def get_kb_roots(project_only: bool = False) -> list[Path]:
+def get_kb_roots(scope: str | None = None) -> list[Path]:
     """Get all active KB root directories.
 
     By default, returns both project and user KBs (additive scope).
-    Use project_only=True to restrict to project KB only.
 
     Args:
-        project_only: If True, only return project KB (not user KB).
+        scope: Filter to specific scope - "project", "user", or None for all.
 
     Returns:
         List of KB paths. Project KB comes first if present.
@@ -57,20 +56,21 @@ def get_kb_roots(project_only: bool = False) -> list[Path]:
     if root:
         return [Path(root)]
 
-    roots = []
-
-    # Project KB (if in a project with .kbconfig)
     project_kb = get_project_kb_root()
-    if project_kb:
-        roots.append(project_kb)
+    user_kb = get_user_kb_root()
 
-    # User KB (unless project_only is set)
-    if not project_only:
-        user_kb = get_user_kb_root()
+    if scope == "project":
+        return [project_kb] if project_kb else []
+    elif scope == "user":
+        return [user_kb] if user_kb else []
+    else:
+        # Return both KBs
+        roots = []
+        if project_kb:
+            roots.append(project_kb)
         if user_kb and user_kb not in roots:
             roots.append(user_kb)
-
-    return roots
+        return roots
 
 
 def get_kb_root_by_scope(scope: str) -> Path:
@@ -199,11 +199,11 @@ def resolve_scoped_path(path: str) -> Path:
     return kb_root / relative
 
 
-def get_kb_roots_for_indexing(project_only: bool = False) -> list[tuple[str, Path]]:
+def get_kb_roots_for_indexing(scope: str | None = None) -> list[tuple[str | None, Path]]:
     """Get KB roots formatted for indexing (with scope labels).
 
     Args:
-        project_only: If True, only return project KB.
+        scope: Filter to specific scope - "project", "user", or None for all.
 
     Returns:
         List of (scope, path) tuples for use with HybridSearcher.reindex().
@@ -212,8 +212,6 @@ def get_kb_roots_for_indexing(project_only: bool = False) -> list[tuple[str, Pat
     root = os.environ.get("MEMEX_KB_ROOT")
     if root:
         return [(None, Path(root))]
-
-    result = []
 
     project_kb = get_project_kb_root()
     user_kb = get_user_kb_root()
@@ -224,13 +222,19 @@ def get_kb_roots_for_indexing(project_only: bool = False) -> list[tuple[str, Pat
     if user_kb and not project_kb:
         return [(None, user_kb)]
 
-    # Multi-KB mode: add scope prefixes
-    if project_kb:
-        result.append(("project", project_kb))
-    if not project_only and user_kb:
-        result.append(("user", user_kb))
-
-    return result
+    # Multi-KB mode: filter by scope or return both
+    if scope == "project":
+        return [("project", project_kb)] if project_kb else []
+    elif scope == "user":
+        return [("user", user_kb)] if user_kb else []
+    else:
+        # Return both KBs
+        result = []
+        if project_kb:
+            result.append(("project", project_kb))
+        if user_kb:
+            result.append(("user", user_kb))
+        return result
 
 
 def _discover_project_config(start_dir: Path | None = None, max_depth: int = 10) -> tuple[Path, Path] | None:

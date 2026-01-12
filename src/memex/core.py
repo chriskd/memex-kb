@@ -726,6 +726,7 @@ async def search(
     include_content: bool = False,
     kb_context: KBContext | None = None,
     strict: bool = False,
+    scope: str | None = None,
 ) -> SearchResponse:
     """Search the knowledge base.
 
@@ -741,6 +742,7 @@ async def search(
         strict: If True, use a higher similarity threshold to filter out
                 low-confidence semantic matches. Prevents misleading scores
                 for gibberish or unrelated queries.
+        scope: Filter to specific scope - "project", "user", or None for all.
 
     Returns:
         SearchResponse with results and optional warnings.
@@ -755,6 +757,11 @@ async def search(
         query, limit=limit, mode=mode, project_context=project_context, kb_context=kb_context, strict=strict
     )
     warnings: list[str] = []
+
+    # Filter by scope if specified (matches @project/ or @user/ prefix)
+    if scope:
+        scope_prefix = f"@{scope}/"
+        results = [r for r in results if r.path.startswith(scope_prefix)]
 
     # Filter by tags if specified
     if tags:
@@ -1371,6 +1378,7 @@ async def list_entries(
     tag: str | None = None,
     recursive: bool = True,
     limit: int = 20,
+    scope: str | None = None,
 ) -> list[dict]:
     """List KB entries.
 
@@ -1382,61 +1390,68 @@ async def list_entries(
         recursive: If True (default), include entries in subdirectories.
                    If False, only list direct children of the directory.
         limit: Maximum number of entries to return (default 20).
+        scope: Filter to specific scope - "project", "user", or None for all.
 
     Returns:
         List of {path, title, tags, created, updated} dictionaries.
     """
-    kb_root = get_kb_root()
+    from .config import get_kb_roots_for_indexing
 
-    if not kb_root.exists():
+    kb_roots = get_kb_roots_for_indexing(scope=scope)
+    if not kb_roots:
         return []
-
-    # Determine search path: prefer 'directory' over 'category'
-    if directory:
-        abs_path, _ = validate_nested_path(directory)
-        if not abs_path.exists() or not abs_path.is_dir():
-            raise ValueError(f"Directory not found: {directory}")
-        search_path = abs_path
-    elif category:
-        search_path = kb_root / category
-        if not search_path.exists() or not search_path.is_dir():
-            raise ValueError(f"Category not found: {category}")
-    else:
-        search_path = kb_root
 
     results = []
 
-    # Choose glob pattern based on recursive flag
-    md_files = search_path.rglob("*.md") if recursive else search_path.glob("*.md")
-
-    for md_file in md_files:
-        # Skip index files
-        if md_file.name.startswith("_"):
+    for scope_label, kb_root in kb_roots:
+        if not kb_root.exists():
             continue
 
-        rel_path = str(md_file.relative_to(kb_root))
+        # Determine search path: prefer 'directory' over 'category'
+        if directory:
+            search_path = kb_root / directory
+            if not search_path.exists() or not search_path.is_dir():
+                continue  # Skip this KB if directory doesn't exist
+        elif category:
+            search_path = kb_root / category
+            if not search_path.exists() or not search_path.is_dir():
+                continue  # Skip this KB if category doesn't exist
+        else:
+            search_path = kb_root
 
-        try:
-            metadata, _, _ = parse_entry(md_file)
-        except ParseError:
-            continue
+        # Choose glob pattern based on recursive flag
+        md_files = search_path.rglob("*.md") if recursive else search_path.glob("*.md")
 
-        # Filter by tag if specified
-        if tag and tag not in metadata.tags:
-            continue
+        for md_file in md_files:
+            # Skip index files
+            if md_file.name.startswith("_"):
+                continue
 
-        results.append(
-            {
-                "path": rel_path,
-                "title": metadata.title,
-                "tags": metadata.tags,
-                "created": metadata.created.isoformat() if metadata.created else None,
-                "updated": metadata.updated.isoformat() if metadata.updated else None,
-            }
-        )
+            rel_path = str(md_file.relative_to(kb_root))
+            # Add scope prefix for multi-KB mode
+            display_path = f"@{scope_label}/{rel_path}" if scope_label else rel_path
 
-        if len(results) >= limit:
-            break
+            try:
+                metadata, _, _ = parse_entry(md_file)
+            except ParseError:
+                continue
+
+            # Filter by tag if specified
+            if tag and tag not in metadata.tags:
+                continue
+
+            results.append(
+                {
+                    "path": display_path,
+                    "title": metadata.title,
+                    "tags": metadata.tags,
+                    "created": metadata.created.isoformat() if metadata.created else None,
+                    "updated": metadata.updated.isoformat() if metadata.updated else None,
+                }
+            )
+
+            if len(results) >= limit:
+                return results
 
     return results
 
@@ -1532,7 +1547,7 @@ async def whats_new(
     include_updated: bool = True,
     category: str | None = None,
     tag: str | None = None,
-    project: str | None = None,
+    scope: str | None = None,
 ) -> list[dict]:
     """List recent KB entries.
 
@@ -1543,90 +1558,76 @@ async def whats_new(
         include_updated: Include recently updated entries (default True).
         category: Optional category filter.
         tag: Optional tag filter.
-        project: Optional project filter. Matches entries where:
-            - Path starts with "projects/{project}/" (project-specific docs)
-            - source_project metadata equals the project name
-            - Tags contain the project name
+        scope: Filter to specific scope - "project", "user", or None for all.
 
     Returns:
         List of {path, title, tags, created, updated, activity_type, activity_date, source_project}.
     """
-    kb_root = get_kb_root()
+    from .config import get_kb_roots_for_indexing
 
-    if not kb_root.exists():
+    kb_roots = get_kb_roots_for_indexing(scope=scope)
+    if not kb_roots:
         return []
-
-    # Determine search path
-    if category:
-        search_path = kb_root / category
-        if not search_path.exists() or not search_path.is_dir():
-            raise ValueError(f"Category not found: {category}")
-    else:
-        search_path = kb_root
 
     cutoff_datetime = datetime.now(timezone.utc) - timedelta(days=days)
     candidates: list[dict] = []
 
-    for md_file in search_path.rglob("*.md"):
-        if md_file.name.startswith("_"):
+    for scope_label, kb_root in kb_roots:
+        if not kb_root.exists():
             continue
 
-        rel_path = str(md_file.relative_to(kb_root))
+        # Determine search path
+        if category:
+            search_path = kb_root / category
+            if not search_path.exists() or not search_path.is_dir():
+                continue  # Skip this KB if category doesn't exist
+        else:
+            search_path = kb_root
 
-        try:
-            metadata, _, _ = parse_entry(md_file)
-        except ParseError:
-            continue
-
-        # Filter by tag if specified
-        if tag and tag not in metadata.tags:
-            continue
-
-        # Filter by project if specified
-        if project:
-            project_lower = project.lower()
-            matches_project = False
-
-            # Check 1: Path starts with projects/{project}/
-            if rel_path.lower().startswith(f"projects/{project_lower}/"):
-                matches_project = True
-            # Check 2: source_project metadata matches
-            elif metadata.source_project and metadata.source_project.lower() == project_lower:
-                matches_project = True
-            # Check 3: Project name appears in tags
-            elif any(t.lower() == project_lower for t in metadata.tags):
-                matches_project = True
-
-            if not matches_project:
+        for md_file in search_path.rglob("*.md"):
+            if md_file.name.startswith("_"):
                 continue
 
-        # Determine activity type and datetime
-        activity_type: str | None = None
-        activity_date: datetime | None = None
+            rel_path = str(md_file.relative_to(kb_root))
+            # Add scope prefix for multi-KB mode
+            display_path = f"@{scope_label}/{rel_path}" if scope_label else rel_path
 
-        # Check updated first (takes precedence if both qualify)
-        if include_updated and metadata.updated and metadata.updated >= cutoff_datetime:
-            activity_type = "updated"
-            activity_date = metadata.updated
-        elif include_created and metadata.created >= cutoff_datetime:
-            activity_type = "created"
-            activity_date = metadata.created
+            try:
+                metadata, _, _ = parse_entry(md_file)
+            except ParseError:
+                continue
 
-        if activity_type is None:
-            continue
+            # Filter by tag if specified
+            if tag and tag not in metadata.tags:
+                continue
 
-        candidates.append(
-            {
-                "path": rel_path,
-                "title": metadata.title,
-                "tags": metadata.tags,
-                "created": metadata.created.isoformat() if metadata.created else None,
-                "updated": metadata.updated.isoformat() if metadata.updated else None,
-                "activity_type": activity_type,
-                "activity_date": activity_date.isoformat(),
-                "source_project": metadata.source_project,
-            }
-        )
+            # Determine activity type and datetime
+            activity_type: str | None = None
+            activity_date: datetime | None = None
+
+            # Check updated first (takes precedence if both qualify)
+            if include_updated and metadata.updated and metadata.updated >= cutoff_datetime:
+                activity_type = "updated"
+                activity_date = metadata.updated
+            elif include_created and metadata.created >= cutoff_datetime:
+                activity_type = "created"
+                activity_date = metadata.created
+
+            if activity_type is None:
+                continue
+
+            candidates.append(
+                {
+                    "path": display_path,
+                    "title": metadata.title,
+                    "tags": metadata.tags,
+                    "created": metadata.created.isoformat() if metadata.created else None,
+                    "updated": metadata.updated.isoformat() if metadata.updated else None,
+                    "activity_type": activity_type,
+                    "activity_date": activity_date.isoformat(),
+                    "source_project": metadata.source_project,
+                }
+            )
 
     # Sort by activity_date descending
     candidates.sort(key=lambda x: x["activity_date"], reverse=True)
@@ -1719,11 +1720,11 @@ async def backlinks(path: str) -> list[str]:
     return all_backlinks.get(path_key, [])
 
 
-async def reindex(project_only: bool = False) -> IndexStatus:
+async def reindex(scope: str | None = None) -> IndexStatus:
     """Rebuild search indices.
 
     Args:
-        project_only: If True, only index project KB (not user KB).
+        scope: Filter to specific scope - "project", "user", or None for all.
 
     Returns:
         IndexStatus with document counts.
@@ -1731,7 +1732,7 @@ async def reindex(project_only: bool = False) -> IndexStatus:
     from .config import get_kb_roots_for_indexing
 
     searcher = get_searcher()
-    kb_roots = get_kb_roots_for_indexing(project_only=project_only)
+    kb_roots = get_kb_roots_for_indexing(scope=scope)
 
     # Index all KBs
     if kb_roots:
@@ -1767,6 +1768,7 @@ async def tree(
     path: str = "",
     depth: int = 3,
     include_files: bool = True,
+    scope: str | None = None,
 ) -> dict:
     """Show directory tree.
 
@@ -1774,25 +1776,22 @@ async def tree(
         path: Starting path relative to KB root (empty for root).
         depth: Maximum depth to display (default 3).
         include_files: Whether to include .md files (default True).
+        scope: Filter to specific scope - "project", "user", or None for all.
 
     Returns:
         Dict with tree structure and counts.
     """
-    kb_root = get_kb_root()
+    from .config import get_kb_roots_for_indexing
 
-    if path:
-        abs_path, _ = validate_nested_path(path)
-        if not abs_path.is_dir():
-            raise ValueError(f"Path is not a directory: {path}")
-        start_path = abs_path
-    else:
-        start_path = kb_root
+    kb_roots = get_kb_roots_for_indexing(scope=scope)
+    if not kb_roots:
+        return {"tree": {}, "directories": 0, "files": 0}
 
-    def _build_tree(current: Path, current_depth: int) -> dict:
+    def _build_tree(current: Path, current_depth: int, max_depth: int) -> dict:
         """Recursively build tree structure."""
         result = {}
 
-        if current_depth >= depth:
+        if current_depth >= max_depth:
             return result
 
         try:
@@ -1806,7 +1805,7 @@ async def tree(
                 continue
 
             if item.is_dir():
-                children = _build_tree(item, current_depth + 1)
+                children = _build_tree(item, current_depth + 1, max_depth)
                 result[item.name] = {"_type": "directory", **children}
             elif item.is_file() and item.suffix == ".md" and include_files:
                 # Try to get title from frontmatter
@@ -1819,8 +1818,6 @@ async def tree(
                 result[item.name] = {"_type": "file", "title": title}
 
         return result
-
-    tree_data = _build_tree(start_path, 0)
 
     # Count directories and files
     def _count(node: dict) -> tuple[int, int]:
@@ -1838,10 +1835,36 @@ async def tree(
                     files += 1
         return dirs, files
 
-    total_dirs, total_files = _count(tree_data)
+    # Build tree for each KB root
+    combined_tree = {}
+    total_dirs, total_files = 0, 0
+
+    for scope_label, kb_root in kb_roots:
+        if not kb_root.exists():
+            continue
+
+        if path:
+            start_path = kb_root / path
+            if not start_path.is_dir():
+                continue  # Skip this KB if path doesn't exist
+        else:
+            start_path = kb_root
+
+        tree_data = _build_tree(start_path, 0, depth)
+        dirs, files = _count(tree_data)
+        total_dirs += dirs
+        total_files += files
+
+        # In multi-KB mode, nest under @scope/ prefix
+        if scope_label:
+            combined_tree[f"@{scope_label}"] = {"_type": "directory", **tree_data}
+            total_dirs += 1  # Count the scope directory itself
+        else:
+            # Single KB mode - use tree directly
+            combined_tree = tree_data
 
     return {
-        "tree": tree_data,
+        "tree": combined_tree,
         "directories": total_dirs,
         "files": total_files,
     }
