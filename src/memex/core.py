@@ -1926,7 +1926,17 @@ async def health(
 
     # Collect all entries and their metadata
     all_entries: dict[str, dict] = {}  # path -> {title, tags, created, updated, links}
+    # Use timezone-aware datetime (UTC) for comparison
     cutoff_datetime = datetime.now(timezone.utc) - timedelta(days=stale_days)
+
+    def make_aware(dt: datetime | None) -> datetime | None:
+        """Ensure datetime is timezone-aware for comparison."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            # Assume naive datetimes are UTC
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
 
     for md_file in kb_root.rglob("*.md"):
         if md_file.name.startswith("_"):
@@ -1990,7 +2000,7 @@ async def health(
     # Check for stale entries
     if check_stale:
         for path_key, entry in all_entries.items():
-            last_activity = entry["updated"] or entry["created"]
+            last_activity = make_aware(entry["updated"]) or make_aware(entry["created"])
             if last_activity and last_activity < cutoff_datetime:
                 days_old = (datetime.now(timezone.utc) - last_activity).days
                 results["stale"].append({
