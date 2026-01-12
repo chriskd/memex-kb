@@ -103,3 +103,88 @@ class ViewStats(BaseModel):
     total_views: int = 0
     last_viewed: datetime | None = None
     views_by_day: dict[str, int] = Field(default_factory=dict)  # ISO date -> count
+
+
+class SearchSuggestion(BaseModel):
+    """A search suggestion when results are sparse."""
+
+    query: str  # The suggested query
+    reason: str  # Why this was suggested (e.g., "similar spelling", "related tag")
+
+
+class PotentialDuplicate(BaseModel):
+    """A potential duplicate entry detected before creation."""
+
+    path: str  # Path to the existing entry
+    title: str  # Title of the existing entry
+    score: float  # Semantic similarity score (0-1)
+    tags: list[str] = Field(default_factory=list)  # Tags for context
+
+
+class AddEntryPreview(BaseModel):
+    """Preview data for add_entry without creating a file."""
+
+    path: str  # Relative path where entry would be created
+    absolute_path: str  # Absolute path on disk
+    frontmatter: str  # Generated YAML frontmatter
+    content: str  # Final content (including related links if provided)
+    potential_duplicates: list[PotentialDuplicate] = Field(default_factory=list)
+    warning: str | None = None  # Warning message if duplicates detected
+
+
+class UpsertMatch(BaseModel):
+    """A potential match for upsert title search."""
+
+    path: str  # Path to the entry
+    title: str  # Entry title
+    score: float  # Confidence score (0-1)
+    match_type: str  # How matched: 'exact_title', 'alias', 'fuzzy'
+
+
+class UpsertResult(BaseModel):
+    """Result of upsert operation."""
+
+    path: str  # Path to the entry (created or updated)
+    action: Literal["created", "appended", "replaced"]  # What action was taken
+    title: str  # Title of the entry
+    matched_by: str | None = None  # How matched: 'exact_title', 'alias', 'fuzzy', None if created
+    match_score: float | None = None  # Confidence score if matched
+
+
+class SessionLogResult(BaseModel):
+    """Result of session-log operation."""
+
+    path: str  # Path to the session entry
+    action: Literal["appended", "created"]  # What action was taken
+    project: str | None = None  # Detected project name
+    context_source: str | None = None  # How context was determined
+
+
+class SearchHistoryEntry(BaseModel):
+    """A recorded search query."""
+
+    query: str  # The search query string
+    timestamp: datetime  # When the search was executed
+    result_count: int = 0  # Number of results returned
+    mode: str = "hybrid"  # Search mode used (hybrid, keyword, semantic)
+    tags: list[str] = Field(default_factory=list)  # Tag filters applied
+
+
+class BatchOperationResult(BaseModel):
+    """Result of a single batch operation."""
+
+    index: int  # Index in the batch
+    command: str  # The command that was executed
+    success: bool  # Whether it succeeded
+    result: dict | None = None  # Result if successful
+    error: str | None = None  # Error message if failed
+    error_code: str | None = None  # Error code if failed
+
+
+class BatchResponse(BaseModel):
+    """Response from batch command execution."""
+
+    total: int  # Total commands processed
+    succeeded: int  # Number that succeeded
+    failed: int  # Number that failed
+    results: list[BatchOperationResult]  # Per-operation results

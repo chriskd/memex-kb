@@ -79,6 +79,164 @@ def output(data, as_json: bool = False):
         click.echo(data)
 
 
+def _handle_error(
+    ctx: click.Context,
+    error: Exception,
+    fallback_message: str | None = None,
+    exit_code: int = 1,
+) -> None:
+    """Handle an error with optional JSON output.
+
+    If --json-errors is enabled, outputs structured JSON error.
+    Otherwise, outputs human-readable error message.
+
+    Args:
+        ctx: Click context (must have obj["json_errors"] set).
+        error: The exception that occurred.
+        fallback_message: Optional message to use for non-MemexError exceptions.
+        exit_code: Exit code to use (default 1). Some commands use specific codes.
+    """
+    from .errors import MemexError, format_error_json
+
+    json_errors = ctx.obj.get("json_errors", False) if ctx.obj else False
+
+    if isinstance(error, MemexError):
+        if json_errors:
+            click.echo(error.to_json(), err=True)
+        else:
+            click.echo(f"Error: {_normalize_error_message(error.message)}", err=True)
+    else:
+        message = fallback_message or str(error)
+        if json_errors:
+            # Map common exceptions to error codes
+            code = _infer_error_code(error, message)
+            click.echo(format_error_json(code, _normalize_error_message(message)), err=True)
+        else:
+            click.echo(f"Error: {_normalize_error_message(message)}", err=True)
+
+    sys.exit(exit_code)
+
+
+def _infer_error_code(error: Exception, message: str):
+    """Infer an error code from exception type and message.
+
+    Used for backwards compatibility when non-MemexError exceptions are raised.
+    """
+    from .errors import ErrorCode
+
+    message_lower = message.lower()
+
+    # Check exception types first
+    if isinstance(error, FileNotFoundError):
+        return ErrorCode.ENTRY_NOT_FOUND
+    if isinstance(error, PermissionError):
+        return ErrorCode.PERMISSION_DENIED
+
+    # Check message patterns
+    if "not found" in message_lower:
+        return ErrorCode.ENTRY_NOT_FOUND
+    if "already exists" in message_lower:
+        return ErrorCode.ENTRY_EXISTS
+    if "duplicate" in message_lower:
+        return ErrorCode.DUPLICATE_DETECTED
+    if "invalid path" in message_lower or "path escapes" in message_lower:
+        return ErrorCode.INVALID_PATH
+    if "ambiguous" in message_lower:
+        return ErrorCode.AMBIGUOUS_MATCH
+    if "category" in message_lower and ("required" in message_lower or "not found" in message_lower):
+        return ErrorCode.INVALID_CATEGORY
+    if "tag" in message_lower and "required" in message_lower:
+        return ErrorCode.INVALID_TAGS
+    if "index" in message_lower and "unavailable" in message_lower:
+        return ErrorCode.INDEX_UNAVAILABLE
+    if "semantic" in message_lower and ("unavailable" in message_lower or "not available" in message_lower):
+        return ErrorCode.SEMANTIC_SEARCH_UNAVAILABLE
+    if "parse" in message_lower or "frontmatter" in message_lower:
+        return ErrorCode.PARSE_ERROR
+
+    # Default to a generic file error
+    return ErrorCode.FILE_READ_ERROR
+
+
+def _normalize_error_message(message: str) -> str:
+    """Normalize core error messages to CLI-friendly guidance."""
+    normalized = message.replace("force=True", "--force")
+    normalized = normalized.replace(
+        "Either 'category' or 'directory' must be provided",
+        "Either --category must be provided",
+    )
+    normalized = normalized.replace(
+        "Use rmdir for directories.",
+        "Delete entries inside or remove the directory manually.",
+    )
+    return normalized
+
+
+def _format_missing_category_error(tags: list[str], message: str) -> str:
+    """Format a helpful error when category is required."""
+    from . import core
+
+    valid_categories = core.get_valid_categories()
+    tag_set = {tag.strip().lower() for tag in tags if tag.strip()}
+    matches = [category for category in valid_categories if category.lower() in tag_set]
+    suggestion = matches[0] if len(matches) == 1 else None
+
+    lines = ["Error: --category required."]
+    if "no .kbcontext file found" in message.lower():
+        lines.append("No .kbcontext primary found. Run 'mx context init' or pass --category.")
+    if tags:
+        lines.append(f"Your tags: {', '.join(tags)}")
+    if suggestion:
+        lines.append(f"Suggested: --category={suggestion}")
+    elif matches:
+        lines.append(f"Tags matched categories: {', '.join(matches)}")
+    if valid_categories:
+        lines.append(f"Available categories: {', '.join(valid_categories)}")
+    lines.append(
+        "Example: mx add --title=\"...\" --tags=\"...\" --category=... --content=\"...\""
+    )
+    return "\n".join(lines)
+
+
+def _handle_add_error(ctx: click.Context, error: Exception, tags: list[str]) -> None:
+    """Handle errors from add/quick-add with special category error formatting.
+
+    Supports --json-errors output while preserving the category error guidance
+    for human-readable output.
+    """
+    from .errors import ErrorCode, MemexError
+
+    message = str(error)
+    json_errors = ctx.obj.get("json_errors", False) if ctx.obj else False
+
+    # Special handling for category errors
+    if "Either 'category' or 'directory' must be provided" in message:
+        if json_errors:
+            from . import core
+
+            valid_categories = core.get_valid_categories()
+            tag_set = {tag.strip().lower() for tag in tags if tag.strip()}
+            matches = [cat for cat in valid_categories if cat.lower() in tag_set]
+
+            error = MemexError(
+                ErrorCode.INVALID_CATEGORY,
+                "--category is required",
+                {
+                    "suggestion": "Provide --category or run 'mx context init'",
+                    "available_categories": valid_categories,
+                    "matching_tags": matches if matches else None,
+                    "your_tags": tags,
+                },
+            )
+            click.echo(error.to_json(), err=True)
+        else:
+            click.echo(_format_missing_category_error(tags, message), err=True)
+        sys.exit(1)
+
+    # Use standard error handler for other errors
+    _handle_error(ctx, error)
+
+
 def format_json_error(code: str, message: str, details: Optional[dict] = None) -> str:
     """Format an error as JSON for --json-errors output."""
     error = {"error": {"code": code, "message": message}}
@@ -174,16 +332,190 @@ class JsonErrorGroup(click.Group):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Status Output (default when no subcommand)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _show_status() -> None:
+    """Show KB status with context, recent entries, and suggested commands.
+
+    Displayed when running `mx` with no arguments. Provides quick orientation
+    for agents and humans about the current KB state.
+    """
+    from .config import ConfigurationError, get_kb_root
+    from .context import get_kb_context
+
+    # Track what we successfully loaded
+    kb_root = None
+    context = None
+    entries = []
+    project_name = None
+
+    # Try to get KB configuration
+    try:
+        kb_root = get_kb_root()
+    except ConfigurationError:
+        pass
+
+    # Try to get context
+    context = get_kb_context()
+    if context:
+        project_name = context.get_project_name()
+    else:
+        # Fallback to current directory name as project
+        project_name = Path.cwd().name
+
+    # Get recent entries if KB is available
+    if kb_root and kb_root.exists():
+        entries = _get_recent_entries_for_status(kb_root, project_name, limit=5)
+
+    # Build output
+    _output_status(kb_root, context, entries, project_name)
+
+
+def _get_recent_entries_for_status(
+    kb_root: Path, project: str | None, limit: int = 5
+) -> list[dict]:
+    """Get recent entries for status display.
+
+    Tries to get project-specific entries first, falls back to all entries.
+
+    Args:
+        kb_root: Knowledge base root directory.
+        project: Optional project name to filter by.
+        limit: Maximum entries to return.
+
+    Returns:
+        List of entry dicts with path, title, date, activity_type.
+    """
+    from .core import whats_new as core_whats_new
+
+    try:
+        # Try project-specific first
+        if project:
+            entries = run_async(core_whats_new(days=14, limit=limit, project=project))
+            if entries:
+                return entries
+
+        # Fall back to all recent entries
+        return run_async(core_whats_new(days=14, limit=limit))
+    except Exception:
+        # Fail silently - status output should be resilient
+        return []
+
+
+def _output_status(
+    kb_root: Path | None,
+    context,  # KBContext | None
+    entries: list[dict],
+    project_name: str | None,
+) -> None:
+    """Output the status display.
+
+    Args:
+        kb_root: KB root path (None if not configured).
+        context: Loaded KBContext (None if no .kbcontext).
+        entries: Recent entries to display.
+        project_name: Current project name.
+    """
+    lines = []
+
+    # Header
+    lines.append("Memex Knowledge Base")
+    lines.append("=" * 40)
+
+    # Context section
+    if kb_root:
+        lines.append(f"KB Root: {kb_root}")
+
+        if context:
+            lines.append(f"Context: {context.source_file}")
+            if context.primary:
+                lines.append(f"Primary: {context.primary}")
+            if context.default_tags:
+                lines.append(f"Tags:    {', '.join(context.default_tags)}")
+        elif project_name:
+            lines.append(f"Project: {project_name} (auto-detected)")
+            lines.append("         Run 'mx init' to configure")
+        else:
+            lines.append("Context: (none)")
+    else:
+        lines.append("KB Root: NOT CONFIGURED")
+        lines.append("")
+        lines.append("Set MEMEX_KB_ROOT and MEMEX_INDEX_ROOT environment variables")
+        lines.append("to point to your knowledge base directory.")
+
+    # Recent entries section
+    if entries:
+        lines.append("")
+        header = "Recent Entries"
+        if project_name and any(
+            e.get("path", "").startswith(f"projects/{project_name}")
+            or project_name in e.get("tags", [])
+            for e in entries
+        ):
+            header = f"Recent Entries ({project_name})"
+        lines.append(header)
+        lines.append("-" * 40)
+
+        for e in entries[:5]:
+            activity = "NEW" if e.get("activity_type") == "created" else "UPD"
+            date_str = str(e.get("activity_date", ""))[:10]
+            path = e.get("path", "")
+            title = e.get("title", "Untitled")
+
+            # Truncate path if too long
+            if len(path) > 35:
+                path = "..." + path[-32:]
+
+            lines.append(f"  {activity} {date_str}  {path}")
+            if title and title != path:
+                lines.append(f"                      {title[:40]}")
+
+    # Suggested commands section
+    lines.append("")
+    lines.append("Commands")
+    lines.append("-" * 40)
+
+    if not kb_root:
+        lines.append("  mx --help           Show all commands")
+    else:
+        if entries:
+            # KB has content
+            lines.append("  mx search \"query\"   Search the knowledge base")
+            lines.append("  mx whats-new        Recent changes")
+            lines.append("  mx tree             Browse structure")
+        else:
+            # Empty KB
+            lines.append("  mx add --title=\"...\" --tags=\"...\"  Add first entry")
+            lines.append("  mx tree             Browse structure")
+
+        if not context:
+            lines.append("  mx context init     Set up project context")
+
+        lines.append("  mx --help           Show all commands")
+
+    # Output
+    click.echo("\n".join(lines))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main CLI Group
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@click.group(cls=JsonErrorGroup)
+@click.group(cls=JsonErrorGroup, invoke_without_command=True)
 @click.version_option(version="0.1.0", prog_name="mx")
 @click.option("--json-errors", "json_errors", is_flag=True,
               help="Output errors as JSON (for programmatic use)")
+@click.option(
+    "--quiet", "-q",
+    is_flag=True,
+    envvar="MEMEX_QUIET",
+    help="Suppress warnings, show only errors and essential output",
+)
 @click.pass_context
-def cli(ctx, json_errors: bool):
+def cli(ctx: click.Context, json_errors: bool, quiet: bool):
     """mx: Token-efficient CLI for memex knowledge base.
 
     Search, browse, and manage KB entries without MCP context overhead.
@@ -204,10 +536,29 @@ def cli(ctx, json_errors: bool):
     Modify content:
       mx patch path.md --find "old text" --replace "new text"
       mx update path.md --tags="new,tags"
+
+    \b
+    For programmatic error handling:
+      mx --json-errors add ...   # Errors output as JSON with error codes
+
+    \b
+    For quieter output:
+      mx --quiet search ...      # Suppress warnings
+      MEMEX_QUIET=1 mx search    # Or use environment variable
     """
-    # Store json_errors in context for subcommands to access
+    from ._logging import set_quiet_mode
+
+    # Store options in context for subcommands to access
     ctx.ensure_object(dict)
     ctx.obj["json_errors"] = json_errors
+    ctx.obj["quiet"] = quiet
+
+    if quiet:
+        set_quiet_mode(True)
+
+    # Show status when no subcommand is provided
+    if ctx.invoked_subcommand is None:
+        _show_status()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1619,6 +1970,735 @@ def patch(
                     click.echo(f"  {ctx['preview']}", err=True)
 
     sys.exit(exit_code)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Quick-Add Helper Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _extract_title_from_content(content: str) -> str:
+    """Extract title from markdown content.
+
+    Tries:
+    1. First H1 heading (# Title)
+    2. First H2 heading (## Title)
+    3. First non-empty line
+    4. First 50 chars of content
+    """
+    import re
+
+    lines = content.strip().split("\n")
+
+    # Try H1 heading
+    for line in lines:
+        if line.startswith("# "):
+            return line[2:].strip()
+
+    # Try H2 heading
+    for line in lines:
+        if line.startswith("## "):
+            return line[3:].strip()
+
+    # Try first non-empty line (strip markdown syntax)
+    for line in lines:
+        clean = re.sub(r"^[#*>\-\s]+", "", line).strip()
+        if clean and len(clean) > 3:
+            # Truncate if too long
+            if len(clean) > 60:
+                clean = clean[:57] + "..."
+            return clean
+
+    # Fallback to first 50 chars
+    return content[:50].strip() + "..."
+
+
+def _suggest_tags_from_content(content: str, existing_tags: set) -> list[str]:
+    """Suggest tags based on content keywords.
+
+    Args:
+        content: The entry content.
+        existing_tags: Set of existing KB tags.
+
+    Returns:
+        List of suggested tags.
+    """
+    import re
+
+    # Extract words from content
+    words = re.findall(r'\b[a-zA-Z][a-zA-Z0-9-]+\b', content.lower())
+    word_counts: dict[str, int] = {}
+    for word in words:
+        if len(word) >= 3:
+            word_counts[word] = word_counts.get(word, 0) + 1
+
+    # Find matches with existing tags
+    matches = []
+    for tag in existing_tags:
+        tag_lower = tag.lower()
+        if tag_lower in word_counts:
+            matches.append((tag, word_counts[tag_lower]))
+
+    # Sort by frequency and return top matches
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return [m[0] for m in matches[:5]]
+
+
+def _suggest_category_from_content(content: str, categories: list[str]) -> str | None:
+    """Suggest category based on content.
+
+    Args:
+        content: The entry content.
+        categories: List of valid categories.
+
+    Returns:
+        Suggested category or None.
+    """
+    content_lower = content.lower()
+
+    # Simple keyword matching
+    for cat in categories:
+        cat_lower = cat.lower()
+        if cat_lower in content_lower:
+            return cat
+
+    # Default to first category if available
+    return categories[0] if categories else None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Quick-Add Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command("quick-add")
+@click.option(
+    "--file", "-f", "file_path",
+    type=click.Path(exists=True), help="Read content from file",
+)
+@click.option("--stdin", is_flag=True, help="Read content from stdin")
+@click.option("--content", "-c", help="Raw content to add")
+@click.option("--title", "-t", help="Override auto-detected title")
+@click.option("--tags", help="Override auto-suggested tags (comma-separated)")
+@click.option("--category", help="Override auto-suggested category")
+@click.option("--confirm", "-y", is_flag=True, help="Auto-confirm without prompting")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def quick_add(
+    file_path: Optional[str],
+    stdin: bool,
+    content: Optional[str],
+    title: Optional[str],
+    tags: Optional[str],
+    category: Optional[str],
+    confirm: bool,
+    as_json: bool,
+):
+    """Quickly add content with auto-generated metadata.
+
+    Analyzes raw content to suggest title, tags, and category.
+    In interactive mode, prompts for confirmation before creating.
+
+    \b
+    Examples:
+      mx quick-add --stdin              # Paste content, auto-generate all
+      mx quick-add -f notes.md          # From file with auto metadata
+      mx quick-add -c "..." -y          # Auto-confirm creation
+      echo "..." | mx quick-add --stdin --json  # Machine-readable
+    """
+    from .core import add_entry, get_valid_categories
+
+    # Resolve content source
+    if stdin:
+        content = sys.stdin.read()
+    elif file_path:
+        content = Path(file_path).read_text()
+    elif not content:
+        click.echo("Error: Provide --content, --file, or --stdin", err=True)
+        sys.exit(1)
+
+    if not content.strip():
+        click.echo("Error: Content is empty", err=True)
+        sys.exit(1)
+
+    # Get existing KB structure
+    valid_categories = get_valid_categories()
+
+    # Collect all existing tags from KB
+    from .config import get_kb_root
+    from .parser import parse_entry
+
+    kb_root = get_kb_root()
+    existing_tags: set[str] = set()
+    try:
+        for md_file in kb_root.rglob("*.md"):
+            try:
+                metadata, _, _ = parse_entry(md_file)
+                existing_tags.update(metadata.tags)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # Auto-generate metadata
+    auto_title = title or _extract_title_from_content(content)
+    auto_tags = tags.split(",") if tags else _suggest_tags_from_content(content, existing_tags)
+    auto_category = category or _suggest_category_from_content(content, valid_categories)
+
+    # Ensure we have at least one tag
+    if not auto_tags:
+        auto_tags = ["uncategorized"]
+
+    if as_json:
+        # In JSON mode, output suggestions and let caller decide
+        output({
+            "title": auto_title,
+            "tags": auto_tags,
+            "category": auto_category,
+            "content_preview": content[:200] + "..." if len(content) > 200 else content,
+            "categories_available": valid_categories,
+        }, as_json=True)
+        return
+
+    # Interactive mode - show suggestions and prompt
+    click.echo("\n=== Quick Add Analysis ===\n")
+    click.echo(f"Title:    {auto_title}")
+    click.echo(f"Tags:     {', '.join(auto_tags)}")
+    click.echo(f"Category: {auto_category or '(none - will need to specify)'}")
+    click.echo(f"Content:  {len(content)} chars")
+
+    if not auto_category:
+        click.echo(f"\nAvailable categories: {', '.join(valid_categories)}")
+        default_cat = valid_categories[0] if valid_categories else "notes"
+        auto_category = click.prompt("Category", default=default_cat)
+
+    if not confirm:
+        if not click.confirm("\nCreate entry with these settings?"):
+            click.echo("Aborted.")
+            return
+
+    # Create the entry
+    try:
+        result = run_async(add_entry(
+            title=auto_title,
+            content=content,
+            tags=auto_tags,
+            category=auto_category,
+        ))
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    path = result.get('path') if isinstance(result, dict) else result.path
+    click.echo(f"\nCreated: {path}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Templates Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("action", default="list", type=click.Choice(["list", "show"]))
+@click.argument("name", required=False)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def templates(action: str, name: Optional[str], as_json: bool):
+    """List or show entry templates.
+
+    \b
+    Examples:
+      mx templates              # List all available templates
+      mx templates list         # Same as above
+      mx templates show pattern # Show the 'pattern' template content
+
+    \b
+    Templates provide scaffolding for structured entries. Use with:
+      mx add --title="..." --tags="..." --template=<name>
+
+    \b
+    Template sources (in priority order):
+      1. Project: .kbcontext templates: section
+      2. User: ~/.config/memex/templates/*.yaml
+      3. Built-in: troubleshooting, project, pattern, decision, runbook, api, meeting
+    """
+    from .templates import get_template, list_templates
+
+    if action == "show":
+        if not name:
+            click.echo("Usage: mx templates show <name>", err=True)
+            sys.exit(1)
+
+        template = get_template(name)
+        if not template:
+            available = ", ".join(t.name for t in list_templates())
+            click.echo(f"Unknown template: {name}", err=True)
+            click.echo(f"Available: {available}", err=True)
+            sys.exit(1)
+
+        if as_json:
+            output({
+                "name": template.name,
+                "description": template.description,
+                "content": template.content,
+                "suggested_tags": template.suggested_tags,
+                "source": template.source,
+            }, as_json=True)
+            return
+
+        click.echo(f"Template: {template.name}")
+        click.echo(f"Source: {template.source}")
+        click.echo(f"Description: {template.description}")
+        if template.suggested_tags:
+            click.echo(f"Suggested tags: {', '.join(template.suggested_tags)}")
+        click.echo()
+        click.echo("Content:")
+        click.echo("-" * 40)
+        click.echo(template.content if template.content else "(empty)")
+        return
+
+    # List templates
+    all_templates = list_templates()
+
+    if as_json:
+        output([{
+            "name": t.name,
+            "description": t.description,
+            "source": t.source,
+            "suggested_tags": t.suggested_tags,
+        } for t in all_templates], as_json=True)
+        return
+
+    click.echo("Available templates:\n")
+    for t in all_templates:
+        source_badge = f"[{t.source}]" if t.source != "builtin" else ""
+        click.echo(f"  {t.name:16} {t.description} {source_badge}")
+
+    click.echo()
+    click.echo("Use: mx add --title='...' --tags='...' --template=<name>")
+    click.echo("Show: mx templates show <name>")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Info Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def info(as_json: bool):
+    """Show knowledge base configuration and stats.
+
+    \b
+    Examples:
+      mx info
+      mx info --json
+    """
+    from .config import ConfigurationError, get_index_root, get_kb_root
+    from .core import get_valid_categories
+
+    try:
+        kb_root = get_kb_root()
+        index_root = get_index_root()
+    except ConfigurationError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    categories = get_valid_categories()
+    # Exclude hidden (.) and special (_) files, consistent with tree command
+    entry_count = (
+        sum(1 for p in kb_root.rglob("*.md") if not p.name.startswith((".", "_")))
+        if kb_root.exists()
+        else 0
+    )
+
+    payload = {
+        "kb_root": str(kb_root),
+        "index_root": str(index_root),
+        "categories": categories,
+        "entry_count": entry_count,
+    }
+
+    if as_json:
+        output(payload, as_json=True)
+        return
+
+    click.echo("Memex Info")
+    click.echo("=" * 40)
+    click.echo(f"KB Root:    {kb_root}")
+    click.echo(f"Index Root: {index_root}")
+    click.echo(f"Entries:    {entry_count}")
+    if categories:
+        click.echo(f"Categories: {', '.join(categories)}")
+    else:
+        click.echo("Categories: (none)")
+
+
+@cli.command("config")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def config_alias(ctx, as_json: bool):
+    """Alias for mx info."""
+    ctx.invoke(info, as_json=as_json)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# History Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option("--limit", "-n", default=10, help="Max entries to show")
+@click.option("--rerun", "-r", type=int, help="Re-execute search at position N (1=most recent)")
+@click.option("--clear", is_flag=True, help="Clear all search history")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def history(limit: int, rerun: Optional[int], clear: bool, as_json: bool):
+    """Show recent search history and optionally re-run searches.
+
+    \b
+    Examples:
+      mx history                  # Show last 10 searches
+      mx history -n 20            # Show last 20 searches
+      mx history --rerun 1        # Re-run most recent search
+      mx history -r 3             # Re-run 3rd most recent search
+      mx history --clear          # Clear all history
+    """
+    from . import search_history
+
+    if clear:
+        count = search_history.clear_history()
+        click.echo(f"Cleared {count} search history entries.")
+        return
+
+    if rerun is not None:
+        entry = search_history.get_by_index(rerun)
+        if entry is None:
+            click.echo(f"Error: No search at position {rerun}", err=True)
+            sys.exit(1)
+
+        # Re-run the search using the search command logic
+        click.echo(f"Re-running: {entry.query}")
+        if entry.tags:
+            click.echo(f"  Tags: {', '.join(entry.tags)}")
+        click.echo(f"  Mode: {entry.mode}")
+        click.echo()
+
+        # Import and run search
+        from .core import search as core_search
+
+        result = run_async(core_search(
+            query=entry.query,
+            limit=10,
+            mode=entry.mode,
+            tags=entry.tags if entry.tags else None,
+            include_content=False,
+        ))
+
+        # Record this re-run in history
+        search_history.record_search(
+            query=entry.query,
+            result_count=len(result.results),
+            mode=entry.mode,
+            tags=entry.tags if entry.tags else None,
+        )
+
+        if as_json:
+            output(
+                [{"path": r.path, "title": r.title,
+                  "score": r.score, "snippet": r.snippet}
+                 for r in result.results],
+                as_json=True,
+            )
+        else:
+            if not result.results:
+                click.echo("No results found.")
+                return
+
+            rows = [
+                {"path": r.path, "title": r.title, "score": f"{r.score:.2f}"}
+                for r in result.results
+            ]
+            click.echo(format_table(rows, ["path", "title", "score"], {"path": 40, "title": 35}))
+        return
+
+    # Show history
+    entries = search_history.get_recent(limit=limit)
+
+    if as_json:
+        output([
+            {
+                "position": i + 1,
+                "query": e.query,
+                "timestamp": e.timestamp.isoformat(),
+                "result_count": e.result_count,
+                "mode": e.mode,
+                "tags": e.tags,
+            }
+            for i, e in enumerate(entries)
+        ], as_json=True)
+        return
+
+    if not entries:
+        click.echo("No search history.")
+        return
+
+    click.echo("Recent searches:\n")
+    for i, entry in enumerate(entries, 1):
+        time_str = entry.timestamp.strftime("%Y-%m-%d %H:%M")
+        tag_str = f" [tags: {', '.join(entry.tags)}]" if entry.tags else ""
+        result_str = f"{entry.result_count} results" if entry.result_count else "no results"
+        click.echo(f"  {i:2d}. {entry.query}")
+        click.echo(f"      {time_str} | {entry.mode} | {result_str}{tag_str}")
+
+    click.echo("\nTip: Use 'mx history --rerun N' to re-execute a search")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Batch Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option(
+    "--file", "-f", "file_path",
+    type=click.Path(exists=True),
+    help="Read commands from file instead of stdin",
+)
+@click.option(
+    "--continue-on-error/--stop-on-error",
+    default=True,
+    help="Continue processing after errors (default: continue)",
+)
+def batch(file_path: Optional[str], continue_on_error: bool):
+    """Execute multiple KB operations in a single invocation.
+
+    Reads commands from stdin (or --file) and executes them sequentially.
+    Output is always JSON with per-operation results.
+
+    \b
+    Supported commands:
+      add --title='...' --tags='...' [--category=...] [--content='...']
+      update <path> [--tags='...'] [--content='...'] [--append]
+      search <query> [--tags='...'] [--mode=...] [--limit=N]
+      get <path> [--metadata]
+      delete <path> [--force]
+
+    \b
+    Example:
+      mx batch << 'EOF'
+      add --title='Note 1' --tags='tag1' --category=tooling --content='Content'
+      search 'api'
+      EOF
+
+    \b
+    Output format:
+      {
+        "total": 2,
+        "succeeded": 2,
+        "failed": 0,
+        "results": [
+          {"index": 0, "command": "add ...", "success": true, "result": {...}},
+          {"index": 1, "command": "search ...", "success": true, "result": {...}}
+        ]
+      }
+
+    Exit code is 1 if any operation fails, 0 if all succeed.
+    """
+    try:
+        from .batch import run_batch
+    except ImportError:
+        click.echo(json.dumps({
+            "error": "Batch module not available",
+            "hint": "The batch module needs to be restored from v0.1.0"
+        }), err=True)
+        sys.exit(1)
+
+    # Read input
+    if file_path:
+        lines = Path(file_path).read_text(encoding="utf-8").strip().split("\n")
+    else:
+        lines = sys.stdin.read().strip().split("\n")
+
+    # Filter empty lines and comments
+    commands = [
+        line.strip()
+        for line in lines
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+    if not commands:
+        click.echo(
+            json.dumps({"error": "No commands provided"}), err=True
+        )
+        sys.exit(1)
+
+    result = run_async(run_batch(commands, continue_on_error=continue_on_error))
+    click.echo(result.model_dump_json(indent=2))
+
+    # Exit with error if any commands failed
+    if result.failed > 0:
+        sys.exit(1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session-Log Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command("session-log")
+@click.option("--message", "-m", help="Session summary message")
+@click.option(
+    "--file", "-f", "file_path",
+    type=click.Path(exists=True),
+    help="Read message from file",
+)
+@click.option("--stdin", is_flag=True, help="Read message from stdin")
+@click.option("--entry", "-e", help="Explicit entry path (overrides context)")
+@click.option("--tags", help="Additional tags (comma-separated)")
+@click.option("--links", help="Wiki-style links to include (comma-separated)")
+@click.option("--no-timestamp", is_flag=True, help="Don't add timestamp header")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def session_log(
+    message: Optional[str],
+    file_path: Optional[str],
+    stdin: bool,
+    entry: Optional[str],
+    tags: Optional[str],
+    links: Optional[str],
+    no_timestamp: bool,
+    as_json: bool,
+):
+    """Log a session summary to the project's session entry.
+
+    Auto-detects the correct entry from .kbcontext, or uses --entry
+    to specify explicitly. Creates the entry if it doesn't exist.
+
+    \b
+    Examples:
+      mx session-log --message="Fixed auth bug, added tests"
+      mx session-log --stdin < session_notes.md
+      mx session-log -m "Deployed v2.1" --tags="deployment,release"
+      mx session-log -m "..." --entry=projects/myapp/devlog.md
+
+    \b
+    Entry resolution:
+      1. --entry flag (explicit)
+      2. .kbcontext session_entry field
+      3. {.kbcontext primary}/sessions.md
+      4. Error with guidance if no context
+    """
+    try:
+        from .core import log_session as core_log_session
+    except ImportError:
+        click.echo("Error: log_session function not available in core", err=True)
+        click.echo("This function needs to be restored from v0.1.0", err=True)
+        sys.exit(1)
+
+    # Validate message source (mutually exclusive)
+    content_sources = sum([bool(message), bool(file_path), stdin])
+    if content_sources == 0:
+        click.echo("Error: Provide --message, --file, or --stdin", err=True)
+        sys.exit(1)
+    if content_sources > 1:
+        click.echo("Error: --message, --file, and --stdin are mutually exclusive", err=True)
+        sys.exit(1)
+
+    # Get message from source
+    if stdin:
+        message = sys.stdin.read()
+    elif file_path:
+        message = Path(file_path).read_text(encoding="utf-8")
+
+    # Parse tags and links
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
+    link_list = [link.strip() for link in links.split(",")] if links else None
+
+    try:
+        result = run_async(
+            core_log_session(
+                message=message,
+                entry_path=entry,
+                tags=tag_list,
+                links=link_list,
+                timestamp=not no_timestamp,
+            )
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    if as_json:
+        output(result.model_dump(), as_json=True)
+    else:
+        click.echo(f"Logged to: {result.path}")
+        if result.project:
+            click.echo(f"Project: {result.project}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Summarize Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command()
+@click.option("--dry-run", is_flag=True, help="Preview changes without writing")
+@click.option("--limit", type=int, help="Maximum entries to process")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def summarize(dry_run: bool, limit: Optional[int], as_json: bool):
+    """Generate descriptions for entries missing them.
+
+    Extracts a one-line summary from entry content to use as the description
+    field in frontmatter. This improves search results and entry discoverability.
+
+    \b
+    Examples:
+      mx summarize --dry-run         # Preview what would be generated
+      mx summarize                   # Generate and write descriptions
+      mx summarize --limit 5         # Process only 5 entries
+      mx summarize --json            # Output as JSON
+    """
+    try:
+        from .core import generate_descriptions
+    except ImportError:
+        click.echo("Error: generate_descriptions function not available in core", err=True)
+        click.echo("This function needs to be restored from v0.1.0", err=True)
+        sys.exit(1)
+
+    results = run_async(generate_descriptions(dry_run=dry_run, limit=limit))
+
+    if as_json:
+        output(results, as_json=True)
+    else:
+        if not results:
+            click.echo("All entries already have descriptions.")
+            return
+
+        updated = [r for r in results if r["status"] == "updated"]
+        previewed = [r for r in results if r["status"] == "preview"]
+        skipped = [r for r in results if r["status"] == "skipped"]
+        errors = [r for r in results if r["status"] == "error"]
+
+        if dry_run:
+            click.echo("Preview of descriptions to generate:")
+            click.echo("=" * 50)
+            for r in previewed:
+                click.echo(f"\n{r['path']}")
+                click.echo(f"  Title: {r['title']}")
+                click.echo(f"  Description: {r['description']}")
+            click.echo(f"\n{len(previewed)} entries would be updated.")
+        else:
+            if updated:
+                click.echo(f"Generated descriptions for {len(updated)} entries:")
+                for r in updated[:10]:
+                    click.echo(f"  - {r['path']}")
+                if len(updated) > 10:
+                    click.echo(f"  ... and {len(updated) - 10} more")
+
+        if skipped:
+            click.echo(f"\nSkipped {len(skipped)} entries (no content to summarize)")
+
+        if errors:
+            click.echo(f"\n{len(errors)} errors:")
+            for r in errors[:5]:
+                click.echo(f"  - {r['path']}: {r.get('reason', 'Unknown error')}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -313,6 +313,35 @@ def clear_context_cache() -> None:
     _context_cache.clear()
 
 
+def get_session_entry_path(context: KBContext | None) -> str | None:
+    """Get the path for session logging from context.
+
+    Resolution order:
+    1. context.session_entry if set
+    2. {context.primary}/sessions.md if primary is set
+    3. None if no context or primary
+
+    Args:
+        context: KB context (may be None).
+
+    Returns:
+        Relative KB path for session entry, or None if can't determine.
+    """
+    if not context:
+        return None
+
+    # Explicit session_entry takes priority
+    if hasattr(context, "session_entry") and context.session_entry:
+        return context.session_entry
+
+    # Fall back to {primary}/sessions.md
+    if context.primary:
+        primary = context.primary.rstrip("/")
+        return f"{primary}/sessions.md"
+
+    return None
+
+
 def validate_context(context: KBContext, kb_root: Path) -> list[str]:
     """Validate a KBContext against the knowledge base.
 

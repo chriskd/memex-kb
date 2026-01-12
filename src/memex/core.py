@@ -22,17 +22,30 @@ log = logging.getLogger(__name__)
 
 from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
 from .config import (
+    DUPLICATE_DETECTION_LIMIT,
+    DUPLICATE_DETECTION_MIN_SCORE,
     LINK_SUGGESTION_MIN_SCORE,
     MAX_CONTENT_RESULTS,
     SIMILAR_ENTRY_TAG_WEIGHT,
     TAG_SUGGESTION_MIN_SCORE,
     get_kb_root,
 )
-from .context import KBContext, get_kb_context, get_kbconfig
+from .context import KBContext, get_kb_context, get_kbconfig, get_session_entry_path
 from .frontmatter import build_frontmatter, create_new_metadata, update_metadata_for_edit
 from .evaluation import run_quality_checks
 from .indexer import HybridSearcher
-from .models import DocumentChunk, IndexStatus, KBEntry, QualityReport, SearchResponse, SearchResult
+from .models import (
+    AddEntryPreview,
+    DocumentChunk,
+    IndexStatus,
+    KBEntry,
+    PotentialDuplicate,
+    QualityReport,
+    SearchResponse,
+    SearchResult,
+    SessionLogResult,
+    UpsertMatch,
+)
 from .parser import ParseError, extract_links, parse_entry, update_links_batch
 
 
@@ -587,6 +600,118 @@ def compute_tag_suggestions(
     return suggestions
 
 
+def detect_potential_duplicates(
+    title: str,
+    content: str,
+    searcher: HybridSearcher,
+    min_score: float = DUPLICATE_DETECTION_MIN_SCORE,
+    limit: int = DUPLICATE_DETECTION_LIMIT,
+) -> list[PotentialDuplicate]:
+    """Detect potential duplicate entries based on semantic similarity.
+
+    Uses a combination of title and content to search for highly similar
+    existing entries that might be duplicates.
+
+    Args:
+        title: The title of the new entry.
+        content: The content of the new entry.
+        searcher: The hybrid searcher instance.
+        min_score: Minimum similarity score to consider as potential duplicate.
+        limit: Maximum number of potential duplicates to return.
+
+    Returns:
+        List of PotentialDuplicate objects for high-similarity matches.
+    """
+    # Combine title and first ~500 chars of content for semantic comparison
+    # This captures the essence of the entry without being too long
+    search_text = f"{title} {content[:500]}"
+
+    # Use semantic search to find similar entries
+    try:
+        results = searcher.search(
+            search_text,
+            limit=limit * 2,
+            mode="semantic",
+        )
+    except Exception as e:
+        log.warning("Duplicate detection failed: %s", e)
+        return []
+
+    duplicates = []
+    for result in results:
+        if result.score >= min_score:
+            duplicates.append(
+                PotentialDuplicate(
+                    path=result.path,
+                    title=result.title,
+                    score=round(result.score, 3),
+                    tags=result.tags,
+                )
+            )
+            if len(duplicates) >= limit:
+                break
+
+    return duplicates
+
+
+def _generate_description_from_content(
+    content: str, max_length: int = 120, title: str | None = None
+) -> str:
+    """Generate a one-line description from entry content.
+
+    Extracts the first meaningful sentence or phrase from the content,
+    stripping markdown formatting. If the content starts with the title
+    (common in markdown with H1 headers), it skips past the title.
+
+    Args:
+        content: Raw markdown content of the entry.
+        max_length: Maximum description length (default 120).
+        title: Optional title to skip if content starts with it.
+
+    Returns:
+        A clean one-line description.
+    """
+    if not content:
+        return ""
+
+    # Import here to avoid circular imports
+    from .indexer import strip_markdown_for_snippet
+
+    # Get a longer snippet to work with
+    clean_text = strip_markdown_for_snippet(content, max_length=500)
+
+    if not clean_text:
+        return ""
+
+    # If content starts with the title (common when H1 matches title), skip it
+    if title:
+        # Check if clean_text starts with the title (possibly followed by whitespace)
+        title_normalized = title.strip()
+        if clean_text.startswith(title_normalized):
+            clean_text = clean_text[len(title_normalized):].strip()
+            if not clean_text:
+                return ""
+
+    # Try to find the first complete sentence
+    # Look for sentence-ending punctuation followed by space or end
+    sentence_match = re.match(r"^(.+?[.!?])(?:\s|$)", clean_text)
+    if sentence_match:
+        description = sentence_match.group(1).strip()
+        if len(description) <= max_length:
+            return description
+
+    # Fallback: truncate at word boundary
+    if len(clean_text) <= max_length:
+        return clean_text
+
+    # Find last space before max_length
+    truncated = clean_text[:max_length]
+    last_space = truncated.rfind(" ")
+    if last_space > max_length * 0.5:  # At least half the content
+        return truncated[:last_space] + "..."
+    return truncated + "..."
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Core business logic functions
 # ─────────────────────────────────────────────────────────────────────────────
@@ -825,6 +950,116 @@ async def add_entry(
     suggested_tags = config_suggestions + suggested_tags
 
     return {"path": rel_path, "suggested_links": suggested_links, "suggested_tags": suggested_tags}
+
+
+async def preview_add_entry(
+    title: str,
+    content: str,
+    tags: list[str],
+    category: str = "",
+    directory: str | None = None,
+    links: list[str] | None = None,
+    kb_context: KBContext | None = None,
+    check_duplicates: bool = True,
+    force: bool = False,
+) -> AddEntryPreview:
+    """Preview a new KB entry without writing to disk.
+
+    Returns path, generated frontmatter, final content, and any duplicate warnings.
+
+    Args:
+        title: Entry title.
+        content: Markdown content (without frontmatter).
+        tags: List of tags for the entry.
+        category: Top-level category directory (deprecated - use 'directory').
+        directory: Full directory path (e.g., "development/python/frameworks").
+        links: Optional list of paths to link to using [[link]] syntax.
+        kb_context: Optional project context.
+        check_duplicates: If True, check for potential duplicates.
+        force: If True, skip duplicate warnings.
+
+    Returns:
+        AddEntryPreview with path, frontmatter, content, and duplicate info.
+
+    Raises:
+        ValueError: If entry already exists or validation fails.
+    """
+    kb_root = get_kb_root()
+
+    if kb_context is None:
+        kb_context = get_kb_context()
+
+    # Determine target directory
+    if directory:
+        abs_dir, normalized_dir = validate_nested_path(directory)
+        target_dir = abs_dir
+        rel_dir = normalized_dir
+    elif category:
+        target_dir = kb_root / category
+        rel_dir = category
+    elif kb_context and kb_context.primary:
+        abs_dir, normalized_dir = validate_nested_path(kb_context.primary)
+        target_dir = abs_dir
+        rel_dir = normalized_dir
+    else:
+        valid_categories = get_valid_categories()
+        raise ValueError(
+            f"Either 'category' or 'directory' must be provided. "
+            f"Existing categories: {', '.join(valid_categories)}"
+        )
+
+    if not tags:
+        raise ValueError("At least one tag is required")
+
+    slug = slugify(title)
+    if not slug:
+        raise ValueError("Title must contain at least one alphanumeric character")
+
+    file_path = target_dir / f"{slug}.md"
+    rel_path = f"{rel_dir}/{slug}.md"
+
+    if file_path.exists():
+        raise ValueError(f"Entry already exists at {rel_path}")
+
+    potential_duplicates: list[PotentialDuplicate] = []
+    warning = None
+    if check_duplicates and not force:
+        searcher = get_searcher()
+        potential_duplicates = detect_potential_duplicates(title, content, searcher)
+        if potential_duplicates:
+            top_match = potential_duplicates[0]
+            warning = (
+                f"Potential duplicate detected: '{top_match.title}' ({top_match.path}) "
+                f"with {top_match.score:.0%} similarity. "
+                f"Use force=True to create anyway, or update the existing entry."
+            )
+
+    final_content = content
+    if links:
+        link_section = "\n\n## Related\n\n"
+        for link in links:
+            link_section += f"- [[{link}]]\n"
+        final_content += link_section
+
+    metadata = create_new_metadata(
+        title=title,
+        tags=tags,
+        source_project=get_current_project(),
+        contributor=get_current_contributor(),
+        model=get_llm_model(),
+        git_branch=get_git_branch(),
+        actor=get_actor_identity(),
+    )
+    frontmatter = build_frontmatter(metadata)
+
+    return AddEntryPreview(
+        path=rel_path,
+        absolute_path=str(file_path),
+        frontmatter=frontmatter,
+        content=final_content,
+        potential_duplicates=potential_duplicates,
+        warning=warning,
+    )
 
 
 async def append_entry(
@@ -2419,3 +2654,360 @@ async def publish(
         "output_dir": result.output_dir,
         "search_index_path": result.search_index_path,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Description Generation
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def generate_descriptions(
+    dry_run: bool = False,
+    limit: int | None = None,
+) -> list[dict]:
+    """Generate descriptions for entries that are missing them.
+
+    Reads entry content and generates a one-line summary based on the
+    first meaningful sentence or paragraph.
+
+    Args:
+        dry_run: If True, only preview changes without writing.
+        limit: Maximum number of entries to process.
+
+    Returns:
+        List of {path, title, description, status} for each processed entry.
+        status is 'updated', 'skipped' (already has description), or 'preview' (dry_run).
+    """
+    from .health_cache import get_entry_metadata
+
+    kb_root = get_kb_root()
+
+    if not kb_root.exists():
+        return []
+
+    results: list[dict] = []
+    processed = 0
+
+    # Get entries missing descriptions from health cache
+    all_entries = get_entry_metadata(kb_root)
+
+    for path_key, entry in all_entries.items():
+        if entry.get("description"):
+            # Already has description
+            continue
+
+        if limit and processed >= limit:
+            break
+
+        rel_path = entry["path"]
+        file_path = kb_root / rel_path
+
+        if not file_path.exists():
+            continue
+
+        try:
+            metadata, content, _ = parse_entry(file_path)
+
+            # Generate description from content, passing title to skip if it appears at start
+            description = _generate_description_from_content(content, title=metadata.title)
+
+            if not description:
+                results.append({
+                    "path": rel_path,
+                    "title": entry["title"],
+                    "description": None,
+                    "status": "skipped",
+                    "reason": "Could not generate description from content",
+                })
+                continue
+
+            if dry_run:
+                results.append({
+                    "path": rel_path,
+                    "title": entry["title"],
+                    "description": description,
+                    "status": "preview",
+                })
+            else:
+                # Update the file with new description
+                metadata.description = description
+
+                # Rebuild frontmatter with new description
+                new_frontmatter = build_frontmatter(metadata)
+
+                # Write updated content
+                # Strip leading whitespace from content to prevent blank line accumulation
+                new_content = f"{new_frontmatter}{content.lstrip()}"
+                file_path.write_text(new_content)
+
+                results.append({
+                    "path": rel_path,
+                    "title": entry["title"],
+                    "description": description,
+                    "status": "updated",
+                })
+
+            processed += 1
+
+        except Exception as e:
+            results.append({
+                "path": rel_path,
+                "title": entry["title"],
+                "description": None,
+                "status": "error",
+                "reason": str(e),
+            })
+
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Title Resolution and Upsert Operations
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class AmbiguousMatchError(ValueError):
+    """Raised when title matches multiple entries with similar confidence."""
+
+    def __init__(self, matches: list[UpsertMatch]):
+        self.matches = matches
+        titles = ", ".join(f"'{m.title}' ({m.score:.0%})" for m in matches[:3])
+        super().__init__(f"Ambiguous title match. Candidates: {titles}")
+
+
+def resolve_entry_by_title(
+    title: str,
+    kb_root: Path | None = None,
+    min_score: float = 0.6,
+) -> UpsertMatch | None:
+    """Resolve a title to an existing entry path.
+
+    Search order:
+    1. Exact title match (case-insensitive)
+    2. Alias match
+    3. Fuzzy title search (semantic similarity)
+
+    Args:
+        title: Title to search for.
+        kb_root: KB root path (auto-detected if None).
+        min_score: Minimum fuzzy match score (0-1).
+
+    Returns:
+        UpsertMatch if found, None if no match above threshold.
+
+    Raises:
+        AmbiguousMatchError: If multiple matches with similar scores.
+    """
+    from .parser.title_index import TitleIndex, build_title_index
+
+    if kb_root is None:
+        kb_root = get_kb_root()
+
+    # Build title index
+    index = build_title_index(kb_root, include_filename_index=True)
+    if isinstance(index, TitleIndex):
+        title_to_path = index.title_to_path
+    else:
+        title_to_path = index
+
+    title_lower = title.lower().strip()
+
+    # 1. Check exact title match
+    if title_lower in title_to_path:
+        path = title_to_path[title_lower]
+        return UpsertMatch(
+            path=f"{path}.md",
+            title=title,
+            score=1.0,
+            match_type="exact_title",
+        )
+
+    # 2. Check if any title starts with or contains our search
+    # This catches aliases since they're also in title_to_path
+    for indexed_title, path in title_to_path.items():
+        if indexed_title == title_lower:
+            return UpsertMatch(
+                path=f"{path}.md",
+                title=indexed_title,
+                score=1.0,
+                match_type="alias",
+            )
+
+    # 3. Fuzzy search using semantic similarity
+    searcher = get_searcher()
+    results = searcher.search(title, limit=5, mode="semantic")
+
+    if not results:
+        return None
+
+    # Convert to UpsertMatch objects
+    matches: list[UpsertMatch] = []
+    for r in results:
+        if r.score >= min_score:
+            matches.append(UpsertMatch(
+                path=r.path,
+                title=r.title,
+                score=r.score,
+                match_type="fuzzy",
+            ))
+
+    if not matches:
+        return None
+
+    # Check for ambiguous matches (multiple results with similar scores)
+    if len(matches) > 1:
+        score_gap = matches[0].score - matches[1].score
+        if score_gap < 0.2:  # Less than 20% difference - ambiguous
+            raise AmbiguousMatchError(matches)
+
+    return matches[0]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Logging
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def log_session(
+    message: str,
+    entry_path: str | None = None,
+    tags: list[str] | None = None,
+    links: list[str] | None = None,
+    timestamp: bool = True,
+    kb_context: KBContext | None = None,
+) -> SessionLogResult:
+    """Log a session summary to the appropriate KB entry.
+
+    Resolution order for entry path:
+    1. Explicit entry_path argument
+    2. context.session_entry field
+    3. {context.primary}/sessions.md
+    4. Error if no context and no explicit path
+
+    Args:
+        message: Session summary to log.
+        entry_path: Explicit entry path (overrides context).
+        tags: Additional tags to add to message section.
+        links: Wiki-style links to include in message.
+        timestamp: Add timestamp header (default True).
+        kb_context: Optional context (auto-discovered if None).
+
+    Returns:
+        SessionLogResult with path and action taken.
+
+    Raises:
+        ValueError: If no entry path can be determined.
+    """
+    from datetime import timezone
+
+    kb_root = get_kb_root()
+
+    # Auto-discover KB context if not provided
+    if kb_context is None:
+        kb_context = get_kb_context()
+
+    # Resolve entry path
+    resolved_path: str | None = entry_path
+
+    if resolved_path is None:
+        resolved_path = get_session_entry_path(kb_context)
+
+    if resolved_path is None:
+        raise ValueError(
+            "Cannot determine session entry path. "
+            "Options:\n"
+            "  1. Create .kbcontext: mx context init\n"
+            "  2. Specify entry: mx session-log --entry=path/to/sessions.md"
+        )
+
+    # Prepare content
+    final_content = message
+
+    # Add links if provided
+    if links:
+        final_content += "\n\nRelated: " + ", ".join(f"[[{link}]]" for link in links)
+
+    # Add tags as inline metadata if provided
+    if tags:
+        tag_str = " ".join(f"#{tag}" for tag in tags)
+        final_content = f"{tag_str}\n\n{final_content}"
+
+    # Check if entry exists
+    file_path = kb_root / resolved_path
+    action: Literal["appended", "created"]
+
+    if file_path.exists():
+        # Append to existing entry
+        if timestamp:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            timestamped_content = f"## {ts}\n\n{final_content}"
+        else:
+            timestamped_content = final_content
+
+        await update_entry(
+            path=resolved_path,
+            content=timestamped_content,
+            section_updates=None,
+        )
+        # Manually append since update_entry doesn't have append mode in current version
+        try:
+            metadata, existing_content, _ = parse_entry(file_path)
+            new_content = existing_content.rstrip() + "\n\n" + timestamped_content
+            updated_metadata = update_metadata_for_edit(
+                metadata,
+                new_tags=list(metadata.tags),
+                new_contributor=get_current_contributor(),
+                edit_source=get_current_project(),
+                model=get_llm_model(),
+                git_branch=get_git_branch(),
+                actor=get_actor_identity(),
+            )
+            frontmatter = build_frontmatter(updated_metadata)
+            file_path.write_text(frontmatter + new_content, encoding="utf-8")
+            rebuild_backlink_cache(kb_root)
+        except ParseError as e:
+            raise ValueError(f"Failed to parse existing entry: {e}") from e
+        action = "appended"
+    else:
+        # Create new session entry with template
+        project_name = kb_context.get_project_name() if kb_context else "Unknown"
+        default_tags = ["sessions"]
+        if project_name and project_name != "Unknown":
+            default_tags.insert(0, project_name)
+
+        # Build initial content with template
+        if timestamp:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            initial_content = f"# Session Log\n\nSession notes for {project_name}.\n\n## {ts}\n\n{final_content}"
+        else:
+            initial_content = f"# Session Log\n\nSession notes for {project_name}.\n\n{final_content}"
+
+        # Ensure directory exists
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write directly to that location
+        metadata = create_new_metadata(
+            title=f"{project_name} Sessions",
+            tags=default_tags,
+            source_project=kb_context.name if kb_context and hasattr(kb_context, "name") else None,
+        )
+        frontmatter = build_frontmatter(metadata)
+        file_path.write_text(frontmatter + initial_content.lstrip(), encoding="utf-8")
+        rebuild_backlink_cache(kb_root)
+        action = "created"
+
+    # Determine context source for reporting
+    context_source: str | None = None
+    if entry_path:
+        context_source = "explicit"
+    elif kb_context and hasattr(kb_context, "session_entry") and kb_context.session_entry:
+        context_source = ".kbcontext (session_entry)"
+    elif kb_context and kb_context.primary:
+        context_source = ".kbcontext (primary)"
+
+    return SessionLogResult(
+        path=resolved_path,
+        action=action,
+        project=kb_context.get_project_name() if kb_context else None,
+        context_source=context_source,
+    )
