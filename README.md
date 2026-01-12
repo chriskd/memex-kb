@@ -58,15 +58,16 @@ User KB entries are personal and available in all projects.
 
 ### Additive Scope (Default)
 
-By default, searches span **both** project and user KBs:
+By default, operations span **both** project and user KBs:
 
 ```bash
 # Search finds entries from project KB AND user KB
 mx search "deployment"
 
 # Restrict to project KB only
-mx search "deployment" --project-only
-mx reindex --project-only
+mx search "deployment" --scope=project
+mx list --scope=project
+mx reindex --scope=project
 ```
 
 Results from different KBs use scope prefixes when both exist:

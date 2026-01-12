@@ -87,8 +87,8 @@ mx add --title="API Rate Limiting" \
   --category=patterns \
   --content="..."
 
-# View recent project updates
-mx whats-new --project=myapp --days=7
+# View recent project KB updates
+mx whats-new --scope=project --days=7
 
 # Quick status check
 mx info
