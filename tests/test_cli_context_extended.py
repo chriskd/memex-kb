@@ -67,7 +67,7 @@ class TestContextShow:
 
         assert result.exit_code == 0
         assert "No .kbcontext file found" in result.output
-        assert "mx context init" in result.output
+        assert "mx init" in result.output  # Suggests using mx init
 
     def test_context_show_displays_primary(self, tmp_path, monkeypatch):
         """Shows primary directory from .kbcontext."""
@@ -214,10 +214,42 @@ paths:
 
 
 class TestContextInit:
-    """Tests for mx context init subcommand."""
+    """Tests for mx context init subcommand (DEPRECATED)."""
+
+    def test_context_init_shows_deprecation_warning(self, project_dir, monkeypatch):
+        """Shows deprecation warning when using mx context init."""
+        monkeypatch.chdir(project_dir)
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["context", "init"])
+
+        assert result.exit_code == 0
+        # Check deprecation warning is shown
+        assert "deprecated" in result.output.lower()
+        assert "mx init" in result.output
+
+    def test_context_init_hidden_from_help(self):
+        """'context init' is hidden from Commands section in help output."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["context", "--help"])
+
+        assert result.exit_code == 0
+        # Split output into sections and check Commands section
+        lines = result.output.split("\n")
+        in_commands = False
+        for line in lines:
+            if line.strip() == "Commands:":
+                in_commands = True
+            elif in_commands:
+                # 'init' should NOT be listed as a command
+                if line.strip().startswith("init"):
+                    assert False, "init command should be hidden from help"
+        # show and validate should be in Commands
+        assert "show" in result.output
+        assert "validate" in result.output
 
     def test_context_init_auto_detects_project(self, project_dir, monkeypatch):
-        """Auto-detects project name from directory name."""
+        """Auto-detects project name from directory name (still works but deprecated)."""
         monkeypatch.chdir(project_dir)
 
         runner = CliRunner()

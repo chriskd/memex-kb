@@ -329,7 +329,7 @@ def prime(full: bool, mcp: bool, as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Init Command - Local KB Setup
+# Init Command - KB Setup (project or user scope)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Default local KB directory name
@@ -337,53 +337,111 @@ LOCAL_KB_DIR = "kb"
 
 
 @cli.command()
-@click.option("--path", "-p", type=click.Path(), help="Custom location for local KB (default: kb/)")
-@click.option("--force", "-f", is_flag=True, help="Reinitialize existing local KB")
+@click.option("--path", "-p", type=click.Path(), help="Custom location for KB (default: kb/)")
+@click.option("--user", "-u", is_flag=True, help="Create user-scope KB at ~/.memex/kb/")
+@click.option("--force", "-f", is_flag=True, help="Reinitialize existing KB")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def init(path: Optional[str], force: bool, as_json: bool):
-    """Initialize a local project KB.
+def init(path: Optional[str], user: bool, force: bool, as_json: bool):
+    """Initialize a knowledge base.
 
-    Creates a kb/ directory (or custom path) for project-specific knowledge.
-    Local KB entries are searched first and stay with the project.
+    By default, creates a project-scope KB at kb/ in the current directory.
+    Use --user to create a user-scope KB at ~/.memex/kb/ for personal knowledge.
+
+    \b
+    Scopes:
+      project (default)  kb/ in repo - shared with collaborators via git
+      user               ~/.memex/kb/ - personal, available everywhere
 
     \b
     Examples:
-      mx init                    # Create kb/ in current directory
-      mx init --path docs/kb     # Custom location
+      mx init                    # Project scope: creates kb/
+      mx init --user             # User scope: creates ~/.memex/kb/
+      mx init --path docs/kb     # Custom project location
       mx init --force            # Reinitialize existing
     """
-    from .context import LOCAL_KB_CONFIG_FILENAME
+    from .context import LOCAL_KB_CONFIG_FILENAME, USER_KB_DIR
 
-    # Determine target directory
-    kb_path = Path(path) if path else Path.cwd() / LOCAL_KB_DIR
+    # Validate mutually exclusive options
+    if user and path:
+        if as_json:
+            output({"error": "--user and --path are mutually exclusive"}, as_json=True)
+        else:
+            click.echo("Error: --user and --path are mutually exclusive", err=True)
+        sys.exit(1)
+
+    # Determine target directory based on scope
+    if user:
+        kb_path = USER_KB_DIR
+        scope = "user"
+    else:
+        kb_path = Path(path) if path else Path.cwd() / LOCAL_KB_DIR
+        scope = "project"
 
     # Check if already exists
     if kb_path.exists():
         if not force:
+            scope_label = "User" if user else "Project"
             if as_json:
                 output({
-                    "error": f"Local KB already exists at {kb_path}",
+                    "error": f"{scope_label} KB already exists at {kb_path}",
                     "hint": "Use --force to reinitialize"
                 }, as_json=True)
             else:
-                click.echo(f"Error: Local KB already exists at {kb_path}", err=True)
+                click.echo(f"Error: {scope_label} KB already exists at {kb_path}", err=True)
                 click.echo("Use --force to reinitialize.", err=True)
             sys.exit(1)
 
     # Create directory structure
     kb_path.mkdir(parents=True, exist_ok=True)
 
-    # Create README
+    # Create README with scope-appropriate content
     readme_path = kb_path / "README.md"
-    readme_content = f"""# Local Knowledge Base
+    if user:
+        readme_content = """# User Knowledge Base
+
+This directory contains your personal knowledge base entries managed by `mx`.
+This KB is available everywhere and is not shared with collaborators.
+
+## Usage
+
+```bash
+mx add --title="Entry" --tags="tag1,tag2" --content="..."
+mx search "query"
+mx list
+```
+
+## Structure
+
+Entries are Markdown files with YAML frontmatter:
+
+```markdown
+---
+title: Entry Title
+tags: [tag1, tag2]
+created: 2024-01-15
+---
+
+# Entry Title
+
+Your content here.
+```
+
+## Scope
+
+User KB entries are personal and available in all projects.
+They are stored at ~/.memex/kb/ and are not committed to git.
+"""
+    else:
+        readme_content = """# Project Knowledge Base
 
 This directory contains project-specific knowledge base entries managed by `mx`.
+Commit this directory to share knowledge with collaborators.
 
 ## Usage
 
 ```bash
 mx add --title="Entry" --tags="tag1,tag2" --content="..." --local
-mx search "query"   # Searches local KB first, then global
+mx search "query"   # Searches local KB first
 mx list --local     # List only local entries
 ```
 
@@ -405,15 +463,28 @@ Your content here.
 
 ## Integration
 
-Local KB entries take precedence over global KB entries in search results.
+Project KB entries take precedence over global KB entries in search results.
 This keeps project-specific knowledge close to the code.
 """
     readme_path.write_text(readme_content, encoding="utf-8")
 
-    # Create config file
+    # Create config file with scope-appropriate defaults
     config_path = kb_path / LOCAL_KB_CONFIG_FILENAME
-    config_content = f"""# Local KB Configuration
-# This file marks this directory as a local memex knowledge base
+    if user:
+        config_content = """# User KB Configuration
+# This file marks this directory as your personal memex knowledge base
+
+# Optional: default tags for entries created here
+# default_tags:
+#   - personal
+
+# Optional: exclude patterns (glob)
+# exclude:
+#   - "*.draft.md"
+"""
+    else:
+        config_content = f"""# Project KB Configuration
+# This file marks this directory as a project memex knowledge base
 
 # Optional: default tags for entries created here
 # default_tags:
@@ -425,18 +496,25 @@ This keeps project-specific knowledge close to the code.
 """
     config_path.write_text(config_content, encoding="utf-8")
 
+    # Output
+    scope_label = "user" if user else "project"
     if as_json:
         output({
             "created": str(kb_path),
+            "scope": scope_label,
             "files": ["README.md", LOCAL_KB_CONFIG_FILENAME],
-            "hint": "Use 'mx add --local' to add entries to this KB"
+            "hint": f"Use 'mx add' to add entries to this KB"
         }, as_json=True)
     else:
-        click.echo(f"✓ Initialized local KB at {kb_path}")
+        click.echo(f"✓ Initialized {scope_label} KB at {kb_path}")
         click.echo()
         click.echo("Next steps:")
-        click.echo("  mx add --title=\"Entry\" --tags=\"...\" --content=\"...\" --local")
-        click.echo("  mx search \"query\"   # Searches local KB first")
+        if user:
+            click.echo("  mx add --title=\"Entry\" --tags=\"...\" --content=\"...\"")
+            click.echo("  mx search \"query\"")
+        else:
+            click.echo("  mx add --title=\"Entry\" --tags=\"...\" --content=\"...\" --local")
+            click.echo("  mx search \"query\"   # Searches local KB first")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1255,17 +1333,18 @@ def reindex(as_json: bool):
 @cli.group(invoke_without_command=True)
 @click.pass_context
 def context(ctx):
-    """Manage project KB context (.kbcontext file).
+    """Show or validate project KB context (.kbcontext file).
 
     The .kbcontext file configures KB behavior for a project:
     - primary: Default directory for new entries
     - paths: Boost these paths in search results
     - default_tags: Suggested tags for new entries
 
+    Note: Use 'mx init' to create a new KB instead of 'mx context init'.
+
     \b
     Examples:
       mx context            # Show current context
-      mx context init       # Create a new .kbcontext file
       mx context validate   # Check context paths exist in KB
     """
     # If no subcommand provided, show context
@@ -1294,7 +1373,7 @@ def context_show(as_json: bool):
             output({"found": False, "message": "No .kbcontext file found"}, as_json=True)
         else:
             click.echo("No .kbcontext file found.")
-            click.echo("Run 'mx context init' to create one.")
+            click.echo("Run 'mx init' to create a project KB.")
         return
 
     if as_json:
@@ -1323,22 +1402,29 @@ def context_status(ctx):
     ctx.invoke(context_show)
 
 
-@context.command("init")
+@context.command("init", hidden=True)  # DEPRECATED: use mx init instead
 @click.option("--project", "-p", help="Project name (auto-detected from directory if not provided)")
 @click.option("--directory", "-d", help="KB directory (defaults to projects/<project>)")
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing .kbcontext file")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def context_init(project: Optional[str], directory: Optional[str], force: bool, as_json: bool):
-    """Create a new .kbcontext file in the current directory.
+    """DEPRECATED: Create a .kbcontext file. Use 'mx init' instead.
+
+    This command is deprecated. Use 'mx init' to create a project KB,
+    or 'mx init --user' for a user-scope KB.
 
     \b
     Examples:
-      mx context init
-      mx context init --project myapp
-      mx context init --project myapp --directory projects/myapp/docs
-      mx context init --json
+      mx init                  # Create project KB (recommended)
+      mx init --user           # Create user KB
     """
     from .context import CONTEXT_FILENAME, create_default_context
+
+    # Show deprecation warning
+    if not as_json:
+        click.echo("Warning: 'mx context init' is deprecated.", err=True)
+        click.echo("Use 'mx init' for project KB or 'mx init --user' for user KB.", err=True)
+        click.echo()
 
     context_path = Path.cwd() / CONTEXT_FILENAME
 
@@ -1363,6 +1449,8 @@ def context_init(project: Optional[str], directory: Optional[str], force: bool, 
             "created": str(context_path),
             "primary": primary_dir,
             "default_tags": [project],
+            "deprecated": True,
+            "migration": "Use 'mx init' instead"
         }, as_json=True)
     else:
         click.echo(f"Created {CONTEXT_FILENAME}")
@@ -1912,20 +2000,22 @@ def _build_schema() -> dict:
                 ],
             },
             "init": {
-                "description": "Initialize a local project KB (creates kb/ directory)",
+                "description": "Initialize a knowledge base (project or user scope)",
                 "aliases": [],
                 "arguments": [],
                 "options": [
-                    {"name": "--path", "short": "-p", "type": "path", "description": "Custom location for local KB (default: kb/)"},
-                    {"name": "--force", "short": "-f", "type": "flag", "description": "Reinitialize existing local KB"},
+                    {"name": "--path", "short": "-p", "type": "path", "description": "Custom location for KB (default: kb/)"},
+                    {"name": "--user", "short": "-u", "type": "flag", "description": "Create user-scope KB at ~/.memex/kb/"},
+                    {"name": "--force", "short": "-f", "type": "flag", "description": "Reinitialize existing KB"},
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
-                "related": ["context", "add"],
+                "related": ["add", "search"],
                 "common_mistakes": {
-                    "confusing with context init": "mx init creates a local kb/ directory. mx context init creates a .kbcontext file for global KB routing.",
+                    "using context init": "mx context init is deprecated. Use 'mx init' for project KB or 'mx init --user' for user KB.",
                 },
                 "examples": [
                     "mx init",
+                    "mx init --user",
                     "mx init --path docs/kb",
                     "mx init --force",
                 ],
@@ -1944,16 +2034,18 @@ def _build_schema() -> dict:
                 ],
             },
             "context": {
-                "description": "Manage project KB context (.kbcontext file)",
+                "description": "Show or validate project KB context (.kbcontext file)",
                 "aliases": [],
                 "arguments": [],
-                "subcommands": ["show", "init", "validate"],
+                "subcommands": ["show", "validate"],
                 "options": [],
-                "related": ["add", "search"],
-                "common_mistakes": {},
+                "related": ["init", "add", "search"],
+                "common_mistakes": {
+                    "using context init": "mx context init is deprecated. Use 'mx init' instead.",
+                },
                 "examples": [
                     "mx context",
-                    "mx context init",
+                    "mx context show",
                     "mx context validate",
                 ],
             },

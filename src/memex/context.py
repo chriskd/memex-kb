@@ -23,17 +23,103 @@ from .config import MAX_CONTEXT_SEARCH_DEPTH
 
 import yaml
 
-# Context filename (for global KB routing)
+# Context filename (for global KB routing) - DEPRECATED, use scopes instead
 CONTEXT_FILENAME = ".kbcontext"
 
-# Local KB config filename (marks a directory as a local KB)
+# KB config filename (marks a directory as a KB root)
 LOCAL_KB_CONFIG_FILENAME = ".kbconfig"
 
-# Default local KB directory name
+# Default project KB directory name (scope=project)
 LOCAL_KB_DIR = "kb"
+
+# User KB directory (scope=user)
+USER_KB_DIR = Path.home() / ".memex" / "kb"
 
 # Cache for context discovery (per-session)
 _context_cache: dict[str, "KBContext | None"] = {}
+
+# Cache for .kbconfig loading (per-session)
+_kbconfig_cache: dict[str, "KBConfig | None"] = {}
+
+
+@dataclass
+class KBConfig:
+    """KB configuration from .kbconfig file.
+
+    This config is stored inside the KB directory itself (e.g., kb/.kbconfig)
+    and configures behavior for that specific KB.
+    """
+
+    default_tags: list[str] = field(default_factory=list)
+    """Suggested tags for entries created in this KB."""
+
+    exclude: list[str] = field(default_factory=list)
+    """Glob patterns for files to exclude from indexing."""
+
+    source_file: Path | None = None
+    """Path to the .kbconfig file that was loaded."""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], source_file: Path | None = None) -> "KBConfig":
+        """Create KBConfig from parsed YAML dict."""
+        return cls(
+            default_tags=data.get("default_tags", []),
+            exclude=data.get("exclude", []),
+            source_file=source_file,
+        )
+
+
+def load_kbconfig(kb_path: Path) -> KBConfig | None:
+    """Load .kbconfig from a KB directory.
+
+    Args:
+        kb_path: Path to the KB directory (e.g., kb/ or ~/.memex/kb/).
+
+    Returns:
+        KBConfig if found and valid, None otherwise.
+    """
+    config_file = kb_path / LOCAL_KB_CONFIG_FILENAME
+
+    if not config_file.exists():
+        return None
+
+    try:
+        content = config_file.read_text(encoding="utf-8")
+        data = yaml.safe_load(content)
+
+        # Handle empty file or all-comments file
+        if data is None:
+            return KBConfig(source_file=config_file)
+
+        if not isinstance(data, dict):
+            return None
+
+        return KBConfig.from_dict(data, source_file=config_file)
+
+    except (OSError, yaml.YAMLError):
+        return None
+
+
+def get_kbconfig(kb_path: Path) -> KBConfig | None:
+    """Get KB config (cached).
+
+    Args:
+        kb_path: Path to the KB directory.
+
+    Returns:
+        KBConfig if found and valid, None otherwise.
+    """
+    cache_key = str(kb_path.resolve())
+
+    if cache_key not in _kbconfig_cache:
+        _kbconfig_cache[cache_key] = load_kbconfig(kb_path)
+
+    return _kbconfig_cache[cache_key]
+
+
+def clear_kbconfig_cache() -> None:
+    """Clear the kbconfig cache. Useful for testing or after .kbconfig changes."""
+    _kbconfig_cache.clear()
 
 
 @dataclass

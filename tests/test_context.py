@@ -1,4 +1,4 @@
-"""Tests for project context (.kbcontext) discovery and path matching."""
+"""Tests for project context (.kbcontext) and KB config (.kbconfig)."""
 
 import os
 from pathlib import Path
@@ -7,11 +7,16 @@ import pytest
 
 from memex.context import (
     CONTEXT_FILENAME,
+    LOCAL_KB_CONFIG_FILENAME,
+    KBConfig,
     KBContext,
     clear_context_cache,
+    clear_kbconfig_cache,
     create_default_context,
     discover_kb_context,
     get_kb_context,
+    get_kbconfig,
+    load_kbconfig,
     matches_glob,
     validate_context,
 )
@@ -24,10 +29,12 @@ from memex.context import (
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Clear context cache before and after each test."""
+    """Clear context and kbconfig caches before and after each test."""
     clear_context_cache()
+    clear_kbconfig_cache()
     yield
     clear_context_cache()
+    clear_kbconfig_cache()
 
 
 @pytest.fixture
@@ -343,3 +350,139 @@ class TestCreateDefaultContext:
 
         assert "primary: custom/path" in content
         assert "- custom/path" in content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KBConfig tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestKBConfig:
+    """Tests for KBConfig dataclass."""
+
+    def test_from_dict_full(self):
+        """Creates KBConfig from dict with all fields."""
+        data = {
+            "default_tags": ["personal", "notes"],
+            "exclude": ["*.draft.md", "private/**"],
+        }
+        config = KBConfig.from_dict(data)
+
+        assert config.default_tags == ["personal", "notes"]
+        assert config.exclude == ["*.draft.md", "private/**"]
+
+    def test_from_dict_empty(self):
+        """Creates KBConfig from empty dict."""
+        config = KBConfig.from_dict({})
+
+        assert config.default_tags == []
+        assert config.exclude == []
+
+    def test_from_dict_partial(self):
+        """Creates KBConfig with only some fields."""
+        data = {"default_tags": ["work"]}
+        config = KBConfig.from_dict(data)
+
+        assert config.default_tags == ["work"]
+        assert config.exclude == []
+
+    def test_source_file_tracking(self, tmp_path):
+        """Tracks source file path."""
+        source = tmp_path / ".kbconfig"
+        config = KBConfig.from_dict({}, source_file=source)
+
+        assert config.source_file == source
+
+
+class TestLoadKBConfig:
+    """Tests for load_kbconfig function."""
+
+    def test_load_full_config(self, tmp_path):
+        """Loads config file with all fields."""
+        config_file = tmp_path / LOCAL_KB_CONFIG_FILENAME
+        config_file.write_text("""
+default_tags:
+  - personal
+  - notes
+exclude:
+  - "*.draft.md"
+""")
+        config = load_kbconfig(tmp_path)
+
+        assert config is not None
+        assert config.default_tags == ["personal", "notes"]
+        assert config.exclude == ["*.draft.md"]
+        assert config.source_file == config_file
+
+    def test_load_empty_config(self, tmp_path):
+        """Handles empty config file (just comments)."""
+        config_file = tmp_path / LOCAL_KB_CONFIG_FILENAME
+        config_file.write_text("""# Empty config
+# Only comments here
+""")
+        config = load_kbconfig(tmp_path)
+
+        assert config is not None
+        assert config.default_tags == []
+        assert config.exclude == []
+
+    def test_load_missing_config(self, tmp_path):
+        """Returns None for missing config file."""
+        config = load_kbconfig(tmp_path)
+
+        assert config is None
+
+    def test_load_invalid_yaml(self, tmp_path):
+        """Returns None for invalid YAML."""
+        config_file = tmp_path / LOCAL_KB_CONFIG_FILENAME
+        config_file.write_text("not: valid: yaml: [[")
+
+        config = load_kbconfig(tmp_path)
+
+        assert config is None
+
+    def test_load_non_dict_yaml(self, tmp_path):
+        """Returns None for non-dict YAML."""
+        config_file = tmp_path / LOCAL_KB_CONFIG_FILENAME
+        config_file.write_text("- just\n- a\n- list")
+
+        config = load_kbconfig(tmp_path)
+
+        assert config is None
+
+
+class TestGetKBConfig:
+    """Tests for get_kbconfig caching function."""
+
+    def test_caches_result(self, tmp_path):
+        """Caches config to avoid repeated reads."""
+        config_file = tmp_path / LOCAL_KB_CONFIG_FILENAME
+        config_file.write_text("default_tags: [cached]")
+
+        # First call
+        config1 = get_kbconfig(tmp_path)
+        assert config1 is not None
+        assert config1.default_tags == ["cached"]
+
+        # Modify file (should not affect cached result)
+        config_file.write_text("default_tags: [modified]")
+
+        # Second call should return cached
+        config2 = get_kbconfig(tmp_path)
+        assert config2 is config1  # Same object
+        assert config2.default_tags == ["cached"]
+
+    def test_cache_cleared(self, tmp_path):
+        """Cache can be cleared to reload config."""
+        config_file = tmp_path / LOCAL_KB_CONFIG_FILENAME
+        config_file.write_text("default_tags: [original]")
+
+        config1 = get_kbconfig(tmp_path)
+        assert config1.default_tags == ["original"]
+
+        # Modify and clear cache
+        config_file.write_text("default_tags: [updated]")
+        clear_kbconfig_cache()
+
+        config2 = get_kbconfig(tmp_path)
+        assert config2.default_tags == ["updated"]
