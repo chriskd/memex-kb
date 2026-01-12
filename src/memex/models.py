@@ -52,6 +52,7 @@ class SearchResult(BaseModel):
     token_count: int = 0
     content: str | None = None  # Full document content when requested
     source_project: str | None = None  # Project that created this entry
+    kb_scope: str | None = None  # KB scope: "project", "user", or None for single-KB
 
 
 class SearchResponse(BaseModel):

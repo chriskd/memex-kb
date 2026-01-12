@@ -1691,29 +1691,34 @@ def suggest_links(path: str, limit: int, as_json: bool):
 
 
 @cli.command()
+@click.option("--project-only", is_flag=True, help="Only index project KB (exclude user KB)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def reindex(as_json: bool):
+def reindex(project_only: bool, as_json: bool):
     """Rebuild search indices from all markdown files.
 
-    Use this after bulk imports or if search results seem stale.
+    By default, indexes entries from both project and user KBs.
+    Use --project-only to restrict to project KB only.
 
     \b
     Examples:
-      mx reindex
+      mx reindex                # Index project + user KBs
+      mx reindex --project-only # Index project KB only
       mx reindex --json
     """
     from .core import reindex as core_reindex
 
     if not as_json:
-        click.echo("Reindexing knowledge base...")
+        scope_msg = "project KB" if project_only else "all KBs"
+        click.echo(f"Reindexing {scope_msg}...")
 
-    result = run_async(core_reindex())
+    result = run_async(core_reindex(project_only=project_only))
 
     if as_json:
         output({
             "kb_files": result.kb_files,
             "whoosh_docs": result.whoosh_docs,
             "chroma_docs": result.chroma_docs,
+            "project_only": project_only,
         }, as_json=True)
     else:
         click.echo(f"✓ Indexed {result.kb_files} entries, {result.whoosh_docs} keyword docs, {result.chroma_docs} semantic docs")

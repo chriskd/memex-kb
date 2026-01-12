@@ -319,46 +319,60 @@ class HybridSearcher:
         self._whoosh.delete_document(path)
         self._chroma.delete_document(path)
 
-    def reindex(self, kb_root: Path | None = None) -> int:
+    def reindex(self, kb_root: Path | None = None, kb_roots: list[tuple[str, Path]] | None = None) -> int:
         """Clear and rebuild indices from all markdown files.
 
         Args:
-            kb_root: Knowledge base root directory. Uses config default if None.
+            kb_root: Knowledge base root directory (single KB mode). Uses config default if None.
+            kb_roots: List of (scope, path) tuples for multi-KB mode. Scope is "project" or "user".
+                      If provided, kb_root is ignored.
 
         Returns:
             Number of chunks indexed.
         """
-        kb_root = kb_root or get_kb_root()
-
         # Clear existing indices
         self.clear()
-
-        # Find all markdown files
-        md_files = list(kb_root.rglob("*.md"))
-
-        if not md_files:
-            return 0
 
         # Import parser here to avoid circular imports
         from ..parser import parse_entry
 
         chunks: list[DocumentChunk] = []
 
-        for md_file in md_files:
-            try:
-                # Parse the file - returns (metadata, content, chunks)
-                _, _, file_chunks = parse_entry(md_file)
-                if not file_chunks:
-                    continue
+        # Build list of (scope, kb_path) to index
+        if kb_roots:
+            roots_to_index = kb_roots
+        else:
+            single_root = kb_root or get_kb_root()
+            roots_to_index = [(None, single_root)]  # No scope prefix for single-KB mode
 
-                relative_path = str(md_file.relative_to(kb_root))
-                normalized_chunks = [
-                    chunk.model_copy(update={"path": relative_path}) for chunk in file_chunks
-                ]
-                chunks.extend(normalized_chunks)
-            except Exception as e:
-                log.warning("Skipping %s during reindex: %s", md_file, e)
+        for scope, root in roots_to_index:
+            if not root.exists():
                 continue
+
+            # Find all markdown files in this KB
+            md_files = list(root.rglob("*.md"))
+
+            for md_file in md_files:
+                try:
+                    # Parse the file - returns (metadata, content, chunks)
+                    _, _, file_chunks = parse_entry(md_file)
+                    if not file_chunks:
+                        continue
+
+                    relative_path = str(md_file.relative_to(root))
+                    # Add scope prefix for multi-KB mode
+                    if scope:
+                        prefixed_path = f"@{scope}/{relative_path}"
+                    else:
+                        prefixed_path = relative_path
+
+                    normalized_chunks = [
+                        chunk.model_copy(update={"path": prefixed_path}) for chunk in file_chunks
+                    ]
+                    chunks.extend(normalized_chunks)
+                except Exception as e:
+                    log.warning("Skipping %s during reindex: %s", md_file, e)
+                    continue
 
         # Index all chunks
         if chunks:

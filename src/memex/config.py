@@ -14,8 +14,70 @@ class ConfigurationError(Exception):
     pass
 
 
+def get_project_kb_root() -> Path | None:
+    """Get the project-scope KB root directory.
+
+    Returns:
+        Path to project KB if found, None otherwise.
+    """
+    project_config = _discover_project_config()
+    if project_config:
+        config_path, kb_path = project_config
+        return kb_path
+    return None
+
+
+def get_user_kb_root() -> Path | None:
+    """Get the user-scope KB root directory.
+
+    Returns:
+        Path to user KB if it exists, None otherwise.
+    """
+    user_kb = Path.home() / ".memex" / "kb"
+    if (user_kb / ".kbconfig").exists():
+        return user_kb
+    return None
+
+
+def get_kb_roots(project_only: bool = False) -> list[Path]:
+    """Get all active KB root directories.
+
+    By default, returns both project and user KBs (additive scope).
+    Use project_only=True to restrict to project KB only.
+
+    Args:
+        project_only: If True, only return project KB (not user KB).
+
+    Returns:
+        List of KB paths. Project KB comes first if present.
+        Empty list if no KBs found.
+    """
+    # Check for explicit env var override (single KB mode)
+    root = os.environ.get("MEMEX_KB_ROOT")
+    if root:
+        return [Path(root)]
+
+    roots = []
+
+    # Project KB (if in a project with .kbconfig)
+    project_kb = get_project_kb_root()
+    if project_kb:
+        roots.append(project_kb)
+
+    # User KB (unless project_only is set)
+    if not project_only:
+        user_kb = get_user_kb_root()
+        if user_kb and user_kb not in roots:
+            roots.append(user_kb)
+
+    return roots
+
+
 def get_kb_root() -> Path:
-    """Get the knowledge base root directory.
+    """Get the primary knowledge base root directory.
+
+    This returns the first/primary KB for write operations.
+    For read operations that should span multiple KBs, use get_kb_roots().
 
     Discovery order:
     1. MEMEX_KB_ROOT environment variable (explicit override)
@@ -32,14 +94,13 @@ def get_kb_root() -> Path:
         return Path(root)
 
     # 2. Look for .kbconfig at project root with kb_path
-    project_config = _discover_project_config()
-    if project_config:
-        config_path, kb_path = project_config
-        return kb_path
+    project_kb = get_project_kb_root()
+    if project_kb:
+        return project_kb
 
     # 3. Check for user-scope KB
-    user_kb = Path.home() / ".memex" / "kb"
-    if (user_kb / ".kbconfig").exists():
+    user_kb = get_user_kb_root()
+    if user_kb:
         return user_kb
 
     # 4. No KB found
@@ -49,6 +110,96 @@ def get_kb_root() -> Path:
         "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
         "  3. Set MEMEX_KB_ROOT to an existing KB directory"
     )
+
+
+def parse_scoped_path(path: str) -> tuple[str | None, str]:
+    """Parse a scoped path into (scope, relative_path).
+
+    Paths can have scope prefixes like @project/ or @user/.
+    Paths without prefixes return (None, path).
+
+    Args:
+        path: Path string, possibly with scope prefix.
+
+    Returns:
+        Tuple of (scope, relative_path). Scope is None if no prefix.
+
+    Examples:
+        "@project/guides/setup.md" -> ("project", "guides/setup.md")
+        "@user/personal/notes.md" -> ("user", "personal/notes.md")
+        "guides/setup.md" -> (None, "guides/setup.md")
+    """
+    if path.startswith("@"):
+        # Find the first slash after @
+        slash_idx = path.find("/")
+        if slash_idx > 1:
+            scope = path[1:slash_idx]
+            relative = path[slash_idx + 1:]
+            return (scope, relative)
+    return (None, path)
+
+
+def resolve_scoped_path(path: str) -> Path:
+    """Resolve a scoped path to an absolute filesystem path.
+
+    Args:
+        path: Path string, possibly with scope prefix.
+
+    Returns:
+        Absolute Path to the entry.
+
+    Raises:
+        ConfigurationError: If scope KB not found.
+    """
+    scope, relative = parse_scoped_path(path)
+
+    if scope == "project":
+        kb_root = get_project_kb_root()
+        if not kb_root:
+            raise ConfigurationError("No project KB found for @project/ path")
+    elif scope == "user":
+        kb_root = get_user_kb_root()
+        if not kb_root:
+            raise ConfigurationError("No user KB found for @user/ path")
+    else:
+        # No scope prefix - use primary KB
+        kb_root = get_kb_root()
+
+    return kb_root / relative
+
+
+def get_kb_roots_for_indexing(project_only: bool = False) -> list[tuple[str, Path]]:
+    """Get KB roots formatted for indexing (with scope labels).
+
+    Args:
+        project_only: If True, only return project KB.
+
+    Returns:
+        List of (scope, path) tuples for use with HybridSearcher.reindex().
+    """
+    # Check for explicit env var override first (single KB mode, used in tests)
+    root = os.environ.get("MEMEX_KB_ROOT")
+    if root:
+        return [(None, Path(root))]
+
+    result = []
+
+    project_kb = get_project_kb_root()
+    user_kb = get_user_kb_root()
+
+    # If only one KB exists, use single-KB mode (no scope prefix)
+    if project_kb and not user_kb:
+        return [(None, project_kb)]
+    if user_kb and not project_kb:
+        return [(None, user_kb)]
+
+    # Multi-KB mode: add scope prefixes
+    if project_kb:
+        result.append(("project", project_kb))
+    if not project_only and user_kb:
+        result.append(("user", user_kb))
+
+    return result
 
 
 def _discover_project_config(start_dir: Path | None = None, max_depth: int = 10) -> tuple[Path, Path] | None:

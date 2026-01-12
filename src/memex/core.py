@@ -1310,12 +1310,15 @@ async def get_entry(path: str) -> KBEntry:
 
     Args:
         path: Path to the entry relative to KB root (e.g., "development/python-tooling.md").
+              Supports scoped paths like "@project/path.md" or "@user/path.md".
 
     Returns:
         KBEntry with metadata, content, links, and backlinks.
     """
-    kb_root = get_kb_root()
-    file_path = kb_root / path
+    from .config import resolve_scoped_path, parse_scoped_path
+
+    # Resolve scoped paths (handles @project/ and @user/ prefixes)
+    file_path = resolve_scoped_path(path)
 
     if not file_path.exists():
         raise ValueError(f"Entry not found: {path}")
@@ -1708,27 +1711,42 @@ async def backlinks(path: str) -> list[str]:
     return all_backlinks.get(path_key, [])
 
 
-async def reindex() -> IndexStatus:
+async def reindex(project_only: bool = False) -> IndexStatus:
     """Rebuild search indices.
+
+    Args:
+        project_only: If True, only index project KB (not user KB).
 
     Returns:
         IndexStatus with document counts.
     """
-    kb_root = get_kb_root()
+    from .config import get_kb_roots_for_indexing
+
     searcher = get_searcher()
+    kb_roots = get_kb_roots_for_indexing(project_only=project_only)
 
-    searcher.reindex(kb_root)
-    rebuild_backlink_cache(kb_root)
+    # Index all KBs
+    if kb_roots:
+        searcher.reindex(kb_roots=kb_roots)
 
-    # Clean up views for deleted entries
+    # Rebuild backlink cache for each KB
+    for scope, kb_root in kb_roots:
+        rebuild_backlink_cache(kb_root)
+
+    # Clean up views for deleted entries (collect from all KBs)
     try:
         from .views_tracker import cleanup_stale_entries
 
-        valid_paths = {
-            str(p.relative_to(kb_root))
-            for p in kb_root.rglob("*.md")
-            if not p.name.startswith("_")
-        }
+        valid_paths = set()
+        for scope, kb_root in kb_roots:
+            for p in kb_root.rglob("*.md"):
+                if not p.name.startswith("_"):
+                    relative = str(p.relative_to(kb_root))
+                    # Add scope prefix if in multi-KB mode
+                    if scope:
+                        valid_paths.add(f"@{scope}/{relative}")
+                    else:
+                        valid_paths.add(relative)
         cleanup_stale_entries(valid_paths)
     except Exception as e:
         log.warning("Failed to cleanup stale view entries: %s", e)
