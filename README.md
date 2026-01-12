@@ -4,292 +4,142 @@ Personal knowledge base with hybrid search (keyword + semantic).
 
 ## Features
 
-- **Hybrid search** - Combines keyword (Whoosh) and semantic (ChromaDB + sentence-transformers) search
-- **CLI tool** - `mx` for token-efficient access from any environment
+- **Hybrid search** - Keyword (Whoosh) + semantic (ChromaDB) search
+- **CLI tool** - `mx` command for terminal and agent workflows
 - **MCP server** - For Claude Desktop and MCP-compatible tools
 - **Bidirectional links** - Obsidian-style `[[links]]` with backlink tracking
-- **Web explorer** - Visual knowledge browser with graph view
 
 ## Installation
 
 ```bash
-# Install with uv
+# With uv (recommended)
 uv tool install memex-kb
 
-# Or install from source
-git clone https://github.com/chriskd/memex.git
-cd memex
-uv tool install -e .
+# With pip
+pip install memex-kb
 
-# Verify installation
+# Verify
 mx --version
 ```
 
+For semantic search, install with extras: `pip install memex-kb[semantic]`
+
 ## Quick Start
 
-### Project KB (Recommended)
-
 ```bash
-# Initialize a project KB in your repo
+# Initialize a KB in your project
 mx init
 
-# Create your first entry
-mx add --title="My First Note" --tags="example" --category=kb --content="Hello, world!"
+# Add an entry
+mx add --title="Setup Guide" --tags="docs" --content="# Setup\n\nInstructions here."
 
-# Search for entries
-mx search "hello"
+# Search
+mx search "setup"
+
+# Read an entry
+mx get guides/setup-guide.md
 ```
 
-This creates:
-- `kb/` directory for entries (commit to share with collaborators)
-- `.kbconfig` at project root with `kb_path: ./kb`
+This creates a `kb/` directory for entries and `.kbconfig` at your project root.
 
-### User KB (Personal)
+## Project and User KBs
 
+Memex supports two knowledge base locations:
+
+| Location | Created with | Use for |
+|----------|--------------|---------|
+| **Project** (`./kb/`) | `mx init` | Team docs, project-specific knowledge. Commit to git. |
+| **User** (`~/.memex/kb/`) | `mx init --user` | Personal notes, available across all projects. |
+
+By default, searches include both KBs. Results show prefixes when both exist:
+- `@project/guides/setup.md`
+- `@user/notes/ideas.md`
+
+To target a specific KB:
 ```bash
-# Initialize a personal KB at ~/.memex/kb/
-mx init --user
-
-# Add personal notes available everywhere
-mx add --title="My Note" --tags="personal" --category=kb --content="Personal knowledge"
-```
-
-User KB entries are personal and available in all projects.
-
-### Additive Scope (Default)
-
-By default, searches span **both** project and user KBs:
-
-```bash
-# Search finds entries from project KB AND user KB
-mx search "deployment"
-
-# Restrict to project KB only
-mx search "deployment" --project-only
-mx reindex --project-only
-```
-
-Results from different KBs use scope prefixes when both exist:
-- `@project/guides/setup.md` - Entry from project KB
-- `@user/personal/notes.md` - Entry from user KB
-
-### Explicit Scope for Writes
-
-When adding entries, use `--scope` to explicitly choose which KB:
-
-```bash
-# Add to project KB (shared with team)
-mx add --title="API Guide" --tags="api" --scope=project --content="..."
-
-# Add to user KB (personal notes)
-mx add --title="My Notes" --tags="personal" --scope=user --content="..."
-
-# Auto-detect (default): project KB if in project, else user KB
-mx add --title="Note" --tags="test" --content="..."
-```
-
-**When to use each scope:**
-
-| Scope | Use For |
-|-------|---------|
-| `project` | Team knowledge, infra docs, shared patterns, API docs |
-| `user` | Personal notes, experiments, drafts, individual workflow tips |
-
-### Global KB
-
-```bash
-# Set up a global knowledge base (advanced)
-mkdir -p ~/kb
-export MEMEX_KB_ROOT=~/kb
-export MEMEX_INDEX_ROOT=~/.kb-indices
-
-# Create an entry
-mx add --title="My First Note" --tags="example" --category=notes --content="Hello, world!"
+mx add --title="Note" --scope=project   # Add to project KB
+mx add --title="Note" --scope=user      # Add to user KB
+mx search "query" --project-only        # Search project KB only
 ```
 
 ## CLI Reference
 
 ```bash
-# Search (hybrid keyword + semantic)
-mx search "deployment"              # Find entries
-mx search "docker" --tags=infra     # Filter by tag
-mx search "api" --mode=semantic     # Semantic only
+# Search
+mx search "query"                  # Hybrid search
+mx search "api" --tags=docs        # Filter by tag
+mx search "api" --mode=semantic    # Semantic only
 
-# Read entries
-mx get tooling/notes.md             # Full entry with content
-mx get tooling/notes.md --metadata  # Just metadata
+# Read
+mx get path/to/entry.md            # Full entry
+mx get path/to/entry.md --metadata # Metadata only
 
 # Browse
-mx tree                             # Directory structure
-mx list --tag=infrastructure        # Filter by tag
-mx whats-new --days=7               # Recent changes
-mx tags                             # List all tags with counts
+mx tree                            # Directory structure
+mx list --tag=docs                 # Filter by tag
+mx whats-new --days=7              # Recent changes
+mx tags                            # All tags
 
-# Create/update entries
-mx add --title="My Entry" --tags="foo,bar" --content="# Content..."
-mx add --title="Personal Note" --tags="draft" --scope=user --content="..."
-mx replace path/entry.md --tags="new,tags"
-mx patch path/entry.md --find="old text" --replace="new text"
-
-# Analysis
-mx hubs                             # Most connected entries
-mx popular                          # Most viewed entries
-mx dead-ends                        # Entries with no outgoing links
+# Write
+mx add --title="Title" --tags="a,b" --content="..."
+mx replace path/entry.md --content="new content"
+mx patch path/entry.md --find="old" --replace="new"
 
 # Maintenance
-mx health                           # Audit for problems
-mx reindex                          # Rebuild search indices
+mx health                          # Audit KB
+mx reindex                         # Rebuild indices
 ```
 
 ## Claude Code Integration
-
-### Hooks (Recommended)
 
 Add to `.claude/settings.local.json`:
 
 ```json
 {
-  "env": { "MEMEX_KB_ROOT": "/path/to/kb", "MEMEX_INDEX_ROOT": "/path/to/indices" },
   "permissions": { "allow": ["Bash(mx:*)"] },
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx prime" }] }],
-    "PreCompact": [{ "hooks": [{ "type": "command", "command": "mx prime --compact" }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx prime" }] }]
   }
 }
 ```
 
-This automatically injects KB context at session start and before context compaction.
-
-### MCP Server
-
-Add to your Claude Code settings or MCP configuration:
+Or use the MCP server in `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "memex": {
-      "type": "stdio",
-      "command": "memex"
-    }
+    "memex": { "type": "stdio", "command": "memex" }
   }
 }
 ```
 
-### Available Tools
-
-| Tool | Description |
-|------|-------------|
-| `search` | Hybrid keyword + semantic search |
-| `get` | Retrieve entry with content and links |
-| `add` | Create new KB entry |
-| `update` | Modify existing entry |
-| `delete` | Remove an entry |
-| `list` | List entries by category/tag |
-| `whats_new` | Recently modified entries |
-| `tree` | Directory structure |
-| `tags` | List all tags |
-| `backlinks` | Find entries linking to a path |
-| `suggest_links` | Find semantically related entries |
-| `health` | KB audit |
-
-## Web Explorer
-
-```bash
-# Start the web interface
-memex-web
-
-# Open http://localhost:8080 in your browser
-```
-
-Features:
-- Interactive search with live results
-- Graph visualization of entry connections
-- Directory tree navigation
-- Markdown rendering with syntax highlighting
-
-## Entry Format
-
-Entries are Markdown files with YAML frontmatter:
-
-```markdown
----
-title: My Knowledge Entry
-tags: [topic, category]
-created: 2025-01-01
----
-
-# My Knowledge Entry
-
-Content with [[bidirectional links]] to other entries.
-
-Use `[[path/to/entry|Display Text]]` for custom link text.
-```
-
 ## Configuration
 
-### Project Configuration (.kbconfig)
-
-For project KBs, `.kbconfig` lives at the **project root** (not inside kb/):
+Project config lives in `.kbconfig` at your project root:
 
 ```yaml
-# Required: path to the KB directory
-kb_path: ./kb
-
-# Default tags suggested when adding entries
-default_tags:
-  - myproject
-
-# Boost these paths in search results
-boost_paths:
-  - guides/*
-  - reference/*
-
-# Default write directory for new entries
-primary: guides
-
-# Patterns to exclude from indexing
-exclude:
-  - "*.draft.md"
+kb_path: ./kb              # Required: path to KB directory
+default_tags: [myproject]  # Tags suggested when adding entries
+boost_paths: [guides/*]    # Prioritize in search results
+primary: guides            # Default directory for new entries
 ```
 
-When you run `mx init`, this file is created automatically at your project root.
+Environment variables:
 
-### User KB Configuration
-
-For user KBs (`~/.memex/kb/`), the `.kbconfig` lives inside the KB directory
-since there's no project root:
-
-```yaml
-# Optional settings for user KB
-default_tags:
-  - personal
-```
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `MEMEX_KB_ROOT` | Override KB discovery (single KB mode) | auto-discover |
-| `MEMEX_INDEX_ROOT` | Search index directory | `{kb}/.indices` |
-| `MEMEX_PRELOAD` | Preload embedding model | `false` |
-| `MEMEX_LOG_LEVEL` | Log level (DEBUG, INFO, WARNING, ERROR) | `INFO` |
+| Variable | Description |
+|----------|-------------|
+| `MEMEX_KB_ROOT` | Override KB discovery |
+| `MEMEX_INDEX_ROOT` | Index directory (default: `{kb}/.indices`) |
 
 ## Development
 
 ```bash
-# Clone and install
 git clone https://github.com/chriskd/memex.git
-cd memex
-uv sync --dev
-
-# Run tests
+cd memex && uv sync --dev
 uv run pytest
-
-# Lint
-uv run ruff check .
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
