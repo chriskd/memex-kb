@@ -27,10 +27,10 @@ mx --version
 
 ## Quick Start
 
-### Local Project KB (Recommended)
+### Project KB (Recommended)
 
 ```bash
-# Initialize a local KB in your project
+# Initialize a project KB in your repo
 mx init
 
 # Create your first entry
@@ -40,10 +40,24 @@ mx add --title="My First Note" --tags="example" --category=kb --content="Hello, 
 mx search "hello"
 ```
 
+This creates a `kb/` directory that you can commit to share knowledge with collaborators.
+
+### User KB (Personal)
+
+```bash
+# Initialize a personal KB at ~/.memex/kb/
+mx init --user
+
+# Add personal notes available everywhere
+mx add --title="My Note" --tags="personal" --category=kb --content="Personal knowledge"
+```
+
+User KB entries are personal and available in all projects.
+
 ### Global KB
 
 ```bash
-# Set up a global knowledge base
+# Set up a global knowledge base (advanced)
 mkdir -p ~/kb
 export MEMEX_KB_ROOT=~/kb
 export MEMEX_INDEX_ROOT=~/.kb-indices
@@ -169,6 +183,26 @@ Use `[[path/to/entry|Display Text]]` for custom link text.
 ```
 
 ## Configuration
+
+### KB Configuration (.kbconfig)
+
+Each KB directory can have a `.kbconfig` file with settings:
+
+```yaml
+# Default tags suggested when adding entries to this KB
+default_tags:
+  - myproject
+  - docs
+
+# Patterns to exclude from indexing
+exclude:
+  - "*.draft.md"
+  - "private/**"
+```
+
+When you run `mx init`, a `.kbconfig` template is created automatically.
+
+### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|

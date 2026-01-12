@@ -693,3 +693,83 @@ More content here.
         import re
         date_match = re.search(r"created:\s*(\d{4}-\d{2}-\d{2})", content)
         assert date_match is not None
+
+
+class TestKBConfigIntegration:
+    """Test .kbconfig default_tags integration."""
+
+    def test_kbconfig_default_tags_suggested(self, kb_root, index_root):
+        """default_tags from .kbconfig are suggested when adding entries."""
+        from memex.context import LOCAL_KB_CONFIG_FILENAME
+
+        # Create a .kbconfig with default_tags in the category directory
+        config_path = kb_root / "development" / LOCAL_KB_CONFIG_FILENAME
+        config_path.write_text("""
+default_tags:
+  - project-tag
+  - auto-tag
+""")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title=KB Config Test",
+                "--tags=explicit",
+                "--category=development",
+                "--content=Testing .kbconfig integration",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0
+
+        import json
+        data = json.loads(result.output)
+
+        # Should have suggested_tags from .kbconfig
+        assert "suggested_tags" in data
+        suggested_tag_names = [t["tag"] for t in data["suggested_tags"]]
+        assert "project-tag" in suggested_tag_names
+        assert "auto-tag" in suggested_tag_names
+
+        # Verify the reason indicates it's from .kbconfig
+        kbconfig_tags = [t for t in data["suggested_tags"] if t.get("reason") == "From .kbconfig"]
+        assert len(kbconfig_tags) >= 2
+
+    def test_kbconfig_tags_not_duplicated_with_explicit(self, kb_root, index_root):
+        """default_tags from .kbconfig are not suggested if already in explicit tags."""
+        from memex.context import LOCAL_KB_CONFIG_FILENAME
+
+        # Create a .kbconfig with a tag that will also be explicit
+        config_path = kb_root / "development" / LOCAL_KB_CONFIG_FILENAME
+        config_path.write_text("""
+default_tags:
+  - already-used
+  - new-tag
+""")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title=No Duplicate Test",
+                "--tags=already-used,other",
+                "--category=development",
+                "--content=Testing no duplicates",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0
+
+        import json
+        data = json.loads(result.output)
+
+        # 'already-used' should NOT be in suggestions (it's already explicit)
+        suggested_tag_names = [t["tag"] for t in data["suggested_tags"]]
+        assert "already-used" not in suggested_tag_names
+        # But 'new-tag' should be suggested
+        assert "new-tag" in suggested_tag_names
