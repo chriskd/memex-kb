@@ -2944,11 +2944,6 @@ async def log_session(
         else:
             timestamped_content = final_content
 
-        await update_entry(
-            path=resolved_path,
-            content=timestamped_content,
-            section_updates=None,
-        )
         # Manually append since update_entry doesn't have append mode in current version
         try:
             metadata, existing_content, _ = parse_entry(file_path)
