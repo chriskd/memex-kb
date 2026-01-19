@@ -7,15 +7,16 @@ workspace="${1:-$(pwd)}"
 
 log() { printf '[memex:post-start] %s\n' "$*"; }
 
-# --- Beads Initialization ---
-# Initialize beads if bd is available but .beads doesn't exist yet
-# (bd is installed by post-start-common.sh if VOIDLABS_BEADS=true)
-if command -v bd &>/dev/null; then
-    if [[ ! -d "$workspace/.beads" ]]; then
-        log "Initializing bd (beads)..."
-        (cd "$workspace" && bd init --quiet) || log "bd init skipped (may already be initialized)"
+# --- Ticket Initialization ---
+# Ensure .tickets exists if tk is available
+# (tk is installed by post-start-common.sh if VOIDLABS_TICKET=true)
+if command -v tk &>/dev/null; then
+    if [[ ! -d "$workspace/.tickets" ]]; then
+        log "Initializing tk (.tickets)..."
+        mkdir -p "$workspace/.tickets"
     fi
 fi
+
 
 # --- Project-specific setup ---
 # Add your recurring post-start tasks here

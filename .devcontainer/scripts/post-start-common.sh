@@ -14,7 +14,7 @@ log_feature() { printf '[voidlabs-devtools:%s] %s\n' "$1" "$2"; }
 
 # --- Configuration ---
 # Defaults (all features enabled)
-VOIDLABS_BEADS="${VOIDLABS_BEADS:-true}"
+VOIDLABS_TICKET="${VOIDLABS_TICKET:-true}"
 VOIDLABS_VLMAIL="${VOIDLABS_VLMAIL:-true}"
 VOIDLABS_VLKB="${VOIDLABS_VLKB:-true}"
 VOIDLABS_FACTORY="${VOIDLABS_FACTORY:-true}"
@@ -116,39 +116,42 @@ EOF
     fi
 }
 
-# --- Beads Issue Tracking ---
-setup_beads() {
-    # Install bd if not present (uses official installer which downloads pre-built binaries)
-    if ! command -v bd &>/dev/null; then
-        log_feature "beads" "Installing bd from GitHub releases..."
-        if curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash; then
-            # Ensure ~/.local/bin is in PATH for this session (where installer puts it)
+# --- Ticket Issue Tracking ---
+setup_ticket() {
+    # Install tk if not present (downloads standalone script)
+    if ! command -v tk &>/dev/null; then
+        log_feature "ticket" "Installing tk from GitHub..."
+        local install_dir="$HOME/.local/bin"
+        mkdir -p "$install_dir"
+        if curl -fsSL https://raw.githubusercontent.com/wedow/ticket/master/ticket -o "$install_dir/tk"; then
+            chmod +x "$install_dir/tk"
             export PATH="$HOME/.local/bin:$PATH"
-            log_feature "beads" "Installed bd v$(bd version 2>/dev/null | awk '{print $3}' || echo 'unknown')"
+            log_feature "ticket" "Installed tk"
         else
-            log_feature "beads" "Failed to install bd, skipping"
+            log_feature "ticket" "Failed to install tk, skipping"
             return 0
         fi
     fi
 
-    # Verify bd is available
-    if ! command -v bd &>/dev/null; then
-        log_feature "beads" "bd not available after install attempt, skipping"
+    # Verify tk is available
+    if ! command -v tk &>/dev/null; then
+        log_feature "ticket" "tk not available after install attempt, skipping"
         return 0
     fi
 
     # Skip if not in a git repository
     if ! git rev-parse --git-dir &>/dev/null 2>&1; then
-        log_feature "beads" "Not in a git repository, skipping hooks"
+        log_feature "ticket" "Not in a git repository, skipping ticket setup"
         return 0
     fi
 
-    # If .beads directory exists, ensure hooks are installed and current
-    if [[ -d "$workspace/.beads" ]]; then
-        log_feature "beads" "Installing/updating git hooks..."
-        (cd "$workspace" && bd --quiet hooks install 2>/dev/null) || true
+    # Ensure .tickets exists for the project
+    if [[ ! -d "$workspace/.tickets" ]]; then
+        mkdir -p "$workspace/.tickets"
+        log_feature "ticket" "Initialized .tickets"
     fi
 }
+
 
 # --- vl-mail Agent Messaging ---
 setup_vlmail() {
@@ -183,25 +186,7 @@ setup_vlmail() {
         log_feature "vl-mail" "vl-mail already up to date"
     fi
 
-    # Configure BEADS_MAIL_DELEGATE env var for bd mail integration
-    local ENV_MARKER="# >>> vl-mail-delegate >>>"
-    local ENV_BLOCK="
-$ENV_MARKER
-# vl-mail as bd mail delegate
-export BEADS_MAIL_DELEGATE=\"vl-mail\"
-# <<< vl-mail-delegate <<<"
-
-    # Add to shell profiles if not present
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        if [[ -f "$rc" ]] && ! grep -q "$ENV_MARKER" "$rc" 2>/dev/null; then
-            echo "$ENV_BLOCK" >> "$rc"
-            log_feature "vl-mail" "Added BEADS_MAIL_DELEGATE to $rc"
-        fi
-    done
-
-    # Export for current session
-    export BEADS_MAIL_DELEGATE="vl-mail"
-    log_feature "vl-mail" "bd mail delegate configured"
+    log_feature "vl-mail" "vl-mail ready"
 }
 
 # --- vl-kb Knowledge Base CLI ---
@@ -292,11 +277,7 @@ setup_factory() {
         log_feature "factory" "No bundled config found at $BUNDLED_CONFIG, skipping"
     fi
 
-    # Configure beads to use Factory droid (if bd is available)
-    if command -v bd &>/dev/null && command -v droid &>/dev/null; then
-        log_feature "factory" "Configuring beads for Factory droid..."
-        bd setup factory 2>/dev/null || true
-    fi
+    log_feature "factory" "Factory config ready"
 }
 
 # --- Chezmoi Dotfiles ---
@@ -473,7 +454,7 @@ main() {
     fi
 
     # Optional features (controlled by config)
-    [[ "$VOIDLABS_BEADS" == "true" ]] && setup_beads
+    [[ "$VOIDLABS_TICKET" == "true" ]] && setup_ticket
     [[ "$VOIDLABS_VLMAIL" == "true" ]] && setup_vlmail
     [[ "$VOIDLABS_VLKB" == "true" ]] && setup_vlkb
     [[ "$VOIDLABS_FACTORY" == "true" ]] && setup_factory

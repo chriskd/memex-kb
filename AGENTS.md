@@ -105,7 +105,7 @@ Development happens in **devcontainers** running on `devbox.voidlabs.local` (a r
 
 - **Cursor** - Connects via SSH Remote extension, then attaches to containers
 - **Claude Code** - CLI in terminal, uses shared settings
-- **Factory Droid** - Local LLM agent (configured via `bd setup factory`)
+- **Factory Droid** - Local LLM agent (configured via `shared devtools setup`)
 - **OpenAI Codex** - API-based agent
 
 **Docker context on Mac:**
@@ -123,13 +123,10 @@ All projects share tooling from `/srv/fast/code/voidlabs-devtools`. This reposit
 | `AGENTS.md` | This file - agent guidance for this project |
 | `hooks/session-context.sh` | Claude Code SessionStart hook |
 | `scripts/new-project.sh` | Scaffolds new projects with devcontainer |
-| `devcontainers/template/scripts/post-start-common.sh` | Shared container setup (Phase secrets, Factory droid, bd hooks) |
+| `devcontainers/template/scripts/post-start-common.sh` | Shared container setup (Phase secrets, Factory droid, ticket tooling) |
 
 **Session hooks run automatically** and inject:
-- `bd prime` output (ready issues + workflow reminders)
-- bd upgrade detection (notifies when bd version changed)
-- Daemon health warnings (version mismatch detection)
-- Stale issues check (>30 days untouched)
+- ticket reminders (ready/blocked when .tickets exists)
 - Comments and documentation guidance
 
 **You don't need to run these manually** - they execute on session start. But understanding where they come from helps if you want to suggest improvements.
@@ -137,7 +134,7 @@ All projects share tooling from `/srv/fast/code/voidlabs-devtools`. This reposit
 **To improve shared tooling:**
 - Edit files in `/srv/fast/code/voidlabs-devtools`
 - Changes apply to all projects on next session start
-- Consider creating a bd issue for significant changes
+- Consider creating a ticket for significant changes
 
 **New projects are bootstrapped with:**
 ```bash
@@ -319,402 +316,94 @@ history/
 
 ---
 
-## Issue Tracking with bd (beads)
+## Issue Tracking with ticket (tk)
 
-We use **bd (beads)** for issue tracking instead of Markdown TODOs or external tools.
+We use **ticket (`tk`)** for issue tracking instead of Markdown TODOs or external tools. Tickets are Markdown files with YAML frontmatter stored in `.tickets/`.
 
-### Why CLI over MCP?
-
-bd offers both CLI and MCP server interfaces. **We use CLI** because:
-- Minimizes context usage - Only injects ~1-2k tokens via `bd prime` vs MCP tool schemas
-- Lower latency with direct CLI calls
-- Works universally across any AI assistant
-
-### Initializing bd
-
-For new projects or first-time setup:
+### Quick Start
 
 ```bash
-bd init --quiet  # Critical for agent environments - prevents interactive prompts
-bd hooks install # Install git hooks for auto-sync
+tk create "Short title" -d "Why/what" -t task -p 2
+tk start <id>
+tk add-note <id> "Progress update"
+tk close <id>
 ```
-
-The `--quiet` flag is essential for non-interactive agent environments - it automatically installs git hooks and configures the merge driver without prompting.
-
-### Getting Context with bd prime
-
-Use `bd prime` to get AI-optimized workflow context at the start of a session:
-
-```bash
-bd prime              # Outputs ready issues, stale work, and workflow reminders
-bd prime --json       # JSON format for programmatic use
-```
-
-This is more comprehensive than `bd ready` - it includes workflow guidance alongside the issue list.
 
 ### CLI Quick Reference
 
-**Essential commands for AI agents:**
-
 ```bash
 # Find work
-bd ready --json                                    # Unblocked issues
-bd stale --days 30 --json                          # Forgotten issues
+tk ready
+tk blocked
+tk ls --status=open
 
-# Create and manage issues
-bd create "Issue title" --description="Detailed context about the issue" -t bug|feature|task -p 0-4 --json
-bd create "Found bug" --description="What the bug is and how it was discovered" -p 1 --deps discovered-from:<parent-id> --json
-bd create "Subtask" --parent <epic-id> --json     # Hierarchical subtask (gets ID like epic-id.1)
-bd update <id> --status in_progress --json
-bd close <id> --reason "Done" --json
+# Create and manage tickets
+tk create "Issue title" -d "Detailed context" -t bug|feature|task|epic|chore -p 0-4
+tk start <id>
+tk status <id> in_progress
+tk close <id>
 
-# Search and filter
-bd list --status open --priority 1 --json
-bd list --label-any urgent,critical --json
-bd show <id> --json
+# Details and notes
+tk show <id>
+tk add-note <id> "Started investigating - found root cause in auth.py"
+tk edit <id>
 
-# Comments (preserve context across sessions)
-bd comment <id> "Started investigating - found root cause in auth.py"
-bd comment <id> "Blocked: waiting on API changes in #ABC-123"
-
-# Graph links
-bd relate <id1> <id2>                              # Bidirectional "see also"
-bd duplicate <id> --of <canonical>                 # Mark as duplicate
-
-# Sync (CRITICAL at end of session!)
-bd sync  # Force immediate export/commit/push
-
-# CLI help - discover all available flags
-bd <command> --help                               # e.g., bd create --help
+# Dependencies and links
+tk dep <id> <dep-id>         # <id> depends on <dep-id>
+tk dep tree <id>
+tk link <id> <other-id>
 ```
-
-### Auto-Sync Behavior
-
-bd automatically syncs with git:
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed during normal work
-
-**Always commit `.beads/issues.jsonl` with code changes** so issue state stays in sync with code state.
 
 ### Workflow
 
-1. **Check for ready work**: Run `bd ready` to see what's unblocked (or `bd stale` to find forgotten issues)
-2. **Claim your task**: `bd update <id> --status in_progress`
+1. **Check for ready work**: `tk ready`
+2. **Claim your task**: `tk start <id>` (or `tk status <id> in_progress`)
 3. **Work on it**: Implement, test, document
-4. **Discover new work**: If you find bugs or TODOs, create issues with `discovered-from` links
-5. **Complete**: `bd close <id> --reason "Implemented"`
-6. **Sync at end of session**: `bd sync`
+4. **Capture context**: `tk add-note <id> "..."` for discoveries and blockers
+5. **Complete**: `tk close <id>`
+6. **Commit**: Include `.tickets/*.md` with code changes
 
----
+### Issue Quality
 
-## IMPORTANT: Always Include Issue Descriptions
+Always include meaningful descriptions and acceptance criteria.
 
-**Issues without descriptions lack context for future work.** When creating issues, always include a meaningful description with:
-
-- **Why** the issue exists (problem statement or need)
-- **What** needs to be done (scope and approach)
-- **How** you discovered it (if applicable during work)
-
-**Good examples:**
+**Good example:**
 
 ```bash
-# Bug discovered during work
-bd create "Fix auth bug in login handler" \
-  --description="Login fails with 500 error when password contains special characters like quotes. Found while testing feature X. Stack trace shows unescaped SQL in auth/login.go:45." \
-  -t bug -p 1 --deps discovered-from:bd-abc --json
-
-# Feature request
-bd create "Add password reset flow" \
-  --description="Users need ability to reset forgotten passwords via email. Should follow OAuth best practices and include rate limiting to prevent abuse." \
-  -t feature -p 2 --json
-
-# Technical debt
-bd create "Refactor auth package for testability" \
-  --description="Current auth code has tight DB coupling making unit tests difficult. Need to extract interfaces and add dependency injection. Blocks writing tests for bd-xyz." \
-  -t task -p 3 --json
+tk create "Fix auth bug in login handler"   -d "Login fails with 500 when password contains quotes. Found while testing feature X. Stack trace shows unescaped SQL in auth/login.go:45."   -t bug -p 1 --acceptance "- [ ] Tests added/updated
+- [ ] README.md updated (if user-facing)
+- [ ] Docs updated (if applicable)"
 ```
 
 **Bad examples (missing context):**
 
 ```bash
-bd create "Fix auth bug" -t bug -p 1 --json  # What bug? Where? Why?
-bd create "Add feature" -t feature --json     # What feature? Why needed?
-bd create "Refactor code" -t task --json      # What code? Why refactor?
+tk create "Fix auth bug" -t bug -p 1
+tk create "Add feature" -t feature
+tk create "Refactor code" -t task
 ```
 
----
+### Types and Priorities
 
-## Issue Comments
-
-**Leave comments on issues as you work** - not just open/close:
-
-```bash
-bd comment <issue-id> "Started investigating - found root cause in auth.py"
-bd comment <issue-id> "Blocked: waiting on API changes in #ABC-123"
-bd comment <issue-id> "Implemented approach 2, running tests now"
-```
-
-**When to comment:**
-- Starting work on an issue (what you're trying first)
-- Finding important context (root cause, blockers, related issues)
-- Changing approach (why you pivoted)
-- Partial progress before session end (what's done, what's left)
-- Discoveries that future sessions need to know
-
-Comments are for **future you** and **other agents** - they preserve context across sessions.
-
----
-
-## Issue Types
-
-- `bug` - Something broken that needs fixing
+- `bug` - Something broken
 - `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature composed of multiple issues (supports hierarchical children)
-- `chore` - Maintenance work (dependencies, tooling)
+- `task` - Tests/docs/refactors
+- `epic` - Large feature with subtasks
+- `chore` - Maintenance
+
+Priorities:
+- `0` Critical
+- `1` High
+- `2` Medium
+- `3` Low
+- `4` Backlog
+
+### Dependencies and Links
+
+- Use `tk dep` for blocking prerequisites.
+- Use `tk link` for "see also"/related work.
+- `tk blocked` shows tickets with unresolved deps.
 
-## Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (nice-to-have features, minor bugs)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
----
-
-## Dependency Types
-
-**Blocking dependencies:**
-- `blocks` - Hard dependency (issue X blocks issue Y)
-
-**Structural relationships:**
-- `parent-child` - Epic/subtask relationship
-- `discovered-from` - Track issues discovered during work
-- `related` - Soft relationship (issues are connected)
-
-**Graph links:**
-- `relates_to` - Bidirectional "see also" links (`bd relate <id1> <id2>`)
-- `duplicates` - Mark issue as duplicate (`bd duplicate <id> --of <canonical>`)
-- `supersedes` - Version chains (`bd supersede <old> --with <new>`)
-
-Only `blocks` dependencies affect the ready work queue.
-
----
-
-## Planning Work with Dependencies
-
-When breaking down large features into tasks, use **beads dependencies** to sequence work - NOT phases or numbered steps.
-
-### Cognitive Trap: Temporal Language Inverts Dependencies
-
-Words like "Phase 1", "Step 1", "first", "before" trigger temporal reasoning that **flips dependency direction**. Your brain thinks:
-- "Phase 1 comes before Phase 2" → "Phase 1 blocks Phase 2" → `bd dep add phase1 phase2`
-
-But that's **backwards**! The correct mental model:
-- "Phase 2 **depends on** Phase 1" → `bd dep add phase2 phase1`
-
-**Solution: Use requirement language, not temporal language**
-
-Instead of phases, name tasks by what they ARE, and think about what they NEED:
-
-```bash
-# WRONG - temporal thinking leads to inverted deps
-bd create "Phase 1: Create buffer layout" ...
-bd create "Phase 2: Add message rendering" ...
-bd dep add phase1 phase2  # WRONG! Says phase1 depends on phase2
-
-# RIGHT - requirement thinking
-bd create "Create buffer layout" ...
-bd create "Add message rendering" ...
-bd dep add msg-rendering buffer-layout  # msg-rendering NEEDS buffer-layout
-```
-
-**Verification**: After adding deps, run `bd blocked` - tasks should be blocked by their prerequisites, not their dependents.
-
----
-
-## Duplicate Detection & Merging
-
-AI agents should proactively detect and merge duplicate issues to keep the database clean:
-
-**Detection strategies:**
-
-1. **Before creating new issues**: Search for similar existing issues
-   ```bash
-   bd list --json | grep -i "authentication"
-   bd show bd-41 bd-42 --json  # Compare candidates
-   ```
-
-2. **During work discovery**: Check for duplicates when filing discovered-from issues
-
-**Merge workflow:**
-
-```bash
-# Step 1: Identify duplicates (bd-42 and bd-43 duplicate bd-41)
-bd show bd-41 bd-42 bd-43 --json
-
-# Step 2: Preview merge to verify
-bd merge bd-42 bd-43 --into bd-41 --dry-run
-
-# Step 3: Execute merge
-bd merge bd-42 bd-43 --into bd-41 --json
-```
-
-**Best practices:**
-- Merge early to prevent dependency fragmentation
-- Choose the oldest or most complete issue as merge target
-
----
-
-## Pro Tips for Agents
-
-- **Start sessions with `bd prime`** to get comprehensive context (issues + workflow guidance)
-- Always use `--json` flags for programmatic use
-- **Always run `bd sync` at end of session** to flush/commit/push immediately
-- Link discoveries with `discovered-from` to maintain context
-- Check `bd ready` before asking "what next?"
-- Use `bd dep tree` to understand complex dependencies
-- Priority 0-1 issues are usually more important than 2-4
-- Use `--dry-run` to preview changes before applying
-- Run `bd info --whats-new` after upgrades to learn about new features
-
----
-
-## Why `bd sync` Matters
-
-When you finish making issue changes, always run:
-
-```bash
-bd sync
-```
-
-This immediately:
-1. Exports pending changes to JSONL (bypasses 30s debounce)
-2. Commits to git
-3. Pulls from remote
-4. Imports any updates
-5. Pushes to remote
-
-**Without `bd sync`**, changes sit in a 30-second debounce window. The user might think you pushed but the JSONL is still dirty.
-
----
-
-## Git Hooks
-
-**Install hooks for automatic sync** (prevents stale JSONL problems):
-
-```bash
-bd hooks install
-```
-
-This installs:
-- **pre-commit** - Flushes pending changes before commit
-- **post-merge** - Imports updated JSONL after pull/merge
-- **pre-push** - Exports database before push (prevents stale JSONL)
-- **post-checkout** - Imports JSONL after branch checkout
-
-**Why hooks matter:** Without pre-push, you can have database changes committed locally but stale JSONL pushed to remote, causing multi-workspace divergence.
-
----
-
-## Upgrading bd
-
-After upgrading bd to a new version:
-
-```bash
-bd info --whats-new   # See what changed in this version
-bd hooks install      # Regenerate hooks to match new version
-```
-
-**Always regenerate hooks after upgrading** - hook behavior may change between versions, and stale hooks can cause sync issues.
-
----
-
-## Multi-Agent Coordination
-
-When multiple agents work on the same repository, bd provides coordination features.
-
-### Agent Identity
-
-Set your agent identity for audit trails and messaging:
-
-```bash
-export BEADS_IDENTITY="worker-1"  # Or "claude-main", "codex-reviewer", etc.
-```
-
-This identity appears in issue history and enables inter-agent messaging.
-
-### Inter-Agent Messaging (bd mail)
-
-Beads includes a built-in messaging system for direct agent-to-agent communication. Messages are stored as beads issues, synced via git.
-
-**Commands:**
-
-```bash
-# Send a message
-bd mail send <recipient> -s "Subject" -m "Body"
-bd mail send worker-2 -s "Handoff" -m "Your turn on bd-xyz" --urgent
-
-# Check your inbox
-bd mail inbox
-
-# Read a specific message
-bd mail read bd-a1b2
-
-# Acknowledge (mark as read/close)
-bd mail ack bd-a1b2
-
-# Reply to a message (creates thread)
-bd mail reply bd-a1b2 -m "Thanks, on it!"
-```
-
-**Use cases:**
-- Task handoffs between agents
-- Status updates to coordinator
-- Blocking questions requiring response
-- Priority signaling with `--urgent` flag
-
-**Cleanup:** Messages are ephemeral. Run `bd cleanup --ephemeral --force` to delete closed messages.
-
-See [docs/messaging.md](docs/messaging.md) for full documentation.
-
-### Deletion Tracking
-
-When issues are deleted, bd tracks them in `.beads/deletions.jsonl` to propagate deletions across clones. This ensures consistency when multiple agents or workspaces interact with the same repository.
-
----
-
-## Daemon Management
-
-bd can run background daemons for faster sync and event-driven updates.
-
-### Checking Daemon Status
-
-```bash
-bd daemons list --json     # List running daemons
-bd daemons health --json   # Check daemon health
-bd daemons logs . -n 100   # View recent daemon logs
-```
-
-### Stopping Daemons
-
-```bash
-bd daemons killall --json  # Stop all daemons
-```
-
-### Event-Driven Mode
-
-For better performance with multiple agents:
-
-```bash
-export BEADS_DAEMON_MODE=events  # Reduces CPU ~60%, latency <500ms
-```
-
-This mode uses filesystem events instead of polling, significantly reducing resource usage.
-
----
 
 ## GitHub Issues and PRs
 
@@ -744,13 +433,13 @@ gh issue view 201
 
 **MANDATORY WORKFLOW:**
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds (file P0 issues if broken)
-3. **Update issue status** - Close finished work, update in-progress items
+1. **File tickets for remaining work** - Create tickets for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds (file P0 tickets if broken)
+3. **Update ticket status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
-   bd sync
+   git add .tickets
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -760,7 +449,7 @@ gh issue view 201
    git remote prune origin  # Clean up deleted remote branches
    ```
 6. **Verify** - All changes committed AND pushed
-7. **Choose follow-up issue** - Pick next work and provide a prompt for next session
+7. **Choose follow-up ticket** - Pick next work and provide a prompt for next session
 
 **CRITICAL RULES:**
 - Work is NOT complete until `git push` succeeds
@@ -773,17 +462,17 @@ gh issue view 201
 
 ```bash
 # 1. File remaining work
-bd create "Add integration tests for sync" --description="..." -t task -p 2 --json
+tk create "Add integration tests for sync" -d "..." -t task -p 2
 
 # 2. Run quality gates (if code changed)
 # [run your project's test/lint commands]
 
-# 3. Close finished issues
-bd close bd-42 bd-43 --reason "Completed" --json
+# 3. Close finished tickets
+tk close <id>
 
 # 4. PUSH TO REMOTE - MANDATORY
 git pull --rebase
-bd sync
+git add .tickets
 git push
 git status  # Verify "up to date with origin"
 
@@ -792,27 +481,24 @@ git stash clear
 git remote prune origin
 
 # 6. Choose next work
-bd ready --json
+tk ready
 ```
 
 **Then provide the user with:**
 - Summary of what was completed this session
-- What issues were filed for follow-up
+- What tickets were filed for follow-up
 - Confirmation that ALL changes have been pushed
-- Recommended prompt for next session: "Continue work on bd-X: [title]. [Brief context]"
+- Recommended prompt for next session: "Continue work on ticket <id>: [title]. [Brief context]"
 
----
 
 ## Important Rules
 
-- Use bd for ALL task tracking
-- Always use `--json` flag for programmatic use
-- Always include meaningful descriptions when creating issues
-- Link discovered work with `discovered-from` dependencies
-- Leave comments to preserve context across sessions
-- Check `bd ready` before asking "what should I work on?"
+- Use ticket for ALL task tracking
+- Always include meaningful descriptions and acceptance criteria
+- Link prerequisites with `tk dep` and related work with `tk link`
+- Check `tk ready` before asking "what should I work on?"
 - Store AI planning docs in `history/` directory, not repo root
-- Run `bd <cmd> --help` to discover available flags
 - Do NOT create markdown TODO lists
 - Do NOT duplicate tracking systems
 - Do NOT clutter repo root with planning documents
+
