@@ -1,0 +1,15 @@
+{
+  "name": "memex",
+  "description": "Personal knowledge base plugins",
+  "owner": {
+    "name": "memex"
+  },
+  "plugins": [
+    {
+      "name": "memex",
+      "description": "Personal knowledge base with semantic search. Build and query your own knowledge graph with wiki-style links and hybrid search.",
+      "version": "0.1.0",
+      "source": "./"
+    }
+  ]
+}

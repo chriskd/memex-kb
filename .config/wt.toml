@@ -1,0 +1,11 @@
+# Worktrunk project hooks for memex
+# See: https://worktrunk.dev/reference/hook
+
+# Install dependencies when creating a worktree
+post-create = "uv sync"
+
+# Quality gates before merging to main
+[pre-merge]
+lint = "uv run ruff check src/"
+typecheck = "uvx ty check src/"
+test = "uv run pytest"

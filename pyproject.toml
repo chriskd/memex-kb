@@ -1,0 +1,64 @@
+[project]
+name = "memex"
+version = "0.1.0"
+description = "Personal knowledge base with semantic search"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.12.0",
+    "whoosh-reloaded>=2.7.4",
+    "chromadb>=0.5.0,<1.0.0",  # Cap for arm64 onnxruntime compatibility
+    "sentence-transformers>=3.0.0",
+    "python-frontmatter>=1.1.0",
+    "watchdog>=4.0.0",
+    "tiktoken>=0.5.0",
+    "click>=8.1.0",
+    "anthropic>=0.40.0",  # For memory capture LLM calls
+    "pyyaml>=6.0.0",  # For .kbcontext parsing
+    "openai>=1.0.0",  # For memory evolution via OpenRouter
+]
+
+[project.scripts]
+mx = "memex.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+norecursedirs = ["_archive", "__pycache__"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.rules]
+# Enable stricter rules that are off by default
+division-by-zero = "error"              # Catch x / 0
+possibly-unresolved-reference = "warn"  # Catch typos in conditional branches
+
+# Promote warnings to errors for CI strictness
+possibly-missing-attribute = "error"    # Was warning, catches real bugs
+
+[tool.ty.terminal]
+error-on-warning = true                 # Fail CI on warnings too
+
+# Relax rules for tests (they often do weird things intentionally)
+[[tool.ty.overrides]]
+include = ["tests/**"]
+[tool.ty.overrides.rules]
+possibly-unresolved-reference = "ignore"

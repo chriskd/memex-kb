@@ -1,0 +1,16 @@
+{
+  "name": "memex",
+  "version": "0.1.0",
+  "description": "Personal knowledge base with semantic search. Build and query your own knowledge graph with wiki-style links and hybrid search.",
+  "author": {
+    "name": "memex"
+  },
+  "license": "MIT",
+  "keywords": [
+    "knowledge-base",
+    "semantic-search",
+    "documentation",
+    "personal-knowledge",
+    "obsidian"
+  ]
+}

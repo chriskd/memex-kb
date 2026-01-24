@@ -1,0 +1,58 @@
+# Voidlabs Development Container
+# Base configuration - synced via pbs
+#
+# Project-specific customizations go in docker-compose.override.yml
+# which is automatically merged and NOT synced.
+
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+
+    # Common volumes - shared across all voidlabs devcontainers
+    # Note: Project is accessed via /srv/fast/code/<project> (no separate mount needed)
+    # workspaceFolder in devcontainer.json uses ${localWorkspaceFolderBasename} to match
+    volumes:
+      - /srv/fast:/srv/fast:cached
+      - /srv/fast/ai-cli-configs/claude:/home/chris/.claude:cached
+      - /srv/fast/ai-cli-configs/codex:/home/chris/.codex:cached
+      - /srv/fast/ai-cli-configs/factory:/home/chris/.factory:cached
+      - ${HOME}/.ssh:/home/chris/.ssh:cached
+      # SSH agent forwarding (for passphrase-protected keys)
+      # Empty fallback prevents failure when SSH_AUTH_SOCK isn't set
+      - ${SSH_AUTH_SOCK:-/dev/null}:/ssh-agent:ro
+      # Persistent package caches - shared across all devcontainers
+      - /srv/fast/caches/uv:/home/chris/.cache/uv:cached
+      - /srv/fast/caches/pip:/home/chris/.cache/pip:cached
+      - /srv/fast/caches/huggingface:/home/chris/.cache/huggingface:cached
+
+    # Network configuration
+    networks:
+      - devtools-shared
+    dns:
+      - 192.168.51.53
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Environment variables
+    environment:
+      - IN_DEVCONTAINER=1
+      - CLAUDE_CONFIG_DIR=/home/chris/.claude
+      - PHASE_HOST=https://secrets.voidlabs.cc
+      - PHASE_SERVICE_TOKEN=${PHASE_SERVICE_TOKEN}
+      - PHASE_ENV=${PHASE_ENV}
+      - PHASE_APP=${PHASE_APP}
+      # SSH agent forwarding (matches volume mount above)
+      - SSH_AUTH_SOCK=/ssh-agent
+      # Cache directories (volumes mounted above)
+      - HF_HOME=/home/chris/.cache/huggingface
+      # LLM breadcrumb metadata - identifies which model is running
+      - LLM_MODEL=claude-opus-4-5
+
+    # Keep container running
+    command: sleep infinity
+
+networks:
+  devtools-shared:
+    external: true
