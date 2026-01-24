@@ -9,6 +9,7 @@ venv/
 *.egg-info/
 dist/
 build/
+.coverage
 
 # Search indices (rebuilt locally)
 .indices/
@@ -25,6 +26,9 @@ Thumbs.db
 
 # Plugin local settings
 .claude/*.local.md
+
+# Local mail artifacts
+.vl-mail/
 
 # uv
 .python-version
