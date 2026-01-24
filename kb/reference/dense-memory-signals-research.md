@@ -136,8 +136,3 @@ Estimated: ~120 tokens with very high information density.
 - [[https://www.letta.com/blog/agent-memory|Letta Agent Memory]]
 - [[https://arxiv.org/abs/2502.12110|A-Mem Paper (NeurIPS 2025)]]
 - [[https://alok-mishra.com/2026/01/07/a-2026-memory-stack-for-enterprise-agents/|2026 Enterprise Memory Stack]]
-
-## Related
-
-- [[reference/agent-memory-comparison.md|Agent Memory Comparison]]
-- [[guides/agent-memory.md|Agent Memory Guide]]

@@ -11,7 +11,7 @@ Provider detection:
 5. If no keys set -> error
 
 Usage:
-    # Sync (for memory.py)
+    # Sync
     client, provider = get_sync_client()
 
     # Async (for llm.py)
@@ -176,7 +176,7 @@ def detect_provider(config: LLMConfig | None = None) -> str:
 
 
 # =============================================================================
-# Sync Clients (for memory.py)
+# Sync Clients
 # =============================================================================
 
 

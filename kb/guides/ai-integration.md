@@ -9,10 +9,7 @@ tags:
   - integration
 created: 2026-01-06T00:00:00
 updated: 2026-01-15T03:22:55.480350+00:00
-semantic_links:
-  - path: a-mem-parity/a-mem-test-cases-for-agent-evaluation.md
-    score: 0.667
-    reason: bidirectional
+semantic_links: []
 ---
 
 # AI Agent Integration
@@ -34,21 +31,6 @@ Add to `.claude/settings.local.json`:
 ```
 
 This grants Claude Code permission to run any `mx` command without prompting.
-
-### Agent Memory
-
-Memex includes automatic session memory that remembers what you worked on across sessions. See [[guides/agent-memory]] for full documentation.
-
-**Quick setup:**
-```bash
-mx memory init
-```
-
-This installs hooks that:
-- **SessionStart**: Inject recent session context (~1000 tokens)
-- **Stop/PreCompact**: Capture session observations via Claude haiku
-
-Requires `ANTHROPIC_API_KEY` environment variable for summarization.
 
 ### Session Hooks
 
@@ -78,9 +60,6 @@ mx search "authentication patterns"
 # During work: add discoveries for future sessions
 mx add --title="OAuth2 Setup" --tags="auth,patterns" --category=patterns \
   --content="..."
-
-# Add manual memory notes (auto-captured on session end)
-mx memory add "Implemented OAuth2 flow"
 ```
 
 ## Codex CLI
@@ -153,21 +132,6 @@ This creates a `.kbcontext` file that:
 - Boosts project entries in search results
 - Suggests project-specific tags
 
-## Session Memory
-
-Memory is captured automatically at session end. For manual notes:
-
-```bash
-# Add a memory note
-mx memory add "Fixed auth bug, added tests"
-
-# Check memory status
-mx memory status
-
-# Preview what would be injected at session start
-mx memory inject
-```
-
 ## Best Practices
 
 1. **Search before creating** - Avoid duplicate entries
@@ -178,7 +142,6 @@ mx memory inject
 
 ## See Also
 
-- [[guides/agent-memory|Agent Memory]] - Automatic session memory
 - [[reference/cli|CLI Reference]]
 - [[guides/mcp-setup|MCP Server Setup]]
 - [[reference/entry-format|Entry Format]]

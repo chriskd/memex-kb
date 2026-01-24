@@ -436,7 +436,7 @@ MEMORY_EVOLUTION_MIN_SCORE = 0.7
 class LLMConfig:
     """Configuration for LLM provider and models.
 
-    Applies to all LLM-powered features (memory capture, evolution, etc.).
+    Applies to all LLM-powered features (evolution, etc.).
     Provider is auto-detected from available API keys unless explicitly set.
 
     Example .kbconfig:
@@ -444,7 +444,6 @@ class LLMConfig:
           provider: anthropic  # or "openrouter"
           model: claude-3.5-haiku
           models:
-            memory_capture: claude-3-haiku
             memory_evolution: claude-3.5-haiku
     """
 
@@ -455,13 +454,13 @@ class LLMConfig:
     """Default model for all LLM features."""
 
     models: dict[str, str] | None = None
-    """Per-feature model overrides. Keys: 'memory_capture', 'memory_evolution'"""
+    """Per-feature model overrides. Keys: 'memory_evolution'"""
 
     def get_model(self, feature: str) -> str:
         """Get the model for a specific feature.
 
         Args:
-            feature: Feature name like 'memory_capture' or 'memory_evolution'.
+            feature: Feature name like 'memory_evolution'.
 
         Returns:
             Model name, using feature-specific override if set.
@@ -482,7 +481,7 @@ def get_llm_config() -> LLMConfig:
           provider: anthropic
           model: claude-3.5-haiku
           models:
-            memory_capture: claude-3-haiku
+            memory_evolution: claude-3.5-haiku
 
     Returns:
         LLMConfig with loaded or default values.
