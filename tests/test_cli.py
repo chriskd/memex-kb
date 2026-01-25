@@ -50,6 +50,7 @@ ALL_COMMANDS = [
     "context",
     "evolve",
     "patch",
+    "relations-lint",
     "relations-add",
     "relations-remove",
 ]
@@ -74,6 +75,7 @@ JSON_COMMANDS = [
     "prime",
     "reindex",
     "evolve",
+    "relations-lint",
     "relations-add",
     "relations-remove",
 ]
@@ -1278,6 +1280,116 @@ class TestTagsCommand:
 
             assert result.exit_code == 1
             assert "No knowledge base found" in result.output
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Relations Lint Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestRelationsLintCommand:
+    """Tests for 'mx relations-lint' command."""
+
+    @patch("memex.config.get_kb_root")
+    @patch("memex.cli.run_async")
+    def test_relations_lint_reports_issues(
+        self, mock_run_async, mock_get_kb_root, runner, tmp_path
+    ):
+        """relations-lint prints warnings for unknown/inconsistent types."""
+        mock_get_kb_root.return_value = tmp_path
+        mock_run_async.return_value = {
+            "summary": {
+                "entries_scanned": 2,
+                "relations_scanned": 2,
+                "unknown_count": 1,
+                "inconsistent_count": 1,
+                "missing_count": 0,
+            },
+            "canonical_types": {"depends_on": "desc", "related": "desc"},
+            "issues": [
+                {
+                    "issue": "unknown",
+                    "path": "a.md",
+                    "scope": None,
+                    "target": "b.md",
+                    "type": "mystery",
+                    "suggestion": None,
+                },
+                {
+                    "issue": "inconsistent",
+                    "path": "c.md",
+                    "scope": None,
+                    "target": "d.md",
+                    "type": "Depends-On",
+                    "suggestion": "depends_on",
+                },
+            ],
+        }
+
+        result = runner.invoke(cli, ["relations-lint"])
+
+        assert result.exit_code == 0
+        assert "Relations Type Lint" in result.output
+        assert "Unknown types: 1" in result.output
+        assert "Inconsistent types: 1" in result.output
+        assert "use depends_on" in result.output
+
+    @patch("memex.config.get_kb_root")
+    @patch("memex.cli.run_async")
+    def test_relations_lint_strict_exits_nonzero(
+        self, mock_run_async, mock_get_kb_root, runner, tmp_path
+    ):
+        """relations-lint --strict exits with code 1 when issues exist."""
+        mock_get_kb_root.return_value = tmp_path
+        mock_run_async.return_value = {
+            "summary": {
+                "entries_scanned": 1,
+                "relations_scanned": 1,
+                "unknown_count": 1,
+                "inconsistent_count": 0,
+                "missing_count": 0,
+            },
+            "canonical_types": {},
+            "issues": [
+                {
+                    "issue": "unknown",
+                    "path": "a.md",
+                    "scope": None,
+                    "target": "b.md",
+                    "type": "mystery",
+                    "suggestion": None,
+                }
+            ],
+        }
+
+        result = runner.invoke(cli, ["relations-lint", "--strict"])
+
+        assert result.exit_code == 1
+
+    @patch("memex.config.get_kb_root")
+    @patch("memex.cli.run_async")
+    def test_relations_lint_json_output(
+        self, mock_run_async, mock_get_kb_root, runner, tmp_path
+    ):
+        """relations-lint --json outputs valid JSON."""
+        mock_get_kb_root.return_value = tmp_path
+        mock_run_async.return_value = {
+            "summary": {
+                "entries_scanned": 1,
+                "relations_scanned": 0,
+                "unknown_count": 0,
+                "inconsistent_count": 0,
+                "missing_count": 0,
+            },
+            "canonical_types": {"depends_on": "desc"},
+            "issues": [],
+        }
+
+        result = runner.invoke(cli, ["relations-lint", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["summary"]["relations_scanned"] == 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────

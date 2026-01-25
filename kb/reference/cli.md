@@ -6,7 +6,7 @@ tags:
   - reference
   - commands
 created: 2026-01-06T00:00:00
-updated: 2026-01-25T22:28:00+00:00
+updated: 2026-01-25T23:32:00+00:00
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
 edit_sources:
@@ -286,6 +286,18 @@ Checks for:
 - Broken links
 - Stale content (>90 days)
 - Missing frontmatter
+
+### mx relations-lint
+
+Warn on unknown or inconsistent typed relation types (non-blocking by default).
+
+```bash
+mx relations-lint
+mx relations-lint --json
+mx relations-lint --strict   # Exit non-zero if issues found
+```
+
+Use `mx relations-lint` to align relation types with the canonical taxonomy.
 
 ### mx hubs
 

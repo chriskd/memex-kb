@@ -67,6 +67,7 @@ from .models import (
     UpsertMatch,
 )
 from .parser import ParseError, extract_links, parse_entry, update_links_batch
+from .relation_types import CANONICAL_RELATION_TYPES, normalize_relation_type
 
 log = logging.getLogger(__name__)
 
@@ -3361,6 +3362,95 @@ async def tags(
             results.append(result)
 
     return results
+
+
+async def lint_relation_types(scope: str | None = None) -> dict:
+    """Check typed relation types against the canonical taxonomy.
+
+    Args:
+        scope: Limit to specific KB scope ("project" or "user"), or None for all.
+
+    Returns:
+        Dict with summary, issue list, and observed type counts.
+    """
+    roots = get_kb_roots_for_indexing(scope=scope)
+    canonical_types = set(CANONICAL_RELATION_TYPES.keys())
+
+    issues: list[dict] = []
+    type_counts: dict[str, int] = {}
+    entries_scanned = 0
+    relations_scanned = 0
+
+    for scope_label, kb_root in roots:
+        if not kb_root.exists():
+            continue
+
+        for md_file in kb_root.rglob("*.md"):
+            if md_file.name.startswith("_"):
+                continue
+
+            try:
+                metadata, _, _ = parse_entry(md_file)
+            except ParseError as e:
+                log.warning("Parse error in %s: %s", md_file, e.message)
+                continue
+
+            entries_scanned += 1
+            rel_path = str(md_file.relative_to(kb_root))
+
+            for relation in metadata.relations:
+                relations_scanned += 1
+                raw_type = (relation.type or "").strip()
+                if raw_type:
+                    type_counts[raw_type] = type_counts.get(raw_type, 0) + 1
+
+                normalized = normalize_relation_type(raw_type)
+
+                if raw_type in canonical_types:
+                    continue
+
+                if raw_type and normalized in canonical_types:
+                    issues.append(
+                        {
+                            "issue": "inconsistent",
+                            "path": rel_path,
+                            "scope": scope_label,
+                            "target": relation.path,
+                            "type": raw_type,
+                            "suggestion": normalized,
+                        }
+                    )
+                    continue
+
+                issue_type = "unknown" if raw_type else "missing"
+                issues.append(
+                    {
+                        "issue": issue_type,
+                        "path": rel_path,
+                        "scope": scope_label,
+                        "target": relation.path,
+                        "type": raw_type,
+                        "suggestion": None,
+                    }
+                )
+
+    unknown_count = sum(1 for issue in issues if issue["issue"] == "unknown")
+    inconsistent_count = sum(1 for issue in issues if issue["issue"] == "inconsistent")
+    missing_count = sum(1 for issue in issues if issue["issue"] == "missing")
+
+    return {
+        "canonical_types": CANONICAL_RELATION_TYPES,
+        "type_counts": dict(sorted(type_counts.items())),
+        "issues": issues,
+        "summary": {
+            "entries_scanned": entries_scanned,
+            "relations_scanned": relations_scanned,
+            "unique_types": sorted(type_counts.keys()),
+            "unknown_count": unknown_count,
+            "inconsistent_count": inconsistent_count,
+            "missing_count": missing_count,
+        },
+    }
 
 
 async def health(

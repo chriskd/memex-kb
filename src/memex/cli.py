@@ -1580,6 +1580,98 @@ def relations_remove(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Relations Lint Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command("relations-lint")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to KB scope")
+@click.option("--strict", is_flag=True, help="Exit non-zero if issues are found")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def relations_lint(ctx: click.Context, scope: str | None, strict: bool, as_json: bool):
+    """Lint typed relation types against the canonical taxonomy."""
+    from .config import ConfigurationError, get_kb_root
+    from .core import lint_relation_types as core_lint_relation_types
+
+    try:
+        get_kb_root()  # Validate KB is configured
+    except ConfigurationError as exc:
+        _handle_error(ctx, exc)
+
+    result = run_async(core_lint_relation_types(scope=scope))
+
+    if as_json:
+        output(result, as_json=True)
+    else:
+        summary = result.get("summary", {})
+        canonical_types = result.get("canonical_types", {}) or {}
+        issues = result.get("issues", [])
+
+        unknown_count = summary.get("unknown_count", 0)
+        inconsistent_count = summary.get("inconsistent_count", 0)
+        missing_count = summary.get("missing_count", 0)
+        total_issues = unknown_count + inconsistent_count + missing_count
+
+        click.echo("Relations Type Lint")
+        click.echo("=" * 40)
+        click.echo(f"Entries scanned: {summary.get('entries_scanned', 0)}")
+        click.echo(f"Relations scanned: {summary.get('relations_scanned', 0)}")
+
+        if canonical_types:
+            canonical_list = ", ".join(sorted(canonical_types.keys()))
+            click.echo(f"Canonical types: {canonical_list}")
+
+        if total_issues == 0:
+            click.echo("\n✓ No relation type issues found")
+        else:
+            click.echo(f"\n⚠ Issues found: {total_issues}")
+            if unknown_count:
+                click.echo(f"  - Unknown types: {unknown_count}")
+            if inconsistent_count:
+                click.echo(f"  - Inconsistent types: {inconsistent_count}")
+            if missing_count:
+                click.echo(f"  - Missing types: {missing_count}")
+
+            max_show = 20
+            issue_labels = [
+                ("unknown", "Unknown types"),
+                ("inconsistent", "Inconsistent types"),
+                ("missing", "Missing types"),
+            ]
+
+            for issue_key, label in issue_labels:
+                subset = [issue for issue in issues if issue.get("issue") == issue_key]
+                if not subset:
+                    continue
+
+                click.echo(f"\n{label} ({len(subset)}):")
+                for issue in subset[:max_show]:
+                    scope_label = issue.get("scope")
+                    path = issue.get("path", "")
+                    path_display = f"@{scope_label}/{path}" if scope_label else path
+                    target = issue.get("target", "")
+                    rel_type = issue.get("type", "")
+                    suggestion = issue.get("suggestion")
+
+                    if issue_key == "inconsistent" and suggestion:
+                        click.echo(
+                            f"  - {path_display} -> {target} "
+                            f"(type: {rel_type}, use {suggestion})"
+                        )
+                    elif issue_key == "missing":
+                        click.echo(f"  - {path_display} -> {target} (type missing)")
+                    else:
+                        click.echo(f"  - {path_display} -> {target} (type: {rel_type})")
+
+                if len(subset) > max_show:
+                    click.echo(f"  ... and {len(subset) - max_show} more")
+
+        if strict and total_issues:
+            sys.exit(1)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Add Command
 # ─────────────────────────────────────────────────────────────────────────────
 

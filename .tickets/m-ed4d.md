@@ -1,6 +1,6 @@
 ---
 id: m-ed4d
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-24T22:13:42Z
@@ -16,3 +16,9 @@ Define a canonical set of relation types and provide a lint/check command to det
 
 - [ ] Document canonical relation types\n- [ ] Lint/check command identifies unknown types\n- [ ] Non-blocking by default (warnings)
 
+
+## Notes
+
+**2026-01-25T21:32:52Z**
+
+Added canonical relation type taxonomy + linting: new relation_types module, core lint_relation_types, mx relations-lint (non-blocking w/ --strict), tests + docs updated.

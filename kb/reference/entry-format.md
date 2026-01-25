@@ -7,7 +7,7 @@ tags:
   - markdown
   - links
 created: 2026-01-06T00:00:00
-updated: 2026-01-25T19:10:27+00:00
+updated: 2026-01-25T23:30:00+00:00
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
 edit_sources:
@@ -91,6 +91,22 @@ relations:
   - path: guides/installation.md
     type: depends_on
 ```
+
+#### Canonical relation types
+
+Use **snake_case** and prefer these canonical types. If none fit, use `related` as the fallback.
+
+| Type | Meaning |
+|------|---------|
+| `depends_on` | A requires B to function or make progress |
+| `implements` | A implements the spec, API, or plan described by B |
+| `extends` | A builds on or extends B with additional behavior |
+| `documents` | A documents or explains B (guides, readmes, specs) |
+| `references` | A cites B for supporting detail or context |
+| `blocks` | A blocks B from proceeding (directional) |
+| `related` | A is generally related to B when no stronger type fits |
+
+Use `mx relations-lint` to audit unknown or inconsistent relation types.
 
 ## Bidirectional Links
 
