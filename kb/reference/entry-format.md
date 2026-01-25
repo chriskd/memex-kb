@@ -7,7 +7,7 @@ tags:
   - markdown
   - links
 created: 2026-01-06T00:00:00
-updated: 2026-01-15T03:28:13.038158+00:00
+updated: 2026-01-25T19:10:27+00:00
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
 edit_sources:
@@ -61,6 +61,36 @@ Your content here with [[bidirectional links]] to other entries.
 | `draft` | boolean | Exclude from `mx publish` unless `--include-drafts` |
 | `archived` | boolean | Exclude from search and publish |
 | `source_project` | string | Project that created this entry |
+| `semantic_links` | list | Semantic links (auto-managed unless set via CLI) |
+| `relations` | list | Typed relations to other entries |
+
+### Semantic Links (optional)
+
+Semantic links are usually computed by Memex when semantic linking is enabled.
+They can also be set explicitly via CLI (`mx add --semantic-links` or `mx update --semantic-links`).
+
+```yaml
+semantic_links:
+  - path: reference/cli.md
+    score: 0.82
+    reason: embedding_similarity
+  - path: guides/quick-start.md
+    score: 0.74
+    reason: shared_tags
+```
+
+### Typed Relations (optional)
+
+Typed relations are manual, directed links that carry a relation type.
+Add them via CLI (`mx add --relation path=type` or `mx relations-add`).
+
+```yaml
+relations:
+  - path: reference/cli.md
+    type: documents
+  - path: guides/installation.md
+    type: depends_on
+```
 
 ## Bidirectional Links
 
