@@ -14,6 +14,8 @@ from ..config import (
     KB_PATH_CONTEXT_BOOST,
     PROJECT_CONTEXT_BOOST,
     RRF_K,
+    HYBRID_SEMANTIC_FASTPATH,
+    HYBRID_SEMANTIC_FASTPATH_MIN_SCORE,
     SEMANTIC_MIN_SIMILARITY,
     SEMANTIC_STRICT_SIMILARITY,
     TAG_MATCH_BOOST,
@@ -91,7 +93,7 @@ class HybridSearcher:
         else:
             results = self._hybrid_search(
                 query,
-                limit=fetch_limit,
+                limit=limit,
                 project_context=project_context,
                 kb_context=kb_context,
                 min_similarity=min_similarity,
@@ -123,6 +125,20 @@ class HybridSearcher:
         # Get results from both indices (fetch more to have good RRF merge)
         fetch_limit = limit * 3
         whoosh_results = self._whoosh.search(query, limit=fetch_limit)
+
+        # Fast-path: if keyword results are strong enough, skip semantic search
+        if (
+            HYBRID_SEMANTIC_FASTPATH
+            and len(whoosh_results) >= limit
+            and whoosh_results[0].score >= HYBRID_SEMANTIC_FASTPATH_MIN_SCORE
+        ):
+            return self._apply_ranking_adjustments(
+                query,
+                whoosh_results[:limit],
+                project_context,
+                kb_context,
+            )
+
         chroma_results = self._chroma.search(
             query,
             limit=fetch_limit,

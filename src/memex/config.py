@@ -345,6 +345,23 @@ MAX_CONTENT_RESULTS = 20
 # k=60 is the standard value from the RRF paper (Cormack et al., 2009).
 RRF_K = 60
 
+# =============================================================================
+# Hybrid Search Fast-Path
+# =============================================================================
+
+# Skip semantic search in hybrid mode when keyword results are already strong.
+# This avoids loading the embedding model for queries that are well-served by BM25.
+HYBRID_SEMANTIC_FASTPATH = os.environ.get("MEMEX_HYBRID_SEMANTIC_FASTPATH", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+# Minimum top keyword score (0-1) to use the fast-path.
+HYBRID_SEMANTIC_FASTPATH_MIN_SCORE = float(
+    os.environ.get("MEMEX_HYBRID_SEMANTIC_FASTPATH_MIN_SCORE", "0.7")
+)
+
 
 # =============================================================================
 # Search Ranking Boosts
