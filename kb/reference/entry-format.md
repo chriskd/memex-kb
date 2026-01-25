@@ -67,7 +67,7 @@ Your content here with [[bidirectional links]] to other entries.
 ### Semantic Links (optional)
 
 Semantic links are usually computed by Memex when semantic linking is enabled.
-They can also be set explicitly via CLI (`mx add --semantic-links` or `mx update --semantic-links`).
+They can also be set explicitly via CLI (`mx add --semantic-links` or `mx replace --semantic-links`).
 
 ```yaml
 semantic_links:
@@ -82,7 +82,7 @@ semantic_links:
 ### Typed Relations (optional)
 
 Typed relations are manual, directed links that carry a relation type.
-Add them via CLI (`mx add --relation path=type` or `mx relations-add`).
+Add them by editing frontmatter directly (or via `mx patch` / `mx replace`).
 
 ```yaml
 relations:
@@ -214,8 +214,8 @@ Use templates for consistent structure:
 # List available templates
 mx templates
 
-# Create entry from template
-mx add --title="..." --tags="..." --category=... --template=troubleshooting
+# Show a template and copy it into a new entry
+mx templates show troubleshooting
 ```
 
 ### Built-in Templates

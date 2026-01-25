@@ -1,6 +1,6 @@
 ---
 id: m-dac5
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-25T20:06:42Z
@@ -16,3 +16,9 @@ README + KB docs still reference .kbcontext and mx context init; kb/reference/cl
 
 - [ ] Remove/replace .kbcontext + mx context init references with .kbconfig guidance\n- [ ] Fix CLI flags for mx add/search (no -c for add; no -c for search)\n- [ ] Add missing commands/flags to kb/reference/cli.md\n- [ ] Remove/update mx add --template example in kb/reference/entry-format.md\n- [ ] Validate examples against current mx --help output
 
+
+## Notes
+
+**2026-01-25T21:08:36Z**
+
+Updated CLI docs to match current mx --help (search/add flags, new commands, global options), removed non-existent relations commands, and refreshed entry-format examples/templates. Removed .kbcontext references in AI integration + focusgroup eval docs.

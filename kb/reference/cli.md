@@ -49,11 +49,11 @@ mx search "query" --json             # JSON output
 ```
 
 **Options:**
-- `--tags, -t`: Filter by tags (comma-separated)
+- `--tag, --tags`: Filter by tags (comma-separated)
 - `--mode`: Search mode (hybrid, keyword, semantic)
 - `--limit, -n`: Maximum results (default: 10)
 - `--min-score`: Minimum score threshold (0.0-1.0)
-- `--content, -c`: Include full document content in results (replaces snippet)
+- `--content`: Include full document content in results (replaces snippet)
 - `--strict`: Disable semantic fallback
 - `--terse`: Output paths only
 - `--full-titles`: Show full titles without truncation
@@ -94,7 +94,7 @@ All search scores are normalized to **0.0-1.0** (higher = better match).
 After initial ranking, scores receive context-aware boosts:
 - **Tag match**: +0.05 per matching tag (e.g., searching "python" boosts entries tagged "python")
 - **Project context**: +0.15 if entry's source_project matches your current project
-- **KB path context**: +0.12 if entry matches patterns in your `.kbcontext` file
+- **Boost paths**: +0.12 if entry matches patterns in `boost_paths` in your `.kbconfig`
 
 Scores are re-normalized to 0-1 after boosts, so the top result is always 1.0.
 
@@ -133,11 +133,11 @@ mx get tooling/my-entry.md            # Full entry by path
 mx get tooling/my-entry.md --metadata # Metadata only
 mx get tooling/my-entry.md --json     # JSON output
 mx get --title="Docker Guide"         # Get by title
-mx get -t "Python Tooling"            # Short form
+mx get --title "Python Tooling"       # Get by title (alt form)
 ```
 
 **Options:**
-- `--title, -t`: Get entry by title instead of path (case-insensitive)
+- `--title`: Get entry by title instead of path (case-insensitive)
 - `--metadata, -m`: Show only metadata
 - `--json`: JSON output
 
@@ -183,14 +183,13 @@ cat content.md | mx add --title="..." --tags="..." --category=... --stdin
 ```
 
 **Required:**
-- `--title, -t`: Entry title
-- `--tags`: Tags (comma-separated)
-- `--category, -c`: Target directory (unless .kbcontext sets primary)
+- `--title`: Entry title
+- `--tag, --tags`: Tags (comma-separated)
+- `--category`: Target directory (required unless `primary` is set in `.kbconfig`)
 
 **Common options:**
 - `--scope`: Target KB scope (project or user)
-- `--relation`: Add typed relations as path=type (repeatable)
-- `--relations`: Add typed relations as JSON array
+- `--keywords`: Key concepts for semantic linking (comma-separated)
 - `--semantic-links`: Set semantic links as JSON array
 
 ### mx replace
@@ -254,7 +253,7 @@ Quickly add content with auto-generated metadata.
 ```bash
 mx quick-add --stdin              # Paste content, auto-generate all
 mx quick-add -f notes.md          # From file with auto metadata
-mx quick-add -c "..." -y          # Auto-confirm creation
+mx quick-add --content "..." --confirm  # Auto-confirm creation
 echo "..." | mx quick-add --stdin --json
 ```
 
@@ -326,6 +325,8 @@ mx info
 mx info --json
 ```
 
+Alias: `mx config`
+
 ### mx whats-new
 
 Show recently modified entries.
@@ -368,47 +369,56 @@ mx init --json             # JSON output
 
 ### mx context
 
-Show or validate project KB context (.kbcontext).
+Show or validate project KB configuration.
 
 ```bash
-mx context                  # Show current context
+mx context                  # Show current config
 mx context show             # Same as above
-mx context validate         # Validate context paths
+mx context validate         # Validate config paths
 mx context validate --json  # JSON output
 ```
 
-**Note:** `mx init` creates a project KB. `.kbcontext` is optional and read if present.
+**Note:** `.kbconfig` is created by `mx init`.
 
-## Relations Graph Commands
+## Automation Commands
 
-### mx relations
+### mx batch
 
-Query the unified relations graph (wikilinks + typed relations).
+Execute multiple KB operations in a single invocation.
 
 ```bash
-mx relations path/entry.md
-mx relations path/entry.md --depth=2 --direction=outgoing
-mx relations path/entry.md --origin=relations --type=depends_on
-mx relations --graph --json
+mx batch << 'EOF'
+add --title='Note 1' --tags='tag1' --category=tooling --content='Content'
+search 'api'
+EOF
 ```
 
-**Options:**
-- `--depth`: Hops to traverse (default: 1)
-- `--direction`: outgoing, incoming, or both
-- `--origin`: Filter by edge origin (repeatable: wikilink, relations)
-- `--type`: Filter by relation type (repeatable)
-- `--scope`: Limit to KB scope
-- `--graph`: Output full graph (JSON only)
-- `--json`: JSON output
+Reads commands from stdin (or `--file`) and returns JSON results.
 
-### mx relations-add / mx relations-remove
+## Agent Memory Commands
 
-Add or remove typed relations without replacing full frontmatter.
+### mx memory
+
+Agent memory for AI coding assistants.
 
 ```bash
-mx relations-add path/entry.md --relation reference/cli.md=documents
-mx relations-add path/entry.md --relations='[{"path":"ref/other.md","type":"implements"}]'
-mx relations-remove path/entry.md --relation reference/cli.md=documents
+mx memory              # Show memory status
+mx memory init         # Enable memory for this project
+mx memory add "note"   # Add a manual memory note
+mx memory inject       # Preview injected context
+mx memory capture      # Manually trigger capture
+```
+
+### mx evolve
+
+Process queued memory evolution.
+
+```bash
+mx evolve              # Process all queued items
+mx evolve --status     # Show queue statistics
+mx evolve --dry-run    # Preview what would be evolved
+mx evolve --limit 10   # Process up to 10 items
+mx evolve --clear      # Clear all queued items
 ```
 
 ## Templates
@@ -435,6 +445,17 @@ mx publish --include-drafts          # Include draft entries
 ```
 
 ## Maintenance
+
+### mx summarize
+
+Generate descriptions for entries missing them.
+
+```bash
+mx summarize --dry-run         # Preview what would be generated
+mx summarize                   # Generate and write descriptions
+mx summarize --limit 5         # Process only 5 entries
+mx summarize --json            # Output as JSON
+```
 
 ### mx reindex
 
@@ -485,6 +506,7 @@ Output agent workflow context (for hooks).
 mx prime                    # Auto-detect mode
 mx prime --full             # Force full output
 mx prime --mcp              # Force minimal output
+mx prime --json             # JSON output
 ```
 
 ### mx schema
@@ -532,9 +554,14 @@ mx schema --compact          # Minimal output (commands and options only)
 
 ## Global Options
 
-All commands support:
-- `--json`: JSON output
+Global flags:
+- `--version`: Show the version and exit
+- `--json-errors`: Output errors as JSON (for programmatic use)
+- `-q, --quiet`: Suppress warnings, show only errors and essential output
 - `--help`: Show help
+
+Per-command (when available):
+- `--json`: JSON output
 
 ## See Also
 

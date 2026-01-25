@@ -58,7 +58,7 @@ Two AI agents evaluated the `mx` CLI for discoverability and agent-friendliness.
 
 - `mx add` requires `--category` but docs show it as optional
 - `--tag` vs `--tags` inconsistency in examples (fixed 2026-01-12)
-- `.kbcontext` vs `.kbconfig` naming confusion
+- Config naming consistency: docs should refer to `.kbconfig` everywhere
 
 ## Agent-Friendliness Recommendations
 

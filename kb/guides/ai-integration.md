@@ -117,13 +117,14 @@ mx info
 - Infrastructure or deployment knowledge
 - Project-specific conventions
 
-## Project Context
+## Project Configuration
 
-Set up project-specific KB context with `.kbcontext`:
+Configure project-specific KB settings in `.kbconfig`:
 
 ```bash
 # In your project directory
-cat <<'EOF' > .kbcontext
+cat <<'EOF' > .kbconfig
+kb_path: ./kb
 primary: projects/memex
 boost_paths:
   - projects/memex/*
@@ -132,10 +133,11 @@ default_tags:
 EOF
 ```
 
-This creates a `.kbcontext` file that:
-- Routes new entries to `projects/<name>` by default
-- Boosts project entries in search results
-- Suggests project-specific tags
+This `.kbconfig` file:
+- Points `mx` at the project KB (`kb_path`)
+- Routes new entries to `projects/<name>` by default (`primary`)
+- Boosts project entries in search results (`boost_paths`)
+- Suggests project-specific tags (`default_tags`)
 
 ## Best Practices
 

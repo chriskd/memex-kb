@@ -39,21 +39,18 @@ Use `--neighbor-depth` to control hop count (default 1).
 
 ## Query the relations graph
 
-Use `mx relations` to inspect the unified graph (wikilinks + typed relations).
-
-```bash
-mx relations path/to/entry.md
-mx relations path/to/entry.md --depth=2 --direction=outgoing
-mx relations path/to/entry.md --origin=relations --type=depends_on
-mx relations --graph --json
-```
+There isn't a dedicated CLI command yet. For now:
+- Use `mx search --include-neighbors` to expand results through semantic links + typed relations
+- Inspect `relations` in entry frontmatter (open the file or use `mx get path/to/entry.md --json`)
 
 ## Editing typed relations
 
-Use `mx relations-add` and `mx relations-remove` to update frontmatter relations without replacing the full entry.
+Edit the `relations` frontmatter directly (or via `mx patch` / `mx replace`).
 
-```bash
-mx relations-add path/to/entry.md --relation reference/cli.md=documents
-mx relations-add path/to/entry.md --relations='[{"path":"ref/other.md","type":"implements"}]'
-mx relations-remove path/to/entry.md --relation reference/cli.md=documents
+```yaml
+relations:
+  - path: reference/cli.md
+    type: documents
+  - path: ref/other.md
+    type: implements
 ```
