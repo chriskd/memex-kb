@@ -591,6 +591,31 @@ class TestUpdateEntry:
                 tags=[],
             )
 
+    @pytest.mark.asyncio
+    async def test_update_entry_relations_reindexes_scoped_paths(self, multi_kb):
+        from memex.models import RelationLink
+        from conftest import create_entry
+
+        project_kb = multi_kb["project_kb"]
+        user_kb = multi_kb["user_kb"]
+
+        create_entry(project_kb, "a.md", "Entry A", "Content A", ["test"])
+        create_entry(project_kb, "b.md", "Entry B", "Content B", ["test"])
+        create_entry(user_kb, "user.md", "User Entry", "User content", ["test"])
+
+        await core.reindex()
+
+        await core.update_entry_relations(
+            "a.md",
+            add=[RelationLink(path="b.md", type="depends_on")],
+        )
+
+        result = await core.search("Entry A", mode="keyword")
+        paths = [r.path for r in result.results]
+
+        assert "@project/a.md" in paths
+        assert "a.md" not in paths
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Delete Entry Tests

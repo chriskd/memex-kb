@@ -79,6 +79,20 @@ class SiteGenerator:
         self.entries: dict[str, EntryData] = {}
         self.broken_links: list[dict] = []
         self.tags_index: dict[str, list[str]] = {}  # tag -> [paths]
+        self.scope: str | None = None
+
+        try:
+            from ..config import get_project_kb_root, get_user_kb_root
+
+            project_kb = get_project_kb_root()
+            user_kb = get_user_kb_root()
+            if project_kb and kb_root.resolve() == project_kb.resolve():
+                self.scope = "project"
+            elif user_kb and kb_root.resolve() == user_kb.resolve():
+                self.scope = "user"
+        except Exception:
+            # Scope detection is best-effort; fall back to None
+            self.scope = None
 
     async def generate(self) -> PublishResult:
         """Generate the complete static site.
@@ -232,16 +246,24 @@ class SiteGenerator:
 
         return result
 
-    @staticmethod
-    def _normalize_relation_target(raw_path: str) -> str:
+    def _normalize_relation_target(self, raw_path: str) -> str | None:
         """Normalize a typed relation path to match published entry paths."""
         from ..config import parse_scoped_path
 
-        _, relative = parse_scoped_path(raw_path)
-        target = relative
-        if target.endswith(".md"):
-            target = target[:-3]
-        return target
+        scope_label, relative = parse_scoped_path(raw_path)
+        if relative.endswith(".md"):
+            relative = relative[:-3]
+
+        if scope_label is None:
+            return relative
+
+        if self.scope is None:
+            return None
+
+        if scope_label != self.scope:
+            return None
+
+        return relative
 
     def _index_relation_edges(self) -> None:
         """Build normalized relation indices for outgoing + incoming edges."""
@@ -253,7 +275,7 @@ class SiteGenerator:
             outgoing: list[RelationLink] = []
             for relation in entry.metadata.relations:
                 target = self._normalize_relation_target(relation.path)
-                if target not in self.entries:
+                if not target or target not in self.entries:
                     continue
                 outgoing.append(RelationLink(path=target, type=relation.type))
                 relation_backlinks[target].append(
@@ -373,7 +395,7 @@ class SiteGenerator:
 
             for relation in entry.metadata.relations:
                 target = self._normalize_relation_target(relation.path)
-                if target in node_ids:
+                if target and target in node_ids:
                     edges.append(
                         {
                             "source": path,

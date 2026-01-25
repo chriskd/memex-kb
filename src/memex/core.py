@@ -34,7 +34,10 @@ from .config import (
     AMEMStrictError,
     get_kb_root,
     get_kb_root_by_scope,
+    get_kb_roots_for_indexing,
     get_memory_evolution_config,
+    get_project_kb_root,
+    get_user_kb_root,
     is_amem_strict_enabled,
     parse_scoped_path,
 )
@@ -1310,6 +1313,25 @@ async def expand_search_with_neighbors(
     """
     from .config import resolve_scoped_path
 
+    def _normalize_neighbor_path(raw_path: str, default_scope: str | None) -> str | None:
+        """Normalize neighbor path to include scope and .md when needed."""
+        scope_label, relative = parse_scoped_path(raw_path)
+        if not relative.endswith(".md"):
+            relative = f"{relative}.md"
+
+        available_scopes = {scope for scope, _ in get_kb_roots_for_indexing()}
+
+        # Explicitly scoped: only allow if that scope is available
+        if scope_label is not None:
+            if scope_label not in available_scopes:
+                return None
+            return f"@{scope_label}/{relative}"
+
+        # Unscoped: resolve within current/default scope if present
+        if default_scope is not None:
+            return f"@{default_scope}/{relative}"
+        return relative
+
     # Build output list - start with direct matches
     output: list[dict] = []
     seen_paths: set[str] = set()
@@ -1348,6 +1370,7 @@ async def expand_search_with_neighbors(
 
         # Read the entry to get its semantic_links and relations
         try:
+            current_scope, _ = parse_scoped_path(current_path)
             file_path = resolve_scoped_path(current_path)
             if not file_path.exists():
                 continue
@@ -1356,10 +1379,15 @@ async def expand_search_with_neighbors(
             semantic_links = metadata.semantic_links
             relation_links = metadata.relations
 
-            neighbor_links: list[tuple[str, float]] = [
-                (link.path, link.score) for link in semantic_links
-            ]
-            neighbor_links.extend((relation.path, parent_score) for relation in relation_links)
+            neighbor_links: list[tuple[str, float]] = []
+            for link in semantic_links:
+                normalized = _normalize_neighbor_path(link.path, current_scope)
+                if normalized:
+                    neighbor_links.append((normalized, link.score))
+            for relation in relation_links:
+                normalized = _normalize_neighbor_path(relation.path, current_scope)
+                if normalized:
+                    neighbor_links.append((normalized, parent_score))
 
             for neighbor_path, link_score in neighbor_links:
                 if neighbor_path not in seen_paths:
@@ -2442,12 +2470,25 @@ async def update_entry_relations(
 
     relative_path = relative_kb_path(kb_root, file_path)
 
+    project_kb = get_project_kb_root()
+    user_kb = get_user_kb_root()
+    is_multi_kb = bool(project_kb and user_kb)
+
+    scope_label = scope
+    if scope_label is None and is_multi_kb:
+        if project_kb and kb_root == project_kb:
+            scope_label = "project"
+        elif user_kb and kb_root == user_kb:
+            scope_label = "user"
+
+    scoped_path = f"@{scope_label}/{relative_path}" if scope_label else relative_path
+
     searcher = get_searcher()
     try:
-        searcher.delete_document(relative_path)
+        searcher.delete_document(scoped_path)
         _, _, chunks = parse_entry(file_path)
         if chunks:
-            normalized_chunks = normalize_chunks(chunks, relative_path)
+            normalized_chunks = normalize_chunks(chunks, scoped_path)
             searcher.index_chunks(normalized_chunks)
     except ParseError as e:
         log.warning("Updated relations but failed to re-index %s: %s", relative_path, e)
@@ -2456,7 +2497,7 @@ async def update_entry_relations(
 
     return {
         "path": relative_path,
-        "scope": scope,
+        "scope": scope_label,
         "added": [relation.model_dump() for relation in added],
         "removed": [relation.model_dump() for relation in removed],
         "total": len(updated_relations),

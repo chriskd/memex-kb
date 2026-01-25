@@ -203,6 +203,43 @@ created: 2024-01-15
 
 
 @pytest.fixture
+def multi_kb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """Create a multi-KB setup with both project and user KBs."""
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    project_kb = project_root / "kb"
+    project_kb.mkdir()
+    (project_root / ".kbconfig").write_text("kb_path: ./kb\n")
+
+    user_kb = tmp_path / "user" / "kb"
+    user_kb.mkdir(parents=True)
+
+    monkeypatch.setenv("MEMEX_USER_KB_ROOT", str(user_kb))
+    monkeypatch.delenv("MEMEX_SKIP_PROJECT_KB", raising=False)
+    monkeypatch.chdir(project_root)
+
+    # Clear caches
+    try:
+        from memex.context import _context_cache, _kbconfig_cache
+
+        _context_cache.clear()
+        _kbconfig_cache.clear()
+    except (ImportError, AttributeError):
+        pass
+
+    # Reset the core module's searcher singleton
+    try:
+        from memex import core
+
+        core._searcher = None
+        core._searcher_ready = False
+    except (ImportError, AttributeError):
+        pass
+
+    return {"project_root": project_root, "project_kb": project_kb, "user_kb": user_kb}
+
+
+@pytest.fixture
 def cli_invoke(runner: CliRunner, tmp_kb: Path):
     """Helper for invoking CLI with proper isolation.
 

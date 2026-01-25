@@ -247,6 +247,53 @@ class TestExpandSearchWithNeighbors:
         assert expanded[1]["linked_from"] == "a.md"
 
     @pytest.mark.asyncio
+    async def test_normalizes_scoped_relation_paths(self, multi_kb):
+        """Relation paths normalize to scoped .md targets in multi-KB mode."""
+        from memex.core import expand_search_with_neighbors
+
+        project_kb = multi_kb["project_kb"]
+        user_kb = multi_kb["user_kb"]
+
+        create_entry_with_links(
+            project_kb,
+            "a.md",
+            "Entry A",
+            "Content A",
+            ["test"],
+            relations=[{"path": "b", "type": "depends_on"}],
+        )
+        create_entry_with_links(
+            project_kb,
+            "b.md",
+            "Entry B",
+            "Content B",
+            ["test"],
+        )
+        create_entry_with_links(
+            user_kb,
+            "user.md",
+            "User Entry",
+            "User content",
+            ["test"],
+        )
+
+        results = [
+            SearchResult(
+                path="@project/a.md",
+                title="Entry A",
+                snippet="Content A",
+                score=0.9,
+                tags=["test"],
+            )
+        ]
+
+        expanded = await expand_search_with_neighbors(results, depth=1)
+        paths = [item.get("path") for item in expanded]
+
+        assert "@project/b.md" in paths
+        assert "b.md" not in paths
+
+    @pytest.mark.asyncio
     async def test_deduplicates_results(self, tmp_kb: Path):
         """Entries appearing multiple times are deduplicated."""
         from memex.core import expand_search_with_neighbors

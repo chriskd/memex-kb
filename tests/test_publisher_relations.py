@@ -97,3 +97,25 @@ async def test_publish_entry_includes_typed_relations_panel(tmp_kb: Path, tmp_pa
     assert "Typed Relations" in entry_b_html
     assert "Incoming" in entry_b_html
     assert "depends_on" in entry_b_html
+
+
+@pytest.mark.asyncio
+async def test_publish_skips_mismatched_scoped_relations(tmp_kb: Path, tmp_path: Path) -> None:
+    _write_entry(
+        tmp_kb,
+        "a.md",
+        "Entry A",
+        ["test"],
+        relations=[{"path": "@project/b.md", "type": "depends_on"}],
+    )
+    _write_entry(tmp_kb, "b.md", "Entry B", ["test"])
+
+    output_dir = tmp_path / "site"
+    config = PublishConfig(output_dir=output_dir, clean=True)
+    generator = SiteGenerator(config, tmp_kb)
+    await generator.generate()
+
+    graph_data = json.loads((output_dir / "graph.json").read_text())
+    edges = graph_data["edges"]
+
+    assert not any(edge["origin"] == "relations" for edge in edges)
