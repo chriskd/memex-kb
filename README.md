@@ -164,6 +164,22 @@ uv run pytest
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+## Perf Sanity
+
+Lightweight timing for reindex/search/publish with isolated indices/output:
+
+```bash
+scripts/perf-sanity.sh
+```
+
+Overrides:
+
+```bash
+PERF_SANITY_QUERY="latency" PERF_SANITY_MODE=keyword scripts/perf-sanity.sh
+PERF_SANITY_SCOPE=user PERF_SANITY_KEEP=1 scripts/perf-sanity.sh
+PERF_SANITY_ROOT=/tmp/memex-perf scripts/perf-sanity.sh
+```
+
 ## License
 
 MIT - see [LICENSE](LICENSE)
