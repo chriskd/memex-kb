@@ -21,7 +21,7 @@ pip install memex-kb
 mx --version
 ```
 
-For semantic search, install with extras: `pip install memex-kb[semantic]`
+Semantic search is included by default (first run downloads the embedding model).
 
 ## Quick Start
 

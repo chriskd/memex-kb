@@ -2,16 +2,15 @@
 title: Installation Guide
 tags: [installation, setup, getting-started]
 created: 2026-01-06
-description: How to install memex with different configurations
+description: How to install memex and its semantic search dependencies
 ---
 
 # Installation Guide
 
-Memex can be installed in two configurations: minimal (keyword search only) or full (with semantic search).
+Memex installs with semantic search enabled by default (ChromaDB + sentence-transformers).
+Expect a larger install footprint and a first-run model download.
 
-## Minimal Install (Recommended Start)
-
-Fast, lightweight installation with keyword search only:
+## Install (Recommended)
 
 ```bash
 # With uv (recommended)
@@ -24,24 +23,8 @@ pip install memex-kb
 mx --version
 ```
 
-This gives you:
-- Full CLI functionality (`mx` command)
-- BM25 keyword search via Whoosh
-- ~100MB footprint
-
-## Full Install (Semantic Search)
-
-Add semantic search for meaning-based queries:
-
-```bash
-# With uv
-uv tool install "memex-kb[semantic]"
-
-# With pip
-pip install "memex-kb[semantic]"
-```
-
-This adds:
+This includes:
+- Hybrid search (keyword + semantic)
 - ChromaDB for vector storage
 - sentence-transformers for embeddings
 - CPU-only PyTorch (~500MB additional)
@@ -55,11 +38,11 @@ For development or customization:
 git clone https://github.com/chriskd/memex.git
 cd memex
 
-# Core only (~100MB)
+# Runtime dependencies
 uv sync
 
-# With semantic search (~600MB)
-uv sync --all-extras
+# Dev dependencies
+uv sync --dev
 ```
 
 ## GPU Support (Optional)
@@ -67,7 +50,7 @@ uv sync --all-extras
 If you have an NVIDIA GPU and want CUDA acceleration:
 
 ```bash
-uv sync --all-extras --index pytorch-gpu=https://download.pytorch.org/whl/cu124
+uv sync --index pytorch-gpu=https://download.pytorch.org/whl/cu124
 ```
 
 ## Platform Notes
