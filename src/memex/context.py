@@ -291,12 +291,16 @@ def _load_kbconfig_as_context(config_path: Path) -> KBContext | None:
 
         # Map .kbconfig fields to KBContext fields
         # boost_paths in new format -> paths in KBContext
+        project_kb = data.get("project_kb")
+        if not project_kb:
+            project_kb = data.get("kb_path")
+
         context_data = {
             "primary": data.get("primary"),
             "paths": data.get("boost_paths", []),
             "default_tags": data.get("default_tags", []),
             "project": data.get("project"),
-            "project_kb": data.get("project_kb"),
+            "project_kb": project_kb,
             "publish_base_url": data.get("publish_base_url"),
         }
 

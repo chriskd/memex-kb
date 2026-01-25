@@ -2128,6 +2128,26 @@ class TestPublishCommand:
             # Check output was created
             assert (Path(output_dir) / "index.html").exists()
 
+    def test_publish_uses_kb_path_from_kbconfig(self, runner, tmp_path, monkeypatch):
+        """publish without --kb-root uses kb_path from .kbconfig."""
+        import tempfile
+
+        kb_dir = tmp_path / "kb"
+        kb_dir.mkdir()
+        (kb_dir / "entry.md").write_text("---\ntitle: Entry\ntags: [test]\n---\nContent")
+        (tmp_path / ".kbconfig").write_text("kb_path: ./kb\n")
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("VL_KB_CONTEXT", raising=False)
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            result = runner.invoke(
+                cli,
+                ["publish", "-o", output_dir],
+            )
+            assert result.exit_code == 0
+            assert (Path(output_dir) / "index.html").exists()
+
     def test_setup_github_actions_dry_run(self, runner, tmp_path):
         """--setup-github-actions --dry-run shows workflow without creating file."""
         import subprocess
