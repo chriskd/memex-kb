@@ -1,3 +1,14 @@
+---
+title: ChatGPT 5.2 Pro Dense Memory Signals Reference
+description: Research prompt and notes on dense memory signals for agent context injection
+tags:
+  - reference
+  - ai
+  - memory
+  - signals
+created: 2026-01-25
+---
+
 My prompt:
 
 
@@ -620,4 +631,3 @@ If you want one very targeted follow-up direction (without adding user effort): 
 [15]: https://zhiyuan-wan.github.io/assets/publications/icse_tool_23_task_context.pdf?utm_source=chatgpt.com "TASK CONTEXT: A Tool for Predicting Code Context Models for Software ..."
 [16]: https://marketplace.visualstudio.com/items?itemName=ContextKeeper.ContextKeeperVsix&utm_source=chatgpt.com "Favorites Tabs and Files Manager - Visual Studio Marketplace"
 [17]: https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool?utm_source=chatgpt.com "Memory tool - Claude Docs"
-
