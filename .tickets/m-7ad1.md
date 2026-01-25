@@ -1,6 +1,6 @@
 ---
 id: m-7ad1
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-25T05:55:52Z
@@ -17,3 +17,9 @@ to add pyright to dev dependencies or update docs/CI to remove the requirement.
 
 - [ ] `uv run pyright` succeeds (pyright added to deps) or docs updated to remove it
 - [ ] CI/dev docs reflect the chosen approach
+
+## Notes
+
+**2026-01-25T06:27:31Z**
+
+Added pyright to dev deps via uv add, documented in CONTRIBUTING, and addressed pyright errors in cli/indexer/test. uv run pyright now passes.

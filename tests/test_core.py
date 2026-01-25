@@ -1440,6 +1440,7 @@ class TestEnsureAware:
         result = core._ensure_aware(aware)
 
         assert result is aware
+        assert result is not None
         assert result.tzinfo == pst
 
 

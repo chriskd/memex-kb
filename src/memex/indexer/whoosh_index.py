@@ -142,7 +142,8 @@ class WhooshIndex:
                 return []
 
             # Normalize scores to 0-1 range
-            max_score = max(r.score for r in results) if results else 1.0
+            scores = [float(getattr(r, "score", 0.0) or 0.0) for r in results]
+            max_score = max(scores, default=1.0)
             max_score = max_score if max_score > 0 else 1.0
 
             from . import strip_markdown_for_snippet
@@ -167,7 +168,7 @@ class WhooshIndex:
                         path=hit["path"],
                         title=hit.get("title", ""),
                         snippet=snippet,
-                        score=hit.score / max_score,
+                        score=float(hit.score or 0.0) / max_score,
                         tags=tag_list,
                         section=hit.get("section") or None,
                         created=created_date,

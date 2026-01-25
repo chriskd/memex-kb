@@ -314,7 +314,7 @@ def _handle_add_error(ctx: click.Context, error: Exception, tags: list[str]) -> 
 
 def format_json_error(code: str, message: str, details: dict | None = None) -> str:
     """Format an error as JSON for --json-errors output."""
-    error = {"error": {"code": code, "message": message}}
+    error: dict[str, dict[str, object]] = {"error": {"code": code, "message": message}}
     if details:
         error["error"]["details"] = details
     return json.dumps(error)
@@ -1418,7 +1418,7 @@ def relations(
 
     assert path is not None  # narrowing for type checker after sys.exit
 
-    origin_set = set(origins) if origins else None
+    origin_set = cast(set[Literal["wikilink", "relations"]], set(origins)) if origins else None
     type_set = set(relation_types) if relation_types else None
 
     try:

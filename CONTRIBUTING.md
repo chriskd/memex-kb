@@ -65,6 +65,12 @@ uv run pytest tests/test_search_content.py
 uv run pytest -k "test_search"
 ```
 
+## Type Checking
+
+```bash
+uv run pyright
+```
+
 ## Pull Request Process
 
 1. **Fork and branch**: Create a feature branch from `main`

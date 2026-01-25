@@ -272,27 +272,43 @@ class ChromaIndex:
 
             snippet = strip_markdown_for_snippet(doc, max_length=200)
 
-            tags = meta.get("tags", "")
-            tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+            tags_value = meta.get("tags") or ""
+            tags_str = str(tags_value)
+            tag_list = [t.strip() for t in tags_str.split(",") if t.strip()]
 
             # Parse datetimes from stored ISO strings
-            created_str = meta.get("created", "")
-            updated_str = meta.get("updated", "")
+            created_str = str(meta.get("created") or "")
+            updated_str = str(meta.get("updated") or "")
             created_date = datetime.fromisoformat(created_str) if created_str else None
             updated_date = datetime.fromisoformat(updated_str) if updated_str else None
 
+            path_value = meta.get("path") or ""
+            title_value = meta.get("title") or ""
+            section_value = meta.get("section")
+            token_count_value = meta.get("token_count")
+            source_project_value = meta.get("source_project")
+
+            section = str(section_value) if section_value else None
+            token_count = (
+                int(token_count_value)
+                if isinstance(token_count_value, (int, float))
+                and not isinstance(token_count_value, bool)
+                else 0
+            )
+            source_project = str(source_project_value) if source_project_value else None
+
             search_results.append(
                 SearchResult(
-                    path=meta.get("path", ""),
-                    title=meta.get("title", ""),
+                    path=str(path_value),
+                    title=str(title_value),
                     snippet=snippet,
                     score=score,
                     tags=tag_list,
-                    section=meta.get("section") or None,
+                    section=section,
                     created=created_date,
                     updated=updated_date,
-                    token_count=meta.get("token_count") or 0,
-                    source_project=meta.get("source_project") or None,
+                    token_count=token_count,
+                    source_project=source_project,
                 )
             )
 
