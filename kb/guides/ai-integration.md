@@ -39,16 +39,20 @@ For automatic context injection, use hooks:
 ```json
 {
   "hooks": {
-    "SessionStart": [
-      { "command": "mx prime" }
-    ]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "./hooks/session-context.sh" }] }]
   }
 }
 ```
 
-The `mx prime` command:
-- Injects KB workflow guidance at session start
-- Provides a concise workflow reminder
+Create the local hook script (gitignored):
+
+```bash
+mx session-context --install
+```
+
+The `mx session-context` command:
+- Injects project-relevant KB context at session start
+- Provides a concise workflow reminder plus related entries
 
 ### Workflow Pattern
 

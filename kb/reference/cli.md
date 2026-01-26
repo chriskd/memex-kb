@@ -521,6 +521,18 @@ mx prime --mcp              # Force minimal output
 mx prime --json             # JSON output
 ```
 
+### mx session-context
+
+Output dynamic project-relevant context (for hooks).
+
+```bash
+mx session-context                   # Print session context
+mx session-context --max-entries 4   # Limit relevant entries
+mx session-context --install         # Create ./hooks/session-context.sh
+mx session-context --install --install-path .claude/hooks/session-context.sh
+mx session-context --json            # JSON output
+```
+
 ### mx schema
 
 Output CLI schema with agent-friendly metadata for introspection.

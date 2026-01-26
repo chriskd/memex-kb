@@ -121,7 +121,6 @@ All projects share tooling from `/srv/fast/code/voidlabs-devtools`. This reposit
 | Component | Purpose |
 |-----------|---------|
 | `AGENTS.md` | This file - agent guidance for this project |
-| `hooks/session-context.sh` | Claude Code SessionStart hook |
 | `scripts/new-project.sh` | Scaffolds new projects with devcontainer |
 | `devcontainers/template/scripts/post-start-common.sh` | Shared container setup (Phase secrets, Factory droid, ticket tooling) |
 
@@ -130,6 +129,8 @@ All projects share tooling from `/srv/fast/code/voidlabs-devtools`. This reposit
 - Comments and documentation guidance
 
 **You don't need to run these manually** - they execute on session start. But understanding where they come from helps if you want to suggest improvements.
+
+**Project-local session hooks** should be created via `mx session-context --install` (writes `./hooks/session-context.sh`, which is gitignored).
 
 **To improve shared tooling:**
 - Edit files in `/srv/fast/code/voidlabs-devtools`
@@ -501,4 +502,3 @@ tk ready
 - Do NOT create markdown TODO lists
 - Do NOT duplicate tracking systems
 - Do NOT clutter repo root with planning documents
-

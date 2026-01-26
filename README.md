@@ -135,9 +135,15 @@ Add to `.claude/settings.local.json`:
 {
   "permissions": { "allow": ["Bash(mx:*)"] },
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx prime" }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "./hooks/session-context.sh" }] }]
   }
 }
+```
+
+Create the local hook script (gitignored):
+
+```bash
+mx session-context --install
 ```
 
 ## Configuration

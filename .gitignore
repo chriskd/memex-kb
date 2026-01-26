@@ -27,6 +27,12 @@ Thumbs.db
 # Plugin local settings
 .claude/*.local.md
 
+# Local project hooks/config
+hooks/
+.config/
+wt.toml
+.devcontainer/
+
 # Local mail artifacts
 .vl-mail/
 

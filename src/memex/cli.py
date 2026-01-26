@@ -768,6 +768,77 @@ def prime(full: bool, mcp: bool, as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Session Context (Project-Relevant Hook Output)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command("session-context")
+@click.option(
+    "--max-entries",
+    type=int,
+    default=4,
+    show_default=True,
+    help="Maximum relevant entries to include.",
+)
+@click.option(
+    "--install",
+    is_flag=True,
+    help="Create a local hook script at ./hooks/session-context.sh",
+)
+@click.option(
+    "--install-path",
+    type=click.Path(path_type=Path),
+    help="Custom path for the hook script (implies --install).",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def session_context_command(
+    max_entries: int, install: bool, install_path: Path | None, as_json: bool
+):
+    """Output dynamic project-relevant KB context for session hooks.
+
+    Use --install to create a local hook script for Claude Code SessionStart.
+    """
+    from .session_context import (
+        build_session_context,
+        default_hook_path,
+        install_session_hook,
+    )
+
+    if install or install_path:
+        target = install_path or default_hook_path(Path.cwd())
+        installed_path = install_session_hook(target)
+        payload = {
+            "installed": True,
+            "path": str(installed_path),
+            "command": str(installed_path),
+        }
+        if as_json:
+            output(payload, as_json=True)
+        else:
+            click.echo(f"✓ Installed session context hook at {installed_path}")
+            click.echo("Add to your Claude SessionStart hook:")
+            click.echo(f'  "command": "{installed_path}"')
+        return
+
+    result = build_session_context(max_entries=max_entries)
+    if not result:
+        return
+
+    if as_json:
+        output(
+            {
+                "project": result.project,
+                "entries": result.entries,
+                "content": result.content,
+                "cached": result.cached,
+            },
+            as_json=True,
+        )
+    else:
+        click.echo(result.content)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Init Command - KB Setup (project or user scope)
 # ─────────────────────────────────────────────────────────────────────────────
 
