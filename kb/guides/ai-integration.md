@@ -8,7 +8,7 @@ tags:
   - agents
   - integration
 created: 2026-01-06T00:00:00
-updated: 2026-01-25T19:24:03+00:00
+updated: 2026-01-27T00:00:00+00:00
 semantic_links: []
 ---
 
@@ -54,6 +54,18 @@ The `mx session-context` command:
 - Injects project-relevant KB context at session start
 - Provides a concise workflow reminder plus related entries
 
+### Claude Code Plugin (Optional)
+
+This repo ships a Claude Code plugin manifest in `.claude-plugin/`. From the repo
+root, add the local marketplace and install the plugin:
+
+```text
+/plugin marketplace add ./.claude-plugin/marketplace.json
+/plugin install memex@memex
+```
+
+Restart Claude Code after installing or updating the plugin.
+
 ### Workflow Pattern
 
 ```bash
@@ -76,6 +88,23 @@ Search organizational knowledge before implementing:
 - `mx search "query"` - Find existing patterns
 - `mx get path/entry.md` - Read specific entry
 - `mx add --title="..." --tags="..." --category=... --content="..."` - Add discoveries
+```
+
+### Codex Skills (Optional)
+
+This repo includes a Memex skill at `skills/kb-usage/`. Codex CLI discovers skills
+from well-known directories (for example `.codex/skills` in the repo or
+`~/.codex/skills` for user installs). Copy or symlink the skill into a Codex skills
+directory and restart Codex.
+
+Examples:
+
+```bash
+mkdir -p .codex/skills
+cp -r skills/kb-usage .codex/skills/
+
+mkdir -p ~/.codex/skills
+cp -r skills/kb-usage ~/.codex/skills/
 ```
 
 ## Other AI Agents

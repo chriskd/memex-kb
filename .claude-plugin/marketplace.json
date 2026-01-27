@@ -1,13 +1,13 @@
 {
   "name": "memex",
-  "description": "Personal knowledge base plugins",
+  "description": "Dual-scope knowledge base plugins for LLM workflows",
   "owner": {
     "name": "memex"
   },
   "plugins": [
     {
       "name": "memex",
-      "description": "Personal knowledge base with semantic search. Build and query your own knowledge graph with wiki-style links and hybrid search.",
+      "description": "Dual-scope knowledge base for LLM workflows with hybrid full-text + semantic search, typed relations, and publishing.",
       "version": "0.1.0",
       "source": "./"
     }

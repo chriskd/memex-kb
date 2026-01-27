@@ -1,7 +1,7 @@
 {
   "name": "memex",
   "version": "0.1.0",
-  "description": "Personal knowledge base with semantic search. Build and query your own knowledge graph with wiki-style links and hybrid search.",
+  "description": "Dual-scope knowledge base for LLM workflows with hybrid full-text + semantic search, typed relations, and publishing.",
   "author": {
     "name": "memex"
   },
@@ -9,8 +9,11 @@
   "keywords": [
     "knowledge-base",
     "semantic-search",
+    "full-text-search",
+    "llm",
+    "agent",
     "documentation",
-    "personal-knowledge",
-    "obsidian"
+    "graph",
+    "wiki"
   ]
 }
