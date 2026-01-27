@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ..config import EMBEDDING_MODEL, SEMANTIC_MIN_SIMILARITY, get_index_root
 from ..models import DocumentChunk, SearchResult
+from .embedding_cache import EmbeddingCache, hash_embedding_text
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class ChromaIndex:
         self._client: ClientAPI | None = None
         self._collection: chromadb.Collection | None = None
         self._model: SentenceTransformer | None = None
+        self._embedding_cache: EmbeddingCache | None = None
 
     def _get_model(self) -> "SentenceTransformer":
         """Lazy-load the embedding model."""
@@ -68,6 +70,14 @@ class ChromaIndex:
             )
         return self._collection
 
+    def _get_embedding_cache(self) -> EmbeddingCache:
+        if self._embedding_cache is None:
+            self._embedding_cache = EmbeddingCache(
+                index_root=self._index_dir.parent,
+                model_name=EMBEDDING_MODEL,
+            )
+        return self._embedding_cache
+
     def _embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts.
 
@@ -80,6 +90,19 @@ class ChromaIndex:
         model = self._get_model()
         embeddings = model.encode(texts, convert_to_numpy=True)
         return embeddings.tolist()
+
+    def _load_cached_embeddings(self, hashes: list[str]) -> dict[str, list[float]]:
+        try:
+            return self._get_embedding_cache().get_many(hashes)
+        except Exception as e:
+            log.warning("Embedding cache read failed: %s", e)
+            return {}
+
+    def _store_cached_embeddings(self, embeddings: dict[str, list[float]]) -> None:
+        try:
+            self._get_embedding_cache().set_many(embeddings)
+        except Exception as e:
+            log.warning("Embedding cache write failed: %s", e)
 
     def _build_embedding_text(self, content: str, keywords: list[str], tags: list[str]) -> str:
         """Build text for embedding by concatenating content, keywords, and tags.
@@ -119,9 +142,12 @@ class ChromaIndex:
             chunk.metadata.keywords,
             chunk.metadata.tags,
         )
-
-        # Generate embedding
-        embedding = self._embed([embedding_text])[0]
+        embedding_hash = hash_embedding_text(embedding_text)
+        cached = self._load_cached_embeddings([embedding_hash])
+        embedding = cached.get(embedding_hash)
+        if embedding is None:
+            embedding = self._embed([embedding_text])[0]
+            self._store_cached_embeddings({embedding_hash: embedding})
 
         # Prepare metadata
         metadata = {
@@ -133,6 +159,7 @@ class ChromaIndex:
             "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
             "token_count": chunk.token_count or 0,
             "source_project": chunk.metadata.source_project or "",
+            "embedding_hash": embedding_hash,
         }
 
         # Upsert to handle updates
@@ -165,6 +192,7 @@ class ChromaIndex:
         ids = []
         documents = []
         embedding_texts = []
+        embedding_hashes = []
         metadatas = []
 
         for chunk_id, idx in seen_ids.items():
@@ -172,13 +200,14 @@ class ChromaIndex:
             ids.append(chunk_id)
             documents.append(chunk.content)
             # Build enriched text for embedding (content + keywords + tags)
-            embedding_texts.append(
-                self._build_embedding_text(
-                    chunk.content,
-                    chunk.metadata.keywords,
-                    chunk.metadata.tags,
-                )
+            embedding_text = self._build_embedding_text(
+                chunk.content,
+                chunk.metadata.keywords,
+                chunk.metadata.tags,
             )
+            embedding_texts.append(embedding_text)
+            embedding_hash = hash_embedding_text(embedding_text)
+            embedding_hashes.append(embedding_hash)
             metadatas.append(
                 {
                     "path": chunk.path,
@@ -189,16 +218,41 @@ class ChromaIndex:
                     "updated": chunk.metadata.updated.isoformat() if chunk.metadata.updated else "",
                     "token_count": chunk.token_count or 0,
                     "source_project": chunk.metadata.source_project or "",
+                    "embedding_hash": embedding_hash,
                 }
             )
 
-        # Generate embeddings in batch using enriched texts
-        embeddings = self._embed(embedding_texts)
+        # Reuse cached embeddings when possible
+        cached = self._load_cached_embeddings(embedding_hashes)
+        embeddings: list[list[float] | None] = [None] * len(embedding_texts)
+        missing_texts = []
+        missing_indices = []
+        missing_hashes = []
+        for i, embedding_hash in enumerate(embedding_hashes):
+            cached_embedding = cached.get(embedding_hash)
+            if cached_embedding is not None:
+                embeddings[i] = cached_embedding
+            else:
+                missing_texts.append(embedding_texts[i])
+                missing_indices.append(i)
+                missing_hashes.append(embedding_hash)
+
+        if missing_texts:
+            computed = self._embed(missing_texts)
+            to_cache: dict[str, list[float]] = {}
+            for idx, embedding in zip(missing_indices, computed, strict=False):
+                embeddings[idx] = embedding
+            for embedding_hash, embedding in zip(missing_hashes, computed, strict=False):
+                to_cache[embedding_hash] = embedding
+            self._store_cached_embeddings(to_cache)
+
+        # All embeddings should be populated now
+        final_embeddings = [cast(list[float], emb) for emb in embeddings]
 
         # Upsert all at once
         collection.upsert(
             ids=ids,
-            embeddings=cast(Any, embeddings),
+            embeddings=cast(Any, final_embeddings),
             documents=documents,
             metadatas=metadatas,
         )

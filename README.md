@@ -68,6 +68,14 @@ Note: `mx add` requires `--category` unless `primary` is set in `.kbconfig`.
 
 ## Core Concepts
 
+### Index Storage
+
+Search indices and caches live under `{kb_root}/.indices/` by default (override with `MEMEX_INDEX_ROOT`):
+
+- `whoosh/` - BM25 keyword index
+- `chroma/` - semantic vector index
+- `embedding_cache.sqlite` - embedding cache (schema v1)
+
 ### Entries (Markdown + Frontmatter)
 
 Entries are Markdown files with YAML frontmatter:
