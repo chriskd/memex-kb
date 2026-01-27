@@ -752,6 +752,22 @@ class TestChunkByH2:
         assert chunks[0].section is None
         assert "Just a paragraph" in chunks[0].content
 
+    def test_no_h2_headers_token_split(self, metadata: EntryMetadata, monkeypatch: pytest.MonkeyPatch):
+        """Long content without H2 headers splits by token window."""
+        import memex.parser.markdown as markdown
+
+        monkeypatch.setattr(markdown, "CHUNK_MAX_TOKENS", 5)
+        monkeypatch.setattr(markdown, "CHUNK_OVERLAP_TOKENS", 1)
+
+        content = "word " * 30
+        chunks = markdown._chunk_by_h2("test.md", content, metadata)
+
+        assert len(chunks) > 1
+        assert all(chunk.section is None for chunk in chunks)
+        assert all((chunk.token_count or 0) <= 5 for chunk in chunks)
+        assert chunks[0].chunk_index == 0
+        assert chunks[-1].chunk_index == len(chunks) - 1
+
     def test_h2_headers_create_sections(self, metadata: EntryMetadata):
         """H2 headers split content into named sections."""
         content = """Intro text.
@@ -770,6 +786,23 @@ Content of section two.
         assert None in sections  # Intro chunk
         assert "Section One" in sections
         assert "Section Two" in sections
+
+    def test_h2_section_token_split(self, metadata: EntryMetadata, monkeypatch: pytest.MonkeyPatch):
+        """Oversized H2 section splits into multiple chunks."""
+        import memex.parser.markdown as markdown
+
+        monkeypatch.setattr(markdown, "CHUNK_MAX_TOKENS", 6)
+        monkeypatch.setattr(markdown, "CHUNK_OVERLAP_TOKENS", 2)
+
+        content = """## Section One
+
+word word word word word word word word word word word word.
+"""
+        chunks = markdown._chunk_by_h2("test.md", content, metadata)
+
+        section_chunks = [c for c in chunks if c.section == "Section One"]
+        assert len(section_chunks) > 1
+        assert all((chunk.token_count or 0) <= 6 for chunk in section_chunks)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

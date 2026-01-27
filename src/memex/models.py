@@ -102,6 +102,7 @@ class DocumentChunk(BaseModel):
     content: str
     metadata: EntryMetadata
     token_count: int | None = None
+    chunk_index: int | None = None
 
 
 class SearchResult(BaseModel):

@@ -1,6 +1,6 @@
 ---
 id: m-d3ef
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-01-27T05:08:11Z
@@ -20,3 +20,9 @@ Implement smarter chunking for search indexing: keep H2-based chunks but add tok
 - [ ] Embedding text includes document title + section heading
 - [ ] Tests updated/added for chunking and embedding text
 
+
+## Notes
+
+**2026-01-27T05:26:24Z**
+
+Implemented token-based fallback chunking with configurable max/overlap; added chunk_index to DocumentChunk and chunk IDs; embedding text now includes title+section; tests added for chunk splitting. Ran: pytest tests/test_parsing.py -k chunk, ty check

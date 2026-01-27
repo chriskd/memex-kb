@@ -336,6 +336,18 @@ MAX_CONTENT_RESULTS = 20
 
 
 # =============================================================================
+# Chunking (Semantic Indexing)
+# =============================================================================
+
+# Max tokens per chunk before token-based splitting is applied.
+# Used as a fallback when sections are oversized or there are no H2 headers.
+CHUNK_MAX_TOKENS = int(os.environ.get("MEMEX_CHUNK_MAX_TOKENS", "400"))
+
+# Token overlap between adjacent chunks when splitting by tokens.
+CHUNK_OVERLAP_TOKENS = int(os.environ.get("MEMEX_CHUNK_OVERLAP_TOKENS", "80"))
+
+
+# =============================================================================
 # Hybrid Search (Reciprocal Rank Fusion)
 # =============================================================================
 

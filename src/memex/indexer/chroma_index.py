@@ -78,6 +78,10 @@ class ChromaIndex:
             )
         return self._embedding_cache
 
+    def _chunk_id(self, chunk: DocumentChunk) -> str:
+        chunk_index = chunk.chunk_index if chunk.chunk_index is not None else 0
+        return f"{chunk.path}#{chunk.section or 'main'}#{chunk_index}"
+
     def _embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for texts.
 
@@ -104,8 +108,15 @@ class ChromaIndex:
         except Exception as e:
             log.warning("Embedding cache write failed: %s", e)
 
-    def _build_embedding_text(self, content: str, keywords: list[str], tags: list[str]) -> str:
-        """Build text for embedding by concatenating content, keywords, and tags.
+    def _build_embedding_text(
+        self,
+        content: str,
+        title: str,
+        section: str | None,
+        keywords: list[str],
+        tags: list[str],
+    ) -> str:
+        """Build text for embedding by concatenating title, section, content, keywords, and tags.
 
         This follows A-Mem's approach of enriching embeddings with semantic context
         to improve search quality for keyword-rich entries.
@@ -118,12 +129,17 @@ class ChromaIndex:
         Returns:
             Combined text for embedding.
         """
-        parts = [content]
+        parts = []
+        if title:
+            parts.append(f"Title: {title}")
+        if section:
+            parts.append(f"Section: {section}")
+        parts.append(content)
         if keywords:
             parts.append(f"\n\nKeywords: {', '.join(keywords)}")
         if tags:
             parts.append(f"\nTags: {', '.join(tags)}")
-        return "".join(parts)
+        return "\n\n".join(parts).strip()
 
     def index_document(self, chunk: DocumentChunk) -> None:
         """Index a document chunk.
@@ -134,11 +150,13 @@ class ChromaIndex:
         collection = self._get_collection()
 
         # Create unique chunk ID
-        chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
+        chunk_id = self._chunk_id(chunk)
 
         # Build text for embedding with keywords and tags
         embedding_text = self._build_embedding_text(
             chunk.content,
+            chunk.metadata.title,
+            chunk.section,
             chunk.metadata.keywords,
             chunk.metadata.tags,
         )
@@ -185,7 +203,7 @@ class ChromaIndex:
         # (handles cases where documents have duplicate sections)
         seen_ids: dict[str, int] = {}
         for i, chunk in enumerate(chunks):
-            chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
+            chunk_id = self._chunk_id(chunk)
             seen_ids[chunk_id] = i  # Later occurrences overwrite earlier
 
         # Build lists using deduplicated indices
@@ -202,6 +220,8 @@ class ChromaIndex:
             # Build enriched text for embedding (content + keywords + tags)
             embedding_text = self._build_embedding_text(
                 chunk.content,
+                chunk.metadata.title,
+                chunk.section,
                 chunk.metadata.keywords,
                 chunk.metadata.tags,
             )

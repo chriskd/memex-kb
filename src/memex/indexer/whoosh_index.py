@@ -62,7 +62,8 @@ class WhooshIndex:
         writer = ix.writer()
 
         # Create unique chunk ID
-        chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
+        chunk_index = chunk.chunk_index if chunk.chunk_index is not None else 0
+        chunk_id = f"{chunk.path}#{chunk.section or 'main'}#{chunk_index}"
 
         writer.update_document(
             path=chunk.path,
@@ -91,7 +92,8 @@ class WhooshIndex:
         writer = ix.writer()
 
         for chunk in chunks:
-            chunk_id = f"{chunk.path}#{chunk.section or 'main'}"
+            chunk_index = chunk.chunk_index if chunk.chunk_index is not None else 0
+            chunk_id = f"{chunk.path}#{chunk.section or 'main'}#{chunk_index}"
             writer.update_document(
                 path=chunk.path,
                 section=chunk.section or "",
