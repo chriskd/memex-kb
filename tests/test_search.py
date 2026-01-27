@@ -359,6 +359,8 @@ class TestSemanticSearch:
         # Test the internal _build_embedding_text method
         result = chroma_index._build_embedding_text(
             content="Main document content",
+            title="Test Title",
+            section=None,
             keywords=["concept1", "concept2"],
             tags=["tag1", "tag2"],
         )
@@ -370,6 +372,8 @@ class TestSemanticSearch:
         """Embedding text handles empty keywords gracefully."""
         result = chroma_index._build_embedding_text(
             content="Content only",
+            title="Test Title",
+            section=None,
             keywords=[],
             tags=["tag1"],
         )
@@ -381,6 +385,8 @@ class TestSemanticSearch:
         """Embedding text handles empty tags gracefully."""
         result = chroma_index._build_embedding_text(
             content="Content only",
+            title="Test Title",
+            section=None,
             keywords=["keyword1"],
             tags=[],
         )

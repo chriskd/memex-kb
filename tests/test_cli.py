@@ -68,7 +68,6 @@ ALL_COMMANDS = [
     "prime",
     "quick-add",
     "context",
-    "evolve",
     "patch",
     "relations-lint",
     "relations-add",
@@ -94,7 +93,6 @@ JSON_COMMANDS = [
     "history",
     "prime",
     "reindex",
-    "evolve",
     "relations-lint",
     "relations-add",
     "relations-remove",
@@ -2407,120 +2405,3 @@ class TestPublishCommand:
         assert "Not in a git repository" in result.output
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Evolve Command Tests
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestEvolveCommand:
-    """Tests for mx evolve command."""
-
-    @pytest.fixture
-    def tmp_kb_with_queue(self, tmp_path, monkeypatch):
-        """Create a KB with some items in the evolution queue."""
-        kb_path = tmp_path / "kb"
-        kb_path.mkdir()
-        (kb_path / ".kbconfig").write_text("""
-kb_path: .
-memory_evolution:
-  enabled: true
-  model: test-model
-  min_score: 0.7
-""")
-        indices = kb_path / ".indices"
-        indices.mkdir()
-
-        monkeypatch.setenv("MEMEX_SKIP_PROJECT_KB", "")
-        monkeypatch.chdir(kb_path)
-
-        return kb_path
-
-    def test_evolve_status_empty(self, tmp_kb_with_queue, runner):
-        """mx evolve --status shows empty queue."""
-        result = runner.invoke(cli, ["evolve", "--status"])
-        assert result.exit_code == 0
-        assert "empty" in result.output.lower()
-
-    def test_evolve_status_with_items(self, tmp_kb_with_queue, runner):
-        """mx evolve --status shows queue statistics."""
-        from memex.evolution_queue import queue_evolution
-
-        queue_evolution("new.md", [("n1.md", 0.8), ("n2.md", 0.7)], tmp_kb_with_queue)
-
-        result = runner.invoke(cli, ["evolve", "--status"])
-        assert result.exit_code == 0
-        assert "Queue items:" in result.output
-        assert "2" in result.output
-
-    def test_evolve_status_json(self, tmp_kb_with_queue, runner):
-        """mx evolve --status --json returns JSON."""
-        result = runner.invoke(cli, ["evolve", "--status", "--json"])
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert "count" in data
-        assert data["count"] == 0
-
-    def test_evolve_dry_run_empty(self, tmp_kb_with_queue, runner):
-        """mx evolve --dry-run on empty queue."""
-        result = runner.invoke(cli, ["evolve", "--dry-run"])
-        assert result.exit_code == 0
-        assert "empty" in result.output.lower()
-
-    def test_evolve_dry_run_with_items(self, tmp_kb_with_queue, runner):
-        """mx evolve --dry-run shows what would be processed."""
-        from memex.evolution_queue import queue_evolution
-
-        queue_evolution("new.md", [("n1.md", 0.8), ("n2.md", 0.7)], tmp_kb_with_queue)
-
-        result = runner.invoke(cli, ["evolve", "--dry-run"])
-        assert result.exit_code == 0
-        assert "Would process" in result.output
-        assert "new.md" in result.output
-        assert "n1.md" in result.output
-
-    def test_evolve_clear(self, tmp_kb_with_queue, runner):
-        """mx evolve --clear removes all items from queue."""
-        from memex.evolution_queue import queue_evolution, queue_stats
-
-        queue_evolution("new.md", [("n1.md", 0.8)], tmp_kb_with_queue)
-
-        result = runner.invoke(cli, ["evolve", "--clear"])
-        assert result.exit_code == 0
-        assert "Cleared" in result.output
-
-        # Verify queue is empty
-        stats = queue_stats(tmp_kb_with_queue)
-        assert stats.count == 0
-
-    def test_evolve_processes_queue(self, tmp_kb_with_queue, runner, monkeypatch):
-        """mx evolve processes queue and removes items."""
-        # Create test entries
-        (tmp_kb_with_queue / "new.md").write_text("""---
-title: New Entry
-tags: [test]
-created: 2024-01-15T10:00:00+00:00
----
-Content
-""")
-        (tmp_kb_with_queue / "neighbor.md").write_text("""---
-title: Neighbor
-tags: [test]
-created: 2024-01-14T10:00:00+00:00
----
-Content
-""")
-
-        from memex.evolution_queue import queue_evolution
-
-        queue_evolution("new.md", [("neighbor.md", 0.8)], tmp_kb_with_queue)
-
-        # Mock LLM to return no suggestions (simpler test)
-        async def mock_evolve(*args, **kwargs):
-            return []
-
-        with patch("memex.llm.evolve_neighbors_batched", mock_evolve):
-            monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-            result = runner.invoke(cli, ["evolve"])
-
-        assert result.exit_code == 0
-        assert "Processing" in result.output

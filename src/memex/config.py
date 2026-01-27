@@ -475,8 +475,6 @@ class LLMConfig:
         llm:
           provider: anthropic  # or "openrouter"
           model: claude-3.5-haiku
-          models:
-            memory_evolution: claude-3.5-haiku
     """
 
     provider: str | None = None
@@ -486,13 +484,13 @@ class LLMConfig:
     """Default model for all LLM features."""
 
     models: dict[str, str] | None = None
-    """Per-feature model overrides. Keys: 'memory_evolution'"""
+    """Per-feature model overrides."""
 
     def get_model(self, feature: str) -> str:
         """Get the model for a specific feature.
 
         Args:
-            feature: Feature name like 'memory_evolution'.
+            feature: Feature name.
 
         Returns:
             Model name, using feature-specific override if set.
@@ -512,8 +510,6 @@ def get_llm_config() -> LLMConfig:
         llm:
           provider: anthropic
           model: claude-3.5-haiku
-          models:
-            memory_evolution: claude-3.5-haiku
 
     Returns:
         LLMConfig with loaded or default values.
@@ -542,154 +538,3 @@ def get_llm_config() -> LLMConfig:
         return LLMConfig()
 
 
-# =============================================================================
-# Memory Evolution (A-Mem style)
-# =============================================================================
-
-
-@dataclass
-class MemoryEvolutionConfig:
-    """Configuration for LLM-driven memory evolution.
-
-    When a new entry is added and links to neighbors, the LLM analyzes
-    the relationship and suggests keyword/context updates for neighbors.
-    This makes the knowledge graph "learn" from new connections.
-
-    Evolution is queued (non-blocking) and processed by `mx evolve`.
-    Auto-triggers can spawn background evolution processing.
-
-    Note: Model configuration has moved to the top-level llm: section.
-    The model field here is kept for backwards compatibility but
-    llm.models.memory_evolution takes precedence if set.
-    """
-
-    enabled: bool = False
-    """Whether memory evolution is active. Requires ANTHROPIC_API_KEY or OPENROUTER_API_KEY."""
-
-    model: str = "anthropic/claude-3-5-haiku"
-    """Model ID for evolution analysis. Deprecated: prefer llm.models.memory_evolution."""
-
-    min_score: float = MEMORY_EVOLUTION_MIN_SCORE
-    """Minimum similarity score to trigger evolution (0.0-1.0)."""
-
-    max_keywords_per_neighbor: int = 3
-    """Maximum keywords to add to a neighbor per evolution."""
-
-    batch_neighbors: bool = True
-    """Batch multiple neighbors into single LLM call when possible."""
-
-    auto_probability: float = 0.0
-    """Probability (0.0-1.0) to spawn background `mx evolve` after add."""
-
-    auto_queue_threshold: int = 0
-    """Spawn background `mx evolve` when queue exceeds this size (0=disabled)."""
-
-    strengthen_on_add: bool = False
-    """Run strengthen analysis synchronously during add_entry() when neighbors found.
-
-    Conservative default (False) - user must opt-in via .kbconfig.
-    When enabled, adds an LLM call to add_entry() which may slow down the operation."""
-
-
-def get_memory_evolution_config() -> MemoryEvolutionConfig:
-    """Load memory evolution config from .kbconfig.
-
-    Config is loaded from the project .kbconfig file's memory_evolution section.
-    Returns default (disabled) config if not configured or KB not found.
-
-    Example .kbconfig:
-        memory_evolution:
-          enabled: true
-          model: anthropic/claude-3-5-haiku
-          min_score: 0.7
-
-    Returns:
-        MemoryEvolutionConfig with loaded or default values.
-    """
-    import yaml
-
-    try:
-        project_config = _discover_project_config()
-        if not project_config:
-            return MemoryEvolutionConfig()
-
-        config_path, _ = project_config
-        content = config_path.read_text(encoding="utf-8")
-        data = yaml.safe_load(content) or {}
-
-        evolution_data = data.get("memory_evolution", {})
-        if not evolution_data:
-            return MemoryEvolutionConfig()
-
-        return MemoryEvolutionConfig(
-            enabled=evolution_data.get("enabled", False),
-            model=evolution_data.get("model", "anthropic/claude-3-5-haiku"),
-            min_score=evolution_data.get("min_score", MEMORY_EVOLUTION_MIN_SCORE),
-            max_keywords_per_neighbor=evolution_data.get("max_keywords_per_neighbor", 3),
-            batch_neighbors=evolution_data.get("batch_neighbors", True),
-            auto_probability=evolution_data.get("auto_probability", 0.0),
-            auto_queue_threshold=evolution_data.get("auto_queue_threshold", 0),
-            strengthen_on_add=evolution_data.get("strengthen_on_add", True),
-        )
-    except (OSError, yaml.YAMLError):
-        return MemoryEvolutionConfig()
-
-
-# =============================================================================
-# A-Mem Strict Mode
-# =============================================================================
-
-
-class AMEMStrictError(ValueError):
-    """Raised when A-Mem strict mode is enabled but keywords are missing."""
-
-    pass
-
-
-AMEM_STRICT_ERROR_MESSAGE = """\
-A-Mem strict mode is enabled but --keywords was not provided.
-
-To fix this, add keywords that capture key concepts in your entry:
-
-    mx add --title="Your Title" \\
-           --tags="tag1,tag2" \\
-           --keywords="concept1,concept2,concept3" \\
-           --content="..."
-
-Keywords should be:
-  • Key concepts mentioned in the content (e.g., "REST", "caching")
-  • Related terms not explicitly mentioned (e.g., "API design")
-  • Domain-specific terminology (e.g., "microservices")
-
-Typically 3-7 keywords work well. They improve search relevance
-and semantic linking accuracy.
-
-To disable this check: set amem_strict: false in .kbconfig"""
-
-
-def is_amem_strict_enabled() -> bool:
-    """Check if A-Mem strict mode is enabled in .kbconfig.
-
-    When enabled, add_entry() and update_entry() will fail if keywords
-    are not provided, helping LLMs remember to populate this field.
-
-    Example .kbconfig:
-        amem_strict: true
-
-    Returns:
-        True if amem_strict is enabled, False otherwise.
-    """
-    import yaml
-
-    try:
-        project_config = _discover_project_config()
-        if not project_config:
-            return False
-
-        config_path, _ = project_config
-        content = config_path.read_text(encoding="utf-8")
-        data = yaml.safe_load(content) or {}
-
-        return bool(data.get("amem_strict", False))
-    except (OSError, yaml.YAMLError):
-        return False
