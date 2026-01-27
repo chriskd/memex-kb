@@ -542,7 +542,7 @@ def _output_status(
 
         for e in entries[:5]:
             activity = "NEW" if e.get("activity_type") == "created" else "UPD"
-            date_str = str(e.get("activity_date", ""))[:10]
+            date_str = str(e.get("activity_date", ""))
             path = e.get("path", "")
             title = e.get("title", "Untitled")
 
@@ -831,6 +831,7 @@ def session_context_command(
             {
                 "project": result.project,
                 "entries": result.entries,
+                "recent_entries": result.recent_entries,
                 "content": result.content,
                 "cached": result.cached,
             },
@@ -2561,7 +2562,7 @@ def whats_new(days: int, limit: int, scope: str | None, as_json: bool):
             return
 
         rows = [
-            {"path": e["path"], "title": e["title"], "date": str(e["activity_date"])[:10]}
+            {"path": e["path"], "title": e["title"], "date": str(e["activity_date"])}
             for e in result
         ]
         click.echo(format_table(rows, ["path", "title", "date"], {"path": 40, "title": 30}))

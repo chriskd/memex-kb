@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import ConfigurationError, get_kb_root
-from .context import get_kb_context
+from .config import (
+    ConfigurationError,
+    get_kb_root,
+    get_project_kb_root,
+    get_user_kb_root,
+)
+from .context import KBContext, get_kb_context, matches_glob
 from .parser import ParseError, parse_entry
 
 CACHE_DIR = Path("/tmp")
@@ -20,6 +26,7 @@ DEFAULT_MAX_ENTRIES = 4
 class SessionContextResult:
     project: str
     entries: list[dict]
+    recent_entries: list[dict] = field(default_factory=list)
     content: str
     cached: bool = False
 
@@ -40,6 +47,7 @@ def _load_cached_context(project_name: str, max_entries: int) -> SessionContextR
             return SessionContextResult(
                 project=data.get("project", project_name),
                 entries=data.get("entries", []),
+                recent_entries=data.get("recent_entries", []),
                 content=data.get("content", ""),
                 cached=True,
             )
@@ -55,6 +63,7 @@ def _save_cached_context(result: SessionContextResult, max_entries: int) -> None
         "timestamp": time.time(),
         "project": result.project,
         "entries": result.entries,
+        "recent_entries": result.recent_entries,
         "content": result.content,
     }
     try:
@@ -92,8 +101,7 @@ def _extract_project_name(remote_url: str | None, cwd: Path) -> str:
     return cwd.name
 
 
-def _resolve_project_name(cwd: Path) -> str:
-    context = get_kb_context()
+def _resolve_project_name(cwd: Path, context: KBContext | None) -> str:
     if context:
         project_name = context.get_project_name()
         if project_name:
@@ -170,7 +178,9 @@ def _scan_kb_entries(kb_root: Path) -> list[dict]:
     return entries
 
 
-def _score_entry(entry: dict, project_name: str, project_tokens: set[str]) -> float:
+def _score_entry(
+    entry: dict, project_name: str, project_tokens: set[str], context: KBContext | None
+) -> float:
     score = 0.0
     entry_text = f"{entry['title']} {entry['tags']} {entry['category']}".lower()
 
@@ -179,6 +189,16 @@ def _score_entry(entry: dict, project_name: str, project_tokens: set[str]) -> fl
 
     for token in project_tokens:
         if token in entry_text:
+            score += 2.0
+
+    if context:
+        boost_paths = context.get_all_boost_paths()
+        if boost_paths:
+            for pattern in boost_paths:
+                if matches_glob(entry["path"], pattern):
+                    score += 4.0
+                    break
+        if context.primary and matches_glob(entry["path"], context.primary):
             score += 2.0
 
     category_weights = {
@@ -194,33 +214,85 @@ def _score_entry(entry: dict, project_name: str, project_tokens: set[str]) -> fl
 
 
 def _select_relevant_entries(
-    entries: list[dict], project_name: str, project_tokens: set[str], max_entries: int
+    entries: list[dict],
+    project_name: str,
+    project_tokens: set[str],
+    context: KBContext | None,
+    max_entries: int,
 ) -> list[dict]:
     if not entries:
         return []
 
-    scored = [(entry, _score_entry(entry, project_name, project_tokens)) for entry in entries]
+    scored = [
+        (entry, _score_entry(entry, project_name, project_tokens, context)) for entry in entries
+    ]
     scored.sort(key=lambda x: x[1], reverse=True)
 
     return [entry for entry, score in scored[:max_entries] if score > 0]
 
 
-def _format_output(entries: list[dict], project_name: str) -> str:
+def _resolve_recent_scope() -> str | None:
+    project_kb = get_project_kb_root()
+    if project_kb and project_kb.exists():
+        return "project"
+
+    user_kb = get_user_kb_root()
+    if user_kb and user_kb.exists():
+        return "user"
+
+    return None
+
+
+def _get_recent_entries(scope: str | None, limit: int = 5) -> list[dict]:
+    from .core import whats_new as core_whats_new
+
+    try:
+        return asyncio.run(core_whats_new(days=14, limit=limit, scope=scope))
+    except Exception:
+        return []
+
+
+def _format_output(
+    entries: list[dict],
+    project_name: str,
+    *,
+    kb_root: Path,
+    scope: str | None,
+    context: KBContext | None,
+    recent_entries: list[dict],
+) -> str:
     lines = [
         "## Memex Knowledge Base",
         "",
         "You have access to a knowledge base with documentation, patterns,",
         "and operational guides. **Search before creating** to avoid duplicates.",
         "",
-        "**Quick Reference:**",
-        "| Action | Command |",
-        "|--------|---------|",
-        "| Search | `mx search <query>` |",
-        "| Browse | `mx list` or `mx tree` |",
-        "| Read entry | `mx get <path>` |",
-        "| Add new | `mx add --title=... --tags=... --content=...` |",
-        "",
+        "**Project Context:**",
     ]
+    context_parts = []
+    if scope:
+        context_parts.append(f"scope={scope}")
+    context_parts.append(f"kb_path={kb_root}")
+    if context and context.primary:
+        context_parts.append(f"primary={context.primary}")
+    if context and context.default_tags:
+        context_parts.append(f"default_tags={','.join(context.default_tags)}")
+    if context and context.paths:
+        context_parts.append(f"boost_paths={','.join(context.paths)}")
+    lines.append(" | ".join(context_parts))
+    lines.append("")
+    lines.extend(
+        [
+            "**Quick Reference:**",
+            "| Action | Command |",
+            "|--------|---------|",
+            "| Search | `mx search <query>` |",
+            "| Browse | `mx list` or `mx tree` |",
+            "| Read entry | `mx get <path>` |",
+            "| Add new | `mx add --title=... --tags=... --content=...` |",
+            "",
+        ]
+    )
 
     if entries:
         lines.append(f"**Relevant entries for {project_name}:**")
@@ -230,12 +302,33 @@ def _format_output(entries: list[dict], project_name: str) -> str:
             lines.append(f"- **{entry['title']}** (`{entry['path']}`){tags}")
         lines.append("")
 
+    if recent_entries:
+        lines.append("**Recent Entries:**")
+        lines.append("")
+        for entry in recent_entries:
+            activity = "NEW" if entry.get("activity_type") == "created" else "UPD"
+            date_str = str(entry.get("activity_date", ""))
+            path = entry.get("path", "")
+            title = entry.get("title", "Untitled")
+            lines.append(f"- {date_str} {activity} `{path}` — {title}")
+        lines.append("")
+
+    lines.append("**Next Commands:**")
+    lines.append("")
+    if scope:
+        lines.append(f"- `mx whats-new --scope={scope} --days=7`")
+    else:
+        lines.append("- `mx whats-new --days=7`")
+    lines.append("- `mx tags`")
+    lines.append("")
+
     return "\n".join(lines)
 
 
 def build_session_context(*, max_entries: int = DEFAULT_MAX_ENTRIES) -> SessionContextResult | None:
     cwd = Path.cwd()
-    project_name = _resolve_project_name(cwd)
+    context = get_kb_context()
+    project_name = _resolve_project_name(cwd, context)
 
     cached = _load_cached_context(project_name, max_entries)
     if cached:
@@ -251,12 +344,22 @@ def build_session_context(*, max_entries: int = DEFAULT_MAX_ENTRIES) -> SessionC
 
     project_tokens = _get_project_tokens(project_name, cwd)
     entries = _scan_kb_entries(kb_root)
-    relevant = _select_relevant_entries(entries, project_name, project_tokens, max_entries)
-    content = _format_output(relevant, project_name)
+    relevant = _select_relevant_entries(entries, project_name, project_tokens, context, max_entries)
+    scope = _resolve_recent_scope()
+    recent_entries = _get_recent_entries(scope)
+    content = _format_output(
+        relevant,
+        project_name,
+        kb_root=kb_root,
+        scope=scope,
+        context=context,
+        recent_entries=recent_entries,
+    )
 
     result = SessionContextResult(
         project=project_name,
         entries=relevant,
+        recent_entries=recent_entries,
         content=content,
         cached=False,
     )
