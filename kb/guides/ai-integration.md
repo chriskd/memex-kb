@@ -39,12 +39,12 @@ For automatic context injection, use hooks:
 ```json
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "./hooks/session-context.sh" }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx session-context" }] }]
   }
 }
 ```
 
-Create the local hook script (gitignored):
+Write the hook into `.claude/settings.json`:
 
 ```bash
 mx session-context --install

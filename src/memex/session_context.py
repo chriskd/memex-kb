@@ -278,30 +278,80 @@ def find_git_root(start_dir: Path) -> Path | None:
         return None
 
 
-def default_hook_path(start_dir: Path) -> Path:
+def default_settings_path(start_dir: Path) -> Path:
     repo_root = find_git_root(start_dir) or start_dir
-    return repo_root / "hooks" / "session-context.sh"
+    return repo_root / ".claude" / "settings.json"
 
 
-def install_session_hook(target_path: Path) -> Path:
-    target_path = target_path.expanduser()
-    target_path.parent.mkdir(parents=True, exist_ok=True)
+def _load_settings(settings_path: Path) -> dict:
+    if not settings_path.exists():
+        return {}
 
-    script = """#!/usr/bin/env bash
-set -euo pipefail
+    data = json.loads(settings_path.read_text())
+    if not isinstance(data, dict):
+        raise ValueError("Claude settings must be a JSON object")
+    return data
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 
-if [ -n "$REPO_ROOT" ]; then
-  cd "$REPO_ROOT"
-else
-  cd "$SCRIPT_DIR"
-fi
+def _remove_setup_remote(hook: dict) -> bool:
+    command = hook.get("command")
+    return isinstance(command, str) and "setup-remote.sh" in command
 
-exec mx session-context
-"""
 
-    target_path.write_text(script)
-    target_path.chmod(0o755)
-    return target_path
+def _ensure_session_start(settings: dict, command: str) -> None:
+    hooks = settings.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        raise ValueError("Claude settings 'hooks' must be a JSON object")
+
+    session_start = hooks.setdefault("SessionStart", [])
+    if not isinstance(session_start, list):
+        raise ValueError("Claude settings 'hooks.SessionStart' must be a list")
+
+    use_nested = any(isinstance(entry, dict) and "hooks" in entry for entry in session_start)
+
+    if use_nested:
+        if not session_start:
+            session_start.append({"hooks": []})
+
+        for entry in session_start:
+            if not isinstance(entry, dict):
+                continue
+            hooks_list = entry.get("hooks")
+            if not isinstance(hooks_list, list):
+                hooks_list = []
+                entry["hooks"] = hooks_list
+
+            hooks_list[:] = [
+                hook
+                for hook in hooks_list
+                if not (isinstance(hook, dict) and _remove_setup_remote(hook))
+            ]
+
+            if not any(
+                isinstance(hook, dict)
+                and hook.get("type") == "command"
+                and hook.get("command") == command
+                for hook in hooks_list
+            ):
+                hooks_list.append({"type": "command", "command": command})
+    else:
+        session_start[:] = [
+            entry
+            for entry in session_start
+            if not (isinstance(entry, dict) and _remove_setup_remote(entry))
+        ]
+
+        if not any(
+            isinstance(entry, dict) and entry.get("command") == command for entry in session_start
+        ):
+            session_start.append({"command": command})
+
+
+def install_session_hook(settings_path: Path, *, command: str = "mx session-context") -> Path:
+    settings_path = settings_path.expanduser()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    settings = _load_settings(settings_path)
+    _ensure_session_start(settings, command)
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+    return settings_path

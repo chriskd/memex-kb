@@ -130,7 +130,7 @@ All projects share tooling from `/srv/fast/code/voidlabs-devtools`. This reposit
 
 **You don't need to run these manually** - they execute on session start. But understanding where they come from helps if you want to suggest improvements.
 
-**Project-local session hooks** should be created via `mx session-context --install` (writes `./hooks/session-context.sh`, which is gitignored).
+**Project-local session hooks** should be created via `mx session-context --install` (updates `.claude/settings.json` with `mx session-context`).
 
 **To improve shared tooling:**
 - Edit files in `/srv/fast/code/voidlabs-devtools`

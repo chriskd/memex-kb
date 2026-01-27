@@ -783,12 +783,12 @@ def prime(full: bool, mcp: bool, as_json: bool):
 @click.option(
     "--install",
     is_flag=True,
-    help="Create a local hook script at ./hooks/session-context.sh",
+    help="Update .claude/settings.json with mx session-context SessionStart hook",
 )
 @click.option(
     "--install-path",
     type=click.Path(path_type=Path),
-    help="Custom path for the hook script (implies --install).",
+    help="Custom path for Claude settings.json (implies --install).",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def session_context_command(
@@ -796,28 +796,30 @@ def session_context_command(
 ):
     """Output dynamic project-relevant KB context for session hooks.
 
-    Use --install to create a local hook script for Claude Code SessionStart.
+    Use --install to write the Claude Code SessionStart hook.
     """
     from .session_context import (
         build_session_context,
-        default_hook_path,
+        default_settings_path,
         install_session_hook,
     )
 
     if install or install_path:
-        target = install_path or default_hook_path(Path.cwd())
-        installed_path = install_session_hook(target)
+        target = install_path or default_settings_path(Path.cwd())
+        try:
+            installed_path = install_session_hook(target)
+        except ValueError as exc:
+            raise ClickException(str(exc)) from exc
         payload = {
             "installed": True,
-            "path": str(installed_path),
-            "command": str(installed_path),
+            "settings_path": str(installed_path),
+            "command": "mx session-context",
         }
         if as_json:
             output(payload, as_json=True)
         else:
-            click.echo(f"✓ Installed session context hook at {installed_path}")
-            click.echo("Add to your Claude SessionStart hook:")
-            click.echo(f'  "command": "{installed_path}"')
+            click.echo(f"✓ Updated Claude settings at {installed_path}")
+            click.echo('SessionStart hook set to: "mx session-context"')
         return
 
     result = build_session_context(max_entries=max_entries)

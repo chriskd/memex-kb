@@ -528,8 +528,8 @@ Output dynamic project-relevant context (for hooks).
 ```bash
 mx session-context                   # Print session context
 mx session-context --max-entries 4   # Limit relevant entries
-mx session-context --install         # Create ./hooks/session-context.sh
-mx session-context --install --install-path .claude/hooks/session-context.sh
+mx session-context --install         # Update .claude/settings.json hook
+mx session-context --install --install-path .claude/settings.local.json
 mx session-context --json            # JSON output
 ```
 
