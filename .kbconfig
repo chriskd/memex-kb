@@ -19,18 +19,3 @@ primary: projects/memex
 # Optional: exclude patterns from indexing (glob)
 # exclude:
 #   - "*.draft.md"
-
-# Memory evolution (A-Mem style)
-# When enabled, LLM analyzes relationships when new entries link to neighbors
-# and suggests keyword updates to make the knowledge graph "learn" from connections.
-# Requires OPENROUTER_API_KEY environment variable.
-memory_evolution:
-  enabled: true
-  model: anthropic/claude-3-5-haiku  # OpenRouter model ID - fast and cheap
-  min_score: 0.7                      # Minimum similarity to trigger evolution (0.0-1.0)
-  max_keywords_per_neighbor: 3        # Max keywords to add per neighbor
-  batch_neighbors: true               # Batch multiple neighbors into single LLM call
-
-  # Auto-trigger options
-  auto_probability: 0.2               # 20% chance to spawn background mx evolve after add
-  auto_queue_threshold: 10            # Spawn background mx evolve when queue exceeds 10 items
