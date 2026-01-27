@@ -6,6 +6,7 @@ Templates include: base layout with 3-column grid, entry page, index page, and t
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from jinja2 import BaseLoader, Environment, select_autoescape
@@ -63,7 +64,7 @@ def _safe(html: str) -> str:
     return Markup(html)
 
 
-def _recent_sort_key(entry: EntryData):
+def _recent_sort_key(entry: EntryData) -> datetime:
     """Sort by most recent activity, preferring updated over created.
 
     Normalizes datetimes to handle mixed timezone-aware and timezone-naive
@@ -72,7 +73,7 @@ def _recent_sort_key(entry: EntryData):
     """
     dt = entry.metadata.updated or entry.metadata.created
     if dt is None:
-        return None
+        return datetime.min
     # Strip timezone info to allow comparison between aware and naive datetimes
     return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
