@@ -1,34 +1,15 @@
 # Memex
 
-Memex is a CLI-first, dual-scope knowledge base for teams and LLM workflows.
-It stores Markdown with YAML frontmatter, supports hybrid full-text + semantic search,
-typed relations, bidirectional links, and can publish a static site with a graph view.
-Designed for humans and AI coding agents across project and user knowledge bases.
+CLI-first knowledge base with hybrid search, typed relations, and static site publishing. Stores Markdown with YAML frontmatter across project and user scopes. Built for humans and AI coding agents.
 
 ## Features
 
-- **Hybrid search**: BM25 keyword + semantic embeddings (Whoosh + ChromaDB + sentence-transformers)
-  merged with Reciprocal Rank Fusion and relevance boosts.
-- **Typed relations**: Canonical relation types in frontmatter, CLI add/remove helpers,
-  and linting (`mx relations-lint`) for consistency.
-- **Relations graph**: Unified graph of wikilinks, typed relations, and semantic links, queryable via `mx relations`,
-  and surfaced in published sites.
-- **Bidirectional links**: Obsidian-style `[[links]]`, backlinks, and semantic links for discovery.
-- **Project + user scopes**: Separate KBs with `@project/` and `@user/` paths, shared search,
-  and scope-aware indexing/publishing.
-- **Entry tooling**: Quick-add, ingest, templates, and surgical edits (append/patch/replace).
-- **Publishing**: Static HTML site with search index, tag pages, and graph data; optional
-  GitHub Pages workflow generation.
-- **Agent workflows**: `mx session-context`, `mx prime`, `mx schema`, and `mx batch`
-  for AI assistants.
-- **Quality tooling**: `mx health`, `mx suggest-links`, `mx hubs`, `mx summarize`, and
-  `mx reindex` for maintenance.
-
-## Who It Is For
-
-- Developers and teams who want searchable, versioned project knowledge.
-- AI-assisted workflows that need low-token, scriptable KB access.
-- Anyone building a "second brain" with Markdown + graph connections.
+- **Hybrid search** — BM25 keyword + semantic embeddings, merged with Reciprocal Rank Fusion
+- **Typed relations** — explicit directed links in frontmatter with CLI helpers and linting
+- **Graph view** — wikilinks, relations, and semantic links queryable via CLI and published sites
+- **Dual scopes** — project KB (`./kb/`) and user KB (`~/.memex/kb/`) with shared search
+- **Publishing** — static HTML with embedded search, tag pages, and graph visualization
+- **Agent-friendly** — `mx prime`, `mx schema`, `mx batch` for low-token AI workflows
 
 ## Installation
 
@@ -43,48 +24,30 @@ pip install memex-kb
 mx --version
 ```
 
-Semantic search is included by default. First run downloads the embedding model.
-Python 3.11+ is required.
+Semantic search is included. First run downloads the embedding model (~90MB).
+Requires Python 3.11+.
 
 ## Quick Start
 
 ```bash
-# Initialize a project KB
-mx init
-
-# Add an entry
-mx add --title="Setup Guide" --tags="docs" --category=guides \
-  --content="# Setup\n\nInstructions here."
-
-# Search
-mx search "setup"
-
-# Read an entry
-mx get guides/setup-guide.md
+mx init                                    # Create kb/ and .kbconfig
+mx add --title="Setup" --tags="docs" \
+       --category=guides --content="..."   # Add an entry
+mx search "setup"                          # Search
+mx get guides/setup.md                     # Read an entry
 ```
 
-This creates a `kb/` directory and a `.kbconfig` at your project root.
 Note: `mx add` requires `--category` unless `primary` is set in `.kbconfig`.
 
-## Core Concepts
+## Entries
 
-### Index Storage
-
-Search indices and caches live under `{kb_root}/.indices/` by default (override with `MEMEX_INDEX_ROOT`):
-
-- `whoosh/` - BM25 keyword index
-- `chroma/` - semantic vector index
-- `embedding_cache.sqlite` - embedding cache (schema v1)
-
-### Entries (Markdown + Frontmatter)
-
-Entries are Markdown files with YAML frontmatter:
+Markdown files with YAML frontmatter:
 
 ```markdown
 ---
 title: API Guide
 tags: [api, docs]
-description: Endpoints and auth rules
+description: Endpoints and auth
 ---
 
 # API Guide
@@ -92,9 +55,7 @@ description: Endpoints and auth rules
 See [[reference/auth]] for auth details.
 ```
 
-### Typed Relations
-
-Typed relations are explicit, directed links in frontmatter:
+Typed relations go in frontmatter:
 
 ```yaml
 relations:
@@ -104,90 +65,59 @@ relations:
     type: depends_on
 ```
 
-Common relation types: `depends_on`, `implements`, `extends`, `documents`,
-`references`, `blocks`, `related`.
+Types: `depends_on`, `implements`, `extends`, `documents`, `references`, `blocks`, `related`.
 
-### Scopes
-
-Memex supports two KB scopes:
-
-- **Project** (`./kb/`): shared with your repo
-- **User** (`~/.memex/kb/`): personal across projects
-
-Commands accept `--scope=project|user`, and paths are prefixed when both exist:
-`@project/guides/setup.md`, `@user/notes/ideas.md`.
-
-## CLI At a Glance
+## CLI Overview
 
 ```bash
 # Search and browse
-mx search "query" --mode=hybrid|keyword|semantic --tags=docs --min-score=0.4
-mx search "query" --include-neighbors --neighbor-depth=2
-mx get path/to/entry.md --metadata
-mx list --tags=docs --scope=project
-mx tree --depth=2
-mx whats-new --days=7
-mx history
-mx info
-mx context validate
+mx search "query"                          # Hybrid search (default)
+mx search "query" --mode=semantic          # Semantic only
+mx search "query" --include-neighbors      # Include linked entries
+mx get path/entry.md                       # Read entry
+mx list --tags=docs                        # List by tag
+mx tree                                    # Directory structure
+mx whats-new --days=7                      # Recent changes
 
-# Write and edit
-mx add --title="..." --tags="..." --category=guides --content="..."
-mx append "Title" --content="..."
+# Create and edit
+mx add --title="..." --tags="..." --content="..."
+mx append "Title" --content="..."          # Append or create
 mx patch path.md --find="old" --replace="new"
-mx replace path.md --content="new content"
-mx delete path.md
-mx quick-add --stdin
-mx ingest notes.md --directory=guides
-mx templates
+mx ingest notes.md --directory=guides      # Import file
 
-# Relations and graph
-mx relations path/to/entry.md --depth=2 --origin relations
-mx relations --graph --json
-mx relations-add path/to/entry.md --relation "reference/cli.md=documents"
-mx relations-remove path/to/entry.md --relation "reference/cli.md=documents"
-mx relations-lint --strict
+# Relations
+mx relations path/entry.md --depth=2       # Query graph
+mx relations-add path.md --relation "other.md=documents"
+mx relations-lint --strict                 # Check consistency
 
-# Maintenance and discovery
-mx health
-mx hubs
-mx suggest-links path/to/entry.md
-mx summarize --dry-run
-mx reindex
+# Maintenance
+mx health                                  # Audit KB
+mx hubs                                    # Find high-connectivity entries
+mx suggest-links path.md                   # Semantic link suggestions
+mx reindex                                 # Rebuild indices
+mx eval                                    # Search quality metrics
 
-# Automation and schema
-mx batch << 'EOF'
-search "deployment"
-get guides/installation.md
-EOF
-mx schema --compact
+# Agent tools
+mx prime                                   # Session context for agents
+mx schema --compact                        # CLI schema (for LLMs)
+mx batch < commands.txt                    # Batch operations
 ```
 
-See the full CLI reference at `kb/reference/cli.md`.
+Full reference at `kb/reference/cli.md`.
 
 ## Publishing
 
-Generate a static site with search, tags, and graph data:
-
 ```bash
-mx publish -o _site
-mx publish --base-url /my-kb
-mx publish --include-drafts
+mx publish -o _site                        # Generate static site
+mx publish --base-url /my-kb               # Custom base path
+mx publish --setup-github-actions          # Add GH Pages workflow
 ```
 
-Optional GitHub Pages workflow:
+## AI Integration
 
-```bash
-mx publish --setup-github-actions
-```
+### Claude Code
 
-Published pages surface typed relations (direction + type) and a graph view.
-
-## AI / Agent Integration
-
-Memex is optimized for AI coding assistants.
-
-### Claude Code Hooks (Recommended)
+Add to `.claude/settings.json`:
 
 ```json
 {
@@ -198,83 +128,61 @@ Memex is optimized for AI coding assistants.
 }
 ```
 
-Install the hook automatically:
+Or install automatically:
 
 ```bash
 mx session-context --install
 ```
 
-### Claude Code Plugin
-
-This repo ships a Claude Code plugin manifest in `.claude-plugin/`. From the repo
-root, add the local marketplace and install the plugin from Claude Code:
+### Plugin
 
 ```text
 /plugin marketplace add ./.claude-plugin/marketplace.json
 /plugin install memex@memex
 ```
 
-Restart Claude Code after installing or updating the plugin.
-
-### Codex Skills
-
-This repo includes a Memex skill at `skills/kb-usage/`.
-Codex loads skills from `$CODEX_HOME/skills` (defaults to `~/.codex/skills`).
-To install this repo's Memex skill, copy or symlink `skills/kb-usage/` into that
-directory, then restart Codex.
-
-Examples:
+### Agent Commands
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -r skills/kb-usage ~/.codex/skills/
-```
-
-### Agent-Friendly Commands
-
-Other agent-friendly commands:
-
-```bash
-mx prime
-mx schema --compact
-mx batch << 'EOF'
-search "deployment"
-get guides/installation.md
-EOF
+mx prime              # Context for session start
+mx schema --compact   # CLI schema (minimal tokens)
+mx batch              # Multiple commands, one invocation
 ```
 
 ## Configuration
 
-Project config lives in `.kbconfig`:
+`.kbconfig` at project root:
 
 ```yaml
 kb_path: ./kb
-primary: guides
+primary: guides              # Default category for mx add
 boost_paths:
-  - guides/*
+  - guides/*                 # Search ranking boost
 default_tags:
-  - memex
+  - myproject
 publish_base_url: /my-kb
 ```
-
-`primary` sets the default directory for new entries, `boost_paths` affects search
-ranking, and `publish_base_url` is used when publishing to a subpath.
 
 Environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `MEMEX_USER_KB_ROOT` | Override user KB root (default: `~/.memex/kb/`) |
-| `MEMEX_INDEX_ROOT` | Index directory (default: `{kb}/.indices`) |
+| `MEMEX_USER_KB_ROOT` | Override user KB location |
+| `MEMEX_INDEX_ROOT` | Override index directory |
+| `MEMEX_QUIET` | Suppress warnings |
 
-## Documentation
+CLI flags:
 
-- `kb/guides/installation.md`
-- `kb/guides/quick-start.md`
-- `kb/guides/ai-integration.md`
-- `kb/reference/cli.md`
-- `kb/reference/entry-format.md`
-- `kb/memex/state-diagrams.md`
+- `--json-errors` — errors as JSON with error codes
+- `-q, --quiet` — suppress warnings
+
+## Index Storage
+
+Indices live at `{kb}/.indices/`:
+
+- `whoosh/` — BM25 keyword index
+- `chroma/` — semantic vectors
+- `embedding_cache.sqlite` — cached embeddings
 
 ## Development
 
@@ -289,4 +197,4 @@ See `CONTRIBUTING.md` for guidelines.
 
 ## License
 
-MIT - see `LICENSE`
+MIT
