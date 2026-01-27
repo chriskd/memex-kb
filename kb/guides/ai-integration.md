@@ -94,8 +94,9 @@ Search organizational knowledge before implementing:
 
 This repo includes a Memex skill at `skills/kb-usage/`. Codex CLI discovers skills
 from well-known directories (for example `.codex/skills` in the repo or
-`~/.codex/skills` for user installs). Copy or symlink the skill into a Codex skills
-directory and restart Codex.
+`~/.codex/skills` for user installs). Team Config can also load skills from
+`/etc/codex/skills` when centrally managed. Copy or symlink the skill into a
+Codex skills directory and restart Codex.
 
 Examples:
 
@@ -105,6 +106,9 @@ cp -r skills/kb-usage .codex/skills/
 
 mkdir -p ~/.codex/skills
 cp -r skills/kb-usage ~/.codex/skills/
+
+sudo mkdir -p /etc/codex/skills
+sudo cp -r skills/kb-usage /etc/codex/skills/
 ```
 
 ## Other AI Agents

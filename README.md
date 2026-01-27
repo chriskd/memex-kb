@@ -213,6 +213,7 @@ Restart Claude Code after installing or updating the plugin.
 This repo includes a Memex skill at `skills/kb-usage/`.
 Codex CLI discovers skills from well-known directories (for example
 `.codex/skills` in the repo or `~/.codex/skills` for user-level installs).
+Team Config can also load skills from `/etc/codex/skills` when centrally managed.
 To install this repo's Memex skill, copy or symlink `skills/kb-usage/` into a
 Codex skills directory, then restart Codex.
 
@@ -224,6 +225,9 @@ cp -r skills/kb-usage .codex/skills/
 
 mkdir -p ~/.codex/skills
 cp -r skills/kb-usage ~/.codex/skills/
+
+sudo mkdir -p /etc/codex/skills
+sudo cp -r skills/kb-usage /etc/codex/skills/
 ```
 
 ### Agent-Friendly Commands
