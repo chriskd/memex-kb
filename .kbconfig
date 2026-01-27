@@ -9,7 +9,7 @@ kb_path: kb
 #   - memex
 
 # Optional: default write directory for new entries
-primary: projects/memex
+# primary: design
 
 # Optional: boost these paths in search (glob patterns)
 # boost_paths:

@@ -154,9 +154,9 @@ Configure project-specific KB settings in `.kbconfig`:
 # In your project directory
 cat <<'EOF' > .kbconfig
 kb_path: ./kb
-primary: projects/memex
+primary: design
 boost_paths:
-  - projects/memex/*
+  - design/*
 default_tags:
   - memex
 EOF

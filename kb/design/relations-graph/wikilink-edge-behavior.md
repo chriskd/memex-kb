@@ -12,7 +12,7 @@ source_project: memex
 git_branch: relations-field
 last_edited_by: chris
 relations:
-  - path: memex/relations-graph/relations-graph-overview.md
+  - path: design/relations-graph/relations-graph-overview.md
     type: related
 ---
 
@@ -20,4 +20,4 @@ relations:
 
 Wikilinks are untyped edges captured from content.
 
-Related: [[memex/relations-graph/relations-graph-overview]].
+Related: [[design/relations-graph/relations-graph-overview]].

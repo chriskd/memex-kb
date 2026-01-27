@@ -12,9 +12,9 @@ source_project: memex
 git_branch: relations-field
 last_edited_by: chris
 relations:
-  - path: memex/relations-graph/wikilink-edge-behavior.md
+  - path: design/relations-graph/wikilink-edge-behavior.md
     type: implements
-  - path: memex/relations-graph/frontmatter-edge-types.md
+  - path: design/relations-graph/frontmatter-edge-types.md
     type: depends_on
 ---
 
@@ -23,7 +23,7 @@ relations:
 
 This page connects wikilinks, typed relations, and semantic links into a single graph.
 
-See [[memex/relations-graph/wikilink-edge-behavior]] and [[memex/relations-graph/frontmatter-edge-types]] for details.
+See [[design/relations-graph/wikilink-edge-behavior]] and [[design/relations-graph/frontmatter-edge-types]] for details.
 
 ## Published UI
 

@@ -12,7 +12,7 @@ source_project: memex
 git_branch: relations-field
 last_edited_by: chris
 relations:
-  - path: memex/relations-graph/relations-graph-overview.md
+  - path: design/relations-graph/relations-graph-overview.md
     type: extends
 ---
 
@@ -21,4 +21,4 @@ relations:
 
 Frontmatter relations create typed edges with explicit types.
 
-Related: [[memex/relations-graph/relations-graph-overview]].
+Related: [[design/relations-graph/relations-graph-overview]].

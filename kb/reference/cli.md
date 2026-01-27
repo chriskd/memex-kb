@@ -592,4 +592,4 @@ Per-command (when available):
 - [[guides/installation|Installation Guide]]
 - [[guides/ai-integration|AI Agent Integration]]
 - [[reference/entry-format|Entry Format]]
-- [[memex/state-diagrams|State diagrams for MX flows]]
+- [[design/state-diagrams|State diagrams for MX flows]]
