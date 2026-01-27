@@ -26,3 +26,7 @@ Add an embedding cache keyed by chunk hash (embedding text) to avoid re-embeddin
 **2026-01-27T05:17:27Z**
 
 Implemented SQLite embedding cache + hash in Chroma metadata; Chroma indexing reuses cached embeddings; added tests for cache roundtrip + reuse; README index storage note. Ran: .venv/bin/python -m pytest tests/test_embedding_cache.py
+
+**2026-01-27T05:20:10Z**
+
+Adjusted test assertion types to satisfy ty; reran pytest and ty check.

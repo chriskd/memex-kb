@@ -70,4 +70,10 @@ def test_chroma_index_reuses_embedding_cache(tmp_path, monkeypatch) -> None:
     assert calls["count"] == 1
 
     assert dummy.upserts
-    assert "embedding_hash" in dummy.upserts[-1]["metadatas"][0]
+    last = dummy.upserts[-1]
+    metadatas = last.get("metadatas")
+    assert isinstance(metadatas, list)
+    assert metadatas
+    metadata0 = metadatas[0]
+    assert isinstance(metadata0, dict)
+    assert "embedding_hash" in metadata0
