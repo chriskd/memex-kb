@@ -1,0 +1,430 @@
+[
+  {
+    "query": "AI Agent Integration",
+    "expected": [
+      "guides/ai-integration.md"
+    ]
+  },
+  {
+    "query": "How to use memex with AI coding assistants",
+    "expected": [
+      "guides/ai-integration.md"
+    ]
+  },
+  {
+    "query": "Claude Code",
+    "expected": [
+      "guides/ai-integration.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Codex CLI",
+    "expected": [
+      "guides/ai-integration.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "ai AI",
+    "expected": [
+      "guides/ai-integration.md"
+    ]
+  },
+  {
+    "query": "Installation Guide",
+    "expected": [
+      "guides/installation.md"
+    ]
+  },
+  {
+    "query": "How to install memex and its semantic search dependencies",
+    "expected": [
+      "guides/installation.md"
+    ]
+  },
+  {
+    "query": "Install (Recommended)",
+    "expected": [
+      "guides/installation.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "From Source",
+    "expected": [
+      "guides/installation.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "installation Installation",
+    "expected": [
+      "guides/installation.md"
+    ]
+  },
+  {
+    "query": "MCP Server Setup (Deprecated)",
+    "expected": [
+      "guides/mcp-setup.md"
+    ]
+  },
+  {
+    "query": "Deprecated. Memex MCP server support has been removed; use the CLI.",
+    "expected": [
+      "guides/mcp-setup.md"
+    ]
+  },
+  {
+    "query": "Use the CLI Instead",
+    "expected": [
+      "guides/mcp-setup.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "mcp MCP",
+    "expected": [
+      "guides/mcp-setup.md"
+    ]
+  },
+  {
+    "query": "Quick Start Guide",
+    "expected": [
+      "guides/quick-start.md"
+    ]
+  },
+  {
+    "query": "Get productive with memex in 5 minutes",
+    "expected": [
+      "guides/quick-start.md"
+    ]
+  },
+  {
+    "query": "1. Set Up Your Knowledge Base",
+    "expected": [
+      "guides/quick-start.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "2. Create Your First Entry",
+    "expected": [
+      "guides/quick-start.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "getting-started Quick",
+    "expected": [
+      "guides/quick-start.md"
+    ]
+  },
+  {
+    "query": "Chunking System Design",
+    "expected": [
+      "memex/chunking-system-design.md"
+    ]
+  },
+  {
+    "query": "Goal",
+    "expected": [
+      "memex/chunking-system-design.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Key Design Decisions",
+    "expected": [
+      "memex/chunking-system-design.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "memex Chunking",
+    "expected": [
+      "memex/chunking-system-design.md"
+    ]
+  },
+  {
+    "query": "Frontmatter Edge Types",
+    "expected": [
+      "memex/relations-graph/frontmatter-edge-types.md"
+    ]
+  },
+  {
+    "query": "memex Frontmatter",
+    "expected": [
+      "memex/relations-graph/frontmatter-edge-types.md"
+    ]
+  },
+  {
+    "query": "Relations Graph Overview",
+    "expected": [
+      "memex/relations-graph/relations-graph-overview.md"
+    ]
+  },
+  {
+    "query": "Published UI",
+    "expected": [
+      "memex/relations-graph/relations-graph-overview.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Search neighbors",
+    "expected": [
+      "memex/relations-graph/relations-graph-overview.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "memex Relations",
+    "expected": [
+      "memex/relations-graph/relations-graph-overview.md"
+    ]
+  },
+  {
+    "query": "Wikilink Edge Behavior",
+    "expected": [
+      "memex/relations-graph/wikilink-edge-behavior.md"
+    ]
+  },
+  {
+    "query": "memex Wikilink",
+    "expected": [
+      "memex/relations-graph/wikilink-edge-behavior.md"
+    ]
+  },
+  {
+    "query": "MX State Diagrams",
+    "expected": [
+      "memex/state-diagrams.md"
+    ]
+  },
+  {
+    "query": "State diagrams for major memex CLI flows",
+    "expected": [
+      "memex/state-diagrams.md"
+    ]
+  },
+  {
+    "query": "Init and KB Discovery",
+    "expected": [
+      "memex/state-diagrams.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Add, Update, Patch",
+    "expected": [
+      "memex/state-diagrams.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "memex MX",
+    "expected": [
+      "memex/state-diagrams.md"
+    ]
+  },
+  {
+    "query": "LLM Query Processing Feature Plan",
+    "expected": [
+      "projects/memex/llm-query-processing-feature-plan.md"
+    ]
+  },
+  {
+    "query": "Summary",
+    "expected": [
+      "projects/memex/llm-query-processing-feature-plan.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "CLI Interface",
+    "expected": [
+      "projects/memex/llm-query-processing-feature-plan.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "memex LLM",
+    "expected": [
+      "projects/memex/llm-query-processing-feature-plan.md"
+    ]
+  },
+  {
+    "query": "ChatGPT 5.2 Pro Dense Memory Signals Reference",
+    "expected": [
+      "reference/chat-gpt-5.2-pro-dense-memory-signals-reference.md"
+    ]
+  },
+  {
+    "query": "Research prompt and notes on dense memory signals for agent context injection",
+    "expected": [
+      "reference/chat-gpt-5.2-pro-dense-memory-signals-reference.md"
+    ]
+  },
+  {
+    "query": "1) Prioritized \u201cmissing\u201d dense signals",
+    "expected": [
+      "reference/chat-gpt-5.2-pro-dense-memory-signals-reference.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "2) Critiques of your current signal list (overrated / underrated / nuance)",
+    "expected": [
+      "reference/chat-gpt-5.2-pro-dense-memory-signals-reference.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "reference ChatGPT",
+    "expected": [
+      "reference/chat-gpt-5.2-pro-dense-memory-signals-reference.md"
+    ]
+  },
+  {
+    "query": "CLI Reference",
+    "expected": [
+      "reference/cli.md"
+    ]
+  },
+  {
+    "query": "Complete reference for the mx command-line interface",
+    "expected": [
+      "reference/cli.md"
+    ]
+  },
+  {
+    "query": "Search Commands",
+    "expected": [
+      "reference/cli.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Read Commands",
+    "expected": [
+      "reference/cli.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "cli CLI",
+    "expected": [
+      "reference/cli.md"
+    ]
+  },
+  {
+    "query": "Dense Memory Signals Research",
+    "expected": [
+      "reference/dense-memory-signals-research.md"
+    ]
+  },
+  {
+    "query": "What Existing Tools Capture",
+    "expected": [
+      "reference/dense-memory-signals-research.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Signal Tiers",
+    "expected": [
+      "reference/dense-memory-signals-research.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "agent-memory Dense",
+    "expected": [
+      "reference/dense-memory-signals-research.md"
+    ]
+  },
+  {
+    "query": "Entry Format Reference",
+    "expected": [
+      "reference/entry-format.md"
+    ]
+  },
+  {
+    "query": "Markdown entry format with YAML frontmatter and bidirectional links",
+    "expected": [
+      "reference/entry-format.md"
+    ]
+  },
+  {
+    "query": "Basic Structure",
+    "expected": [
+      "reference/entry-format.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Frontmatter Fields",
+    "expected": [
+      "reference/entry-format.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "reference Entry",
+    "expected": [
+      "reference/entry-format.md"
+    ]
+  },
+  {
+    "query": "Focusgroup Agent UX Evaluation (2026-01)",
+    "expected": [
+      "reference/focusgroup-evaluation-2026-01.md"
+    ]
+  },
+  {
+    "query": "Comprehensive evaluation of mx CLI agent usability using focusgroup - 5 sessions with 12 total agents (8 Claude, 4 GPT).",
+    "expected": [
+      "reference/focusgroup-evaluation-2026-01.md"
+    ]
+  },
+  {
+    "query": "Overall Rating: 8-8.5/10",
+    "expected": [
+      "reference/focusgroup-evaluation-2026-01.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "Sessions",
+    "expected": [
+      "reference/focusgroup-evaluation-2026-01.md"
+    ],
+    "mode": "semantic"
+  },
+  {
+    "query": "focusgroup Focusgroup",
+    "expected": [
+      "reference/focusgroup-evaluation-2026-01.md"
+    ]
+  },
+  {
+    "query": "Focusgroup Evaluation: mx CLI Discoverability (2026-01)",
+    "expected": [
+      "reference/focusgroup-evaluation-mx-cli-discoverability-2026-01.md"
+    ]
+  },
+  {
+    "query": "Focusgroup Evaluation: mx CLI Discoverability Date: 2026-01-12 Agents: Opus 4.5 (Claude), Codex (OpenAI) Mode:...",
+    "expected": [
+      "reference/focusgroup-evaluation-mx-cli-discoverability-2026-01.md"
+    ]
+  },
+  {
+    "query": "Key Findings",
+    "expected": [
+      "reference/focusgroup-evaluation-mx-cli-discoverability-2026-01.md"
+    ],
+    "mode": "semantic"
+  }
+]
