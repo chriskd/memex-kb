@@ -1,11 +1,9 @@
 """Core business logic for memex.
 
-This module contains the pure business logic, separated from MCP protocol concerns.
-Both the MCP server (server.py) and CLI (cli.py) import from here.
+This module contains the pure business logic used by the CLI.
 
 Design principles:
-- All functions are async for consistency with MCP server
-- No MCP decorators or protocol-specific code
+- All functions are async for consistency
 - Lazy initialization of expensive resources (searcher, embeddings)
 """
 
@@ -1180,7 +1178,7 @@ async def expand_search_with_neighbors(
 
 
 async def quality(limit: int = 5, cutoff: int = 3) -> QualityReport:
-    """Evaluate MCP search accuracy."""
+    """Evaluate search accuracy."""
     from .evaluation import run_quality_checks
 
     searcher = get_searcher()

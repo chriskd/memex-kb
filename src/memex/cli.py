@@ -2,8 +2,6 @@
 """
 mx: CLI for memex knowledge base
 
-Token-efficient alternative to MCP tools. Wraps existing memex functionality.
-
 Usage:
     mx search "query"              # Search entries
     mx get path/to/entry.md        # Read an entry
@@ -603,9 +601,9 @@ def _output_status(
 )
 @click.pass_context
 def cli(ctx: click.Context, json_errors: bool, quiet: bool):
-    """mx: Token-efficient CLI for memex knowledge base.
+    """mx: CLI for memex knowledge base.
 
-    Search, browse, and manage KB entries without MCP context overhead.
+    Search, browse, and manage KB entries.
 
     \b
     Quick start:
@@ -655,8 +653,6 @@ def cli(ctx: click.Context, json_errors: bool, quiet: bool):
 PRIME_OUTPUT = """# Memex Knowledge Base
 
 > Search organizational knowledge before reinventing. Add discoveries for future agents.
-
-**⚡ Use `mx` CLI instead of MCP tools** - CLI uses ~0 tokens vs MCP schema overhead.
 
 ## CLI Quick Reference
 
@@ -719,58 +715,29 @@ Content with [[bidirectional links]] to other entries.
 Use `[[path/to/entry.md|Display Text]]` for links.
 """
 
-PRIME_MCP_OUTPUT = """# KB Quick Reference
-Search: `mx search "query"` | Read: `mx get path.md` | Add: `mx add --title="..." --tags="..."`
-"""
-
-
-def _detect_mcp_mode() -> bool:
-    """Detect if running in MCP context (minimal output preferred)."""
-    # If MCP server is active, we're likely in a context where minimal output is better
-    # Check for common MCP environment indicators
-    return os.environ.get("MCP_SERVER_ACTIVE") == "1"
-
 
 @cli.command()
-@click.option("--full", is_flag=True, help="Force full CLI output (ignore MCP detection)")
-@click.option("--mcp", is_flag=True, help="Force MCP mode (minimal output)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def prime(full: bool, mcp: bool, as_json: bool):
+def prime(as_json: bool):
     """Output agent workflow context for session start.
-
-    Automatically detects MCP vs CLI mode and adapts output:
-    - CLI mode: Full command reference (~1-2k tokens)
-    - MCP mode: Brief workflow reminders (~50 tokens)
 
     Designed for Claude Code hooks (SessionStart, PreCompact) to prevent
     agents from forgetting KB workflow after context compaction.
 
     \b
     Examples:
-      mx prime              # Auto-detect mode
-      mx prime --full       # Force full output
-      mx prime --mcp        # Force minimal output
+      mx prime              # Output context
+      mx prime --json       # Output as JSON
     """
-    # Determine output mode
-    if full:
-        use_full = True
-    elif mcp:
-        use_full = False
-    else:
-        use_full = not _detect_mcp_mode()
+    from .session_context import build_session_context
 
-    content = PRIME_OUTPUT if use_full else PRIME_MCP_OUTPUT
-    session_result = None
-
-    if use_full:
-        from .session_context import build_session_context
-
-        session_result = build_session_context()
-        if session_result:
-            content = session_result.content
+    content = PRIME_OUTPUT
+    session_result = build_session_context()
+    if session_result:
+        content = session_result.content
 
     if as_json:
-        payload: dict[str, Any] = {"mode": "full" if use_full else "mcp", "content": content}
+        payload: dict[str, Any] = {"content": content}
         if session_result:
             payload["project"] = session_result.project
             payload["entries"] = session_result.entries
@@ -4457,24 +4424,13 @@ def _build_schema() -> dict:
                 "aliases": [],
                 "arguments": [],
                 "options": [
-                    {
-                        "name": "--full",
-                        "type": "flag",
-                        "description": "Force full CLI output",
-                    },
-                    {
-                        "name": "--mcp",
-                        "type": "flag",
-                        "description": "Force MCP mode (minimal output)",
-                    },
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
                 "related": ["schema"],
                 "common_mistakes": {},
                 "examples": [
                     "mx prime",
-                    "mx prime --full",
-                    "mx prime --mcp",
+                    "mx prime --json",
                 ],
             },
             "init": {
