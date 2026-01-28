@@ -370,6 +370,10 @@ def _base_layout(
     """
     reader_active = " active" if current_view == "reader" else ""
     graph_active = " active" if current_view == "graph" else ""
+    
+    # Normalize base_url to avoid double slashes
+    # If base_url is "/" or empty, use "" for asset paths
+    asset_base = base_url.rstrip("/") if base_url else ""
 
     return f'''<!DOCTYPE html>
 <html lang="en">
@@ -382,7 +386,7 @@ def _base_layout(
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap"
           rel="stylesheet">
-    <link rel="stylesheet" href="{base_url}/assets/style.css">
+    <link rel="stylesheet" href="{asset_base}/assets/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -510,8 +514,8 @@ def _base_layout(
         </div>
     </nav>
 
-    <script src="{base_url}/assets/search.js"></script>
-    <script src="{base_url}/assets/sidebar.js"></script>
+    <script src="{asset_base}/assets/search.js"></script>
+    <script src="{asset_base}/assets/sidebar.js"></script>
     <script>hljs.highlightAll(); mermaid.initialize({{startOnLoad: true, theme: 'dark'}});</script>
 </body>
 </html>
