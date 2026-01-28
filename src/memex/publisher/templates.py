@@ -376,7 +376,7 @@ def _base_layout(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#2e3440">
+    <meta name="theme-color" content="#fafaf9">
     <title>{_escape_html(title)} - {_escape_html(site_title)}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -401,8 +401,7 @@ def _base_layout(
             </button>
 
             <a href="{base_url}/" class="logo">
-                <div class="logo-mark"></div>
-                <div class="logo-text">{_escape_html(site_title)}<span> / knowledge</span></div>
+                <div class="logo-text">meme<span style="color: var(--accent);">x</span></div>
             </a>
 
             <div class="search-container">
