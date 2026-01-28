@@ -23,6 +23,26 @@ def _escape_html(text: str) -> str:
     )
 
 
+def _url(base_url: str, path: str) -> str:
+    """Join base URL and path without double slashes.
+
+    Handles edge cases:
+    - base_url="" + path="foo.html" -> "/foo.html"
+    - base_url="/" + path="foo.html" -> "/foo.html"
+    - base_url="/kb" + path="foo.html" -> "/kb/foo.html"
+
+    Args:
+        base_url: Base URL prefix (may be "", "/", or "/subdir")
+        path: Path to append (without leading slash)
+
+    Returns:
+        Properly joined URL path
+    """
+    # Normalize: strip trailing slash from base, ensure we have a leading slash
+    base = base_url.rstrip("/") if base_url else ""
+    return f"{base}/{path}"
+
+
 def _format_date(value) -> str:
     """Format a datetime for display in templates.
 
@@ -118,7 +138,7 @@ def _build_file_tree(entries: list[EntryData], current_path: str = "", base_url:
         for entry in folders[folder]:
             active_class = " active" if entry.path == current_path else ""
             html_parts.append(f'''
-                    <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
+                    <a href="{_url(base_url, entry.path + '.html')}" class="tree-item{active_class}">
                         <span class="tree-icon file">◇</span>
                         <span class="tree-label">{_escape_html(entry.title)}</span>
                     </a>''')
@@ -131,7 +151,7 @@ def _build_file_tree(entries: list[EntryData], current_path: str = "", base_url:
     for entry in root_entries:
         active_class = " active" if entry.path == current_path else ""
         html_parts.append(f'''
-            <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
+            <a href="{_url(base_url, entry.path + '.html')}" class="tree-item{active_class}">
                 <span class="tree-icon file">◇</span>
                 <span class="tree-label">{_escape_html(entry.title)}</span>
             </a>''')
@@ -165,7 +185,7 @@ def _build_recent_list(
     for entry in sorted_entries:
         active_class = " active" if entry.path == current_path else ""
         html_parts.append(f'''
-            <a href="{base_url}/{entry.path}.html" class="tree-item{active_class}">
+            <a href="{_url(base_url, entry.path + '.html')}" class="tree-item{active_class}">
                 <span class="tree-icon file">◇</span>
                 <span class="tree-label">{_escape_html(entry.title)}</span>
             </a>''')
@@ -248,7 +268,7 @@ def _build_link_panel(
             title_text = title.title if title else path.split("/")[-1]
             html_parts.append(f'''
                 <li class="link-item">
-                    <a href="{base_url}/{path}.html">
+                    <a href="{_url(base_url, path + '.html')}">
                         <div class="link-title">{_escape_html(title_text)}</div>
                         <div class="link-path">{_escape_html(path)}</div>
                     </a>
@@ -272,7 +292,7 @@ def _build_link_panel(
             title_text = title.title if title else path.split("/")[-1]
             html_parts.append(f'''
                 <li class="link-item">
-                    <a href="{base_url}/{path}.html">
+                    <a href="{_url(base_url, path + '.html')}">
                         <div class="link-title">{_escape_html(title_text)}</div>
                         <div class="link-path">{_escape_html(path)}</div>
                     </a>
@@ -301,7 +321,7 @@ def _build_link_panel(
                 title_text = title.title if title else relation.path.split("/")[-1]
                 html_parts.append(f'''
                     <li class="link-item relation-item">
-                        <a href="{base_url}/{relation.path}.html">
+                        <a href="{_url(base_url, relation.path + '.html')}">
                             <div class="link-title">{_escape_html(title_text)}</div>
                             <div class="link-path">{_escape_html(relation.path)}</div>
                             <div class="relation-meta">
@@ -326,7 +346,7 @@ def _build_link_panel(
                 title_text = title.title if title else relation.path.split("/")[-1]
                 html_parts.append(f'''
                     <li class="link-item relation-item">
-                        <a href="{base_url}/{relation.path}.html">
+                        <a href="{_url(base_url, relation.path + '.html')}">
                             <div class="link-title">{_escape_html(title_text)}</div>
                             <div class="link-path">{_escape_html(relation.path)}</div>
                             <div class="relation-meta">
@@ -370,10 +390,14 @@ def _base_layout(
     """
     reader_active = " active" if current_view == "reader" else ""
     graph_active = " active" if current_view == "graph" else ""
-    
+
     # Normalize base_url to avoid double slashes
     # If base_url is "/" or empty, use "" for asset paths
     asset_base = base_url.rstrip("/") if base_url else ""
+
+    # Pre-compute navigation URLs using _url helper
+    home_url = _url(base_url, "")
+    graph_url = _url(base_url, "graph.html")
 
     return f'''<!DOCTYPE html>
 <html lang="en">
@@ -404,7 +428,7 @@ def _base_layout(
                 <span></span>
             </button>
 
-            <a href="{base_url}/" class="logo">
+            <a href="{home_url}" class="logo">
                 <div class="logo-text">meme<span style="color: var(--accent);">x</span></div>
             </a>
 
@@ -424,8 +448,8 @@ def _base_layout(
             </div>
 
             <div class="header-nav">
-                <a href="{base_url}/" class="nav-link{reader_active}">Reader</a>
-                <a href="{base_url}/graph.html" class="nav-link{graph_active}">Graph</a>
+                <a href="{home_url}" class="nav-link{reader_active}">Reader</a>
+                <a href="{graph_url}" class="nav-link{graph_active}">Graph</a>
             </div>
 
             <!-- Mobile search button -->
@@ -485,7 +509,7 @@ def _base_layout(
     <!-- Bottom navigation (mobile) -->
     <nav class="bottom-nav">
         <div class="bottom-nav-inner">
-            <a href="{base_url}/" class="bottom-nav-link{reader_active}">
+            <a href="{home_url}" class="bottom-nav-link{reader_active}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
@@ -499,7 +523,7 @@ def _base_layout(
                 </svg>
                 <span>Search</span>
             </button>
-            <a href="{base_url}/graph.html" class="bottom-nav-link{graph_active}">
+            <a href="{graph_url}" class="bottom-nav-link{graph_active}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="2"></circle>
                     <circle cx="6" cy="6" r="2"></circle>
@@ -526,7 +550,7 @@ ENTRY_TEMPLATE = """
 <div class="reader-container">
     <article class="entry">
         <header class="entry-header">
-            <a href="{{ base_url }}/{{ entry.path }}.html" class="entry-path">{{ entry.path }}</a>
+            <a href="{{ (entry.path ~ '.html')|url }}" class="entry-path">{{ entry.path }}</a>
             <div class="entry-meta">
                 {% if entry.metadata.created %}
                 <div class="entry-meta-item">
@@ -542,7 +566,7 @@ ENTRY_TEMPLATE = """
             {% if entry.tags %}
             <div class="entry-tags">
                 {% for tag in entry.tags %}
-                <a href="{{ base_url }}/tags/{{ tag }}.html" class="tag">{{ tag }}</a>
+                <a href="{{ ('tags/' ~ tag ~ '.html')|url }}" class="tag">{{ tag }}</a>
                 {% endfor %}
             </div>
             {% endif %}
@@ -563,7 +587,7 @@ INDEX_TEMPLATE = """
         <ul class="entry-list">
             {% for entry in recent_entries %}
             <li>
-                <a href="{{ base_url }}/{{ entry.path }}.html">{{ entry.title }}</a>
+                <a href="{{ (entry.path ~ '.html')|url }}">{{ entry.title }}</a>
                 {% if entry.metadata.created %}
                 <span class="entry-date">{{ entry.metadata.created|datefmt }}</span>
                 {% endif %}
@@ -575,7 +599,7 @@ INDEX_TEMPLATE = """
         <h2>Tags</h2>
         <div class="tags-cloud">
             {% for tag, count in tags_with_counts %}
-            <a href="{{ base_url }}/tags/{{ tag }}.html" class="tag">
+            <a href="{{ ('tags/' ~ tag ~ '.html')|url }}" class="tag">
                 {{ tag }} ({{ count }})
             </a>
             {% endfor %}
@@ -592,25 +616,35 @@ TAG_TEMPLATE = """
     <ul class="entry-list">
         {% for entry in entries %}
         <li>
-            <a href="{{ base_url }}/{{ entry.path }}.html">{{ entry.title }}</a>
+            <a href="{{ (entry.path ~ '.html')|url }}">{{ entry.title }}</a>
             {% if entry.metadata.created %}
             <span class="entry-date">{{ entry.metadata.created|datefmt }}</span>
             {% endif %}
         </li>
         {% endfor %}
     </ul>
-    <p class="back-link"><a href="{{ base_url }}/">← Back to index</a></p>
+    <p class="back-link"><a href="{{ ''|url }}">← Back to index</a></p>
 </div>
 """
 
 
-def _get_env() -> Environment:
-    """Create Jinja2 environment with autoescape enabled and custom filters."""
+def _get_env(base_url: str = "") -> Environment:
+    """Create Jinja2 environment with autoescape enabled and custom filters.
+
+    Args:
+        base_url: Base URL for the url filter (normalized internally)
+    """
     env = Environment(
         loader=BaseLoader(),
         autoescape=select_autoescape(default=True, default_for_string=True),
     )
     env.filters["datefmt"] = _format_date
+
+    # URL filter that properly joins base_url with paths
+    def url_filter(path: str) -> str:
+        return _url(base_url, path)
+
+    env.filters["url"] = url_filter
     return env
 
 
@@ -633,7 +667,7 @@ def render_entry_page(
     Returns:
         Complete HTML page string
     """
-    env = _get_env()
+    env = _get_env(base_url)
     all_entries = all_entries or []
     entries_dict = entries_dict or {}
 
@@ -644,7 +678,6 @@ def render_entry_page(
     tmpl = env.from_string(ENTRY_TEMPLATE)
     main_html = tmpl.render(
         entry=entry,
-        base_url=base_url,
         html_content=_safe(entry.html_content),
     )
 
@@ -686,7 +719,7 @@ def render_index_page(
     Returns:
         Complete HTML page string
     """
-    env = _get_env()
+    env = _get_env(base_url)
 
     # Build tabbed sidebar
     sidebar_html = _build_tabbed_sidebar(entries, base_url=base_url)
@@ -701,7 +734,6 @@ def render_index_page(
 
     tmpl = env.from_string(INDEX_TEMPLATE)
     main_html = tmpl.render(
-        base_url=base_url,
         recent_entries=recent_entries,
         tags_with_counts=tags_with_counts,
     )
@@ -744,7 +776,7 @@ def render_tag_page(
     Returns:
         Complete HTML page string
     """
-    env = _get_env()
+    env = _get_env(base_url)
     all_entries = all_entries or entries
 
     # Build tabbed sidebar
@@ -756,7 +788,6 @@ def render_tag_page(
     tmpl = env.from_string(TAG_TEMPLATE)
     main_html = tmpl.render(
         tag=tag,
-        base_url=base_url,
         entries=sorted_entries,
     )
 

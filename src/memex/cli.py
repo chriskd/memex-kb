@@ -4896,6 +4896,11 @@ def publish(
       1. --base-url flag (explicit)
       2. publish_base_url in .kbconfig (auto-applied)
 
+    \b
+    Landing page resolution:
+      1. --index flag (explicit)
+      2. publish_index_entry in .kbconfig (auto-applied)
+
     Use --base-url when hosting at a subdirectory (e.g., user.github.io/repo).
     Without it, links will 404. Configure in .kbconfig to avoid repeating:
 
@@ -4903,6 +4908,7 @@ def publish(
       # .kbconfig
       project_kb: ./kb
       publish_base_url: /repo-name
+      publish_index_entry: guides/welcome  # Landing page
 
     \b
     Examples:
@@ -4976,6 +4982,11 @@ def publish(
     if not resolved_base_url and context and context.publish_base_url:
         resolved_base_url = context.publish_base_url
 
+    # Resolve index_entry from context if not specified via CLI
+    resolved_index_entry = index_entry
+    if not resolved_index_entry and context and context.publish_index_entry:
+        resolved_index_entry = context.publish_index_entry
+
     # Handle --setup-github-actions
     if setup_github_actions:
         assert resolved_kb is not None  # Checked above (exits if None)
@@ -4998,7 +5009,7 @@ def publish(
                 output_dir=output_dir,
                 base_url=resolved_base_url,
                 site_title=title,
-                index_entry=index_entry,
+                index_entry=resolved_index_entry,
                 include_drafts=include_drafts,
                 include_archived=include_archived,
                 clean=not no_clean,
