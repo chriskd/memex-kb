@@ -150,10 +150,10 @@ llm_query:
 echo 'llm_query:\n  enabled: true' >> .kbconfig
 
 # Test summarize
-mx get kb/tooling/beads.md --llm
+mx get kb/guides/quick-start.md --llm
 
 # Test cached response
-mx get kb/tooling/beads.md --llm  # Should say "(cached)"
+mx get kb/guides/quick-start.md --llm  # Should say "(cached)"
 
 # Test answer query
 mx ask "How do I track issues?"

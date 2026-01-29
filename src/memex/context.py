@@ -7,7 +7,7 @@ Example .kbconfig file:
     primary: projects/memex    # Default write directory
     paths:                           # Boost these in search (supports globs)
       - projects/memex
-      - tooling/beads
+      - guides/*
       - infrastructure/*
     default_tags:                    # Suggested for new entries
       - memex

@@ -126,8 +126,6 @@ class TestBuildFrontmatter:
             model="claude-opus-4",
             git_branch="main",
             last_edited_by="ci-agent",
-            beads_issues=["beads-001"],
-            beads_project="tracker",
         )
 
         result = build_frontmatter(metadata)
@@ -143,8 +141,6 @@ class TestBuildFrontmatter:
         assert "model: claude-opus-4" in result
         assert "git_branch: main" in result
         assert "last_edited_by: ci-agent" in result
-        assert "beads_issues:" in result
-        assert "beads_project: tracker" in result
 
     def test_roundtrip_preserves_data(self):
         """Frontmatter can be parsed back to equivalent data."""

@@ -131,7 +131,7 @@ When `amem.enabled` + `chunking.enabled`:
 
 ## Phase 2: Evaluation Suite (Specification)
 
-> Implementation deferred to Phase 2. This spec enables KB entry and beads creation now.
+> Implementation deferred to Phase 2.
 
 ### Goal
 Test A-Mem evolution efficacy using LoCoMo-style methodology, adapted for document-centric KB.
@@ -205,18 +205,3 @@ mx eval --with-evolution --without-evolution  # A/B test
 }
 ```
 
-## Beads Tracking
-
-### Phase 1 (This Work)
-- `voidlabs-kb-jrzy` - **EPIC**: Configurable chunking system for ChromaDB
-- `voidlabs-kb-mhoy` - Add ChunkingConfig to config.py
-- `voidlabs-kb-k36r` - Implement chunking strategies module
-- `voidlabs-kb-xnxc` - Update ChromaDB/Whoosh schema for chunks
-- `voidlabs-kb-b24w` - Add --show-chunks to mx search
-- `voidlabs-kb-g9ic` - Add mx reindex --force-rechunk
-
-### Phase 2 (Deferred)
-- `voidlabs-kb-p74h` - Implement evaluation metrics module
-- `voidlabs-kb-pio2` - Create adapted LoCoMo test dataset
-- `voidlabs-kb-gvpe` - Build mx eval command
-- `voidlabs-kb-lvg6` - A/B comparison: with/without evolution

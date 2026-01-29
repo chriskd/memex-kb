@@ -607,10 +607,10 @@ def cli(ctx: click.Context, json_errors: bool, quiet: bool):
 
     \b
     Quick start:
-      mx search "deployment"     # Find entries
-      mx get tooling/beads.md    # Read an entry
-      mx tree                    # Browse structure
-      mx health                  # Check KB health
+      mx search "deployment"         # Find entries
+      mx get guides/quick-start.md   # Read an entry
+      mx tree                        # Browse structure
+      mx health                      # Check KB health
 
     \b
     Create content:
@@ -663,8 +663,8 @@ mx search "docker" --tags=infra     # Filter by tag
 mx search "api" --mode=semantic     # Semantic only
 
 # Read entries
-mx get tooling/beads.md             # Full entry
-mx get tooling/beads.md --metadata  # Just metadata
+mx get guides/quick-start.md             # Full entry
+mx get guides/quick-start.md --metadata  # Just metadata
 
 # Browse
 mx tree                             # Directory structure
@@ -1360,9 +1360,9 @@ def get(path: str | None, by_title: str | None, as_json: bool, metadata: bool):
 
     \b
     Examples:
-      mx get tooling/beads-issue-tracker.md
-      mx get tooling/beads-issue-tracker.md --json
-      mx get tooling/beads-issue-tracker.md --metadata
+      mx get guides/quick-start.md
+      mx get guides/quick-start.md --json
+      mx get guides/quick-start.md --metadata
       mx get --title="Docker Guide"
       mx get --title "Python Tooling"
 
@@ -3973,8 +3973,8 @@ def _build_schema() -> dict:
                     ),
                 },
                 "examples": [
-                    "mx get tooling/beads-issue-tracker.md",
-                    "mx get tooling/beads-issue-tracker.md --metadata",
+                    "mx get guides/quick-start.md",
+                    "mx get guides/quick-start.md --metadata",
                 ],
             },
             "add": {

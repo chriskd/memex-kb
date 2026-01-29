@@ -99,13 +99,6 @@ def build_frontmatter(metadata: EntryMetadata) -> str:
     if metadata.last_edited_by:
         parts.append(f"last_edited_by: {_yaml_quote_if_needed(metadata.last_edited_by)}")
 
-    # Beads integration fields (preserved for backwards compatibility)
-    if metadata.beads_issues:
-        parts.append("beads_issues:")
-        parts.append(_format_yaml_list(metadata.beads_issues))
-    if metadata.beads_project:
-        parts.append(f"beads_project: {_yaml_quote_if_needed(metadata.beads_project)}")
-
     # A-Mem semantic linking fields
     if metadata.keywords:
         parts.append("keywords:")
@@ -270,9 +263,6 @@ def update_metadata_for_edit(
         model=model,
         git_branch=git_branch,
         last_edited_by=actor,
-        # Preserve beads fields for backwards compatibility
-        beads_issues=list(metadata.beads_issues),
-        beads_project=metadata.beads_project,
         # A-Mem semantic linking fields
         keywords=keywords if keywords is not None else list(metadata.keywords),
         semantic_links=(
