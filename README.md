@@ -1,3 +1,5 @@
+![Memex](https://raw.githubusercontent.com/chriskd/memex-kb/main/social-banner.png)
+
 # Memex
 
 CLI-first knowledge base with hybrid search, typed relations, and static site publishing. Stores Markdown with YAML frontmatter across project and user scopes. Built for humans and AI coding agents.
@@ -37,7 +39,7 @@ mx search "setup"                          # Search
 mx get guides/setup.md                     # Read an entry
 ```
 
-Note: `mx add` requires `--category` unless `primary` is set in `.kbconfig`.
+Note: If `--category` is omitted and no `.kbconfig` `primary` exists, `mx add` defaults to the KB root (`.`) and prints a warning.
 
 ## Entries
 
