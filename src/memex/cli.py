@@ -478,7 +478,7 @@ def _show_status() -> None:
         entries = _get_recent_entries_for_status(kb_root, project_name, limit=5)
 
     # Build output
-    _output_status(kb_root, context, entries, project_name)
+    _output_status(kb_root, context, entries, project_name, has_keyword_search)
 
 
 def _get_recent_entries_for_status(
@@ -517,6 +517,7 @@ def _output_status(
     context,  # KBContext | None
     entries: list[dict],
     project_name: str | None,
+    has_keyword_search: bool = False,
 ) -> None:
     """Output the status display.
 
