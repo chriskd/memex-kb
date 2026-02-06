@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NoReturn, cast
@@ -67,6 +68,122 @@ def _has_yaml_frontmatter(content: str) -> bool:
         if line.strip() in ("---", "..."):
             return True
     return False
+
+
+def _try_parse_iso_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _strip_yaml_frontmatter(raw_content: str) -> tuple[bool, str]:
+    """Best-effort strip a leading YAML frontmatter block from content.
+
+    Returns (had_frontmatter, body). If no leading frontmatter is detected,
+    returns (False, raw_content).
+    """
+    if not _has_yaml_frontmatter(raw_content):
+        return False, raw_content
+
+    lines = raw_content.splitlines(keepends=True)
+
+    # Find the first non-empty line and ensure it is a frontmatter start marker.
+    i = 0
+    while i < len(lines) and lines[i].strip() == "":
+        i += 1
+    if i >= len(lines) or lines[i].strip() != "---":
+        return False, raw_content
+
+    # Find the closing marker within a reasonable bound.
+    j = i + 1
+    end = min(len(lines), i + 1 + 400)
+    while j < end:
+        if lines[j].strip() in ("---", "..."):
+            body = "".join(lines[j + 1 :])
+            return True, body
+        j += 1
+
+    # If we couldn't find the end marker, don't strip anything.
+    return True, raw_content
+
+
+def _extract_input_frontmatter_overrides(
+    raw_content: str,
+) -> tuple[bool, dict[str, Any] | None, str]:
+    """If raw_content starts with YAML frontmatter, strip it and return safe overrides.
+
+    We preserve only optional fields to avoid surprising behavior (title/tags remain CLI-owned).
+    """
+    had_frontmatter, body = _strip_yaml_frontmatter(raw_content)
+    if not had_frontmatter:
+        return False, None, raw_content
+
+    try:
+        import frontmatter as fm
+
+        post = fm.loads(raw_content)
+    except Exception:
+        # If parsing fails, keep stripping behavior but don't try to merge overrides.
+        return True, None, body
+
+    meta = post.metadata if isinstance(post.metadata, dict) else {}
+    body = post.content
+
+    overrides: dict[str, Any] = {}
+
+    # Optional fields we can safely carry forward.
+    if isinstance(meta.get("description"), str) and meta["description"].strip():
+        overrides["description"] = meta["description"].strip()
+
+    aliases = meta.get("aliases")
+    if isinstance(aliases, list) and all(isinstance(a, str) for a in aliases):
+        overrides["aliases"] = [a.strip() for a in aliases if a.strip()]
+
+    status = meta.get("status")
+    if isinstance(status, str) and status.strip():
+        overrides["status"] = status.strip()
+
+    created = _try_parse_iso_datetime(meta.get("created"))
+    if created is not None:
+        overrides["created"] = created
+
+    updated = _try_parse_iso_datetime(meta.get("updated"))
+    if updated is not None:
+        overrides["updated"] = updated
+
+    contributors = meta.get("contributors")
+    if isinstance(contributors, list) and all(isinstance(c, str) for c in contributors):
+        overrides["contributors"] = [c.strip() for c in contributors if c.strip()]
+
+    # Preserve typed relations / semantic links if present and well-formed.
+    # If invalid, ignore; add_entry will still write valid frontmatter.
+    try:
+        from .models import RelationLink, SemanticLink
+
+        rels = meta.get("relations")
+        if isinstance(rels, list):
+            parsed: list[RelationLink] = []
+            for item in rels:
+                if isinstance(item, dict):
+                    parsed.append(RelationLink.model_validate(item))
+            if parsed:
+                overrides["relations"] = parsed
+
+        sem = meta.get("semantic_links")
+        if isinstance(sem, list):
+            parsed_sem: list[SemanticLink] = []
+            for item in sem:
+                if isinstance(item, dict):
+                    parsed_sem.append(SemanticLink.model_validate(item))
+            if parsed_sem:
+                overrides["semantic_links"] = parsed_sem
+    except Exception:
+        pass
+
+    return True, (overrides or None), body
 
 
 if TYPE_CHECKING:
@@ -394,7 +511,7 @@ class JsonErrorGroup(click.Group):
             if ctx.params.get("json_errors"):
                 code = get_error_code_for_exception(e)
                 click.echo(format_json_error(code, e.format_message()), err=True)
-                ctx.exit(1)
+                raise SystemExit(1)
             raise
 
     def main(
@@ -410,28 +527,42 @@ class JsonErrorGroup(click.Group):
         This catches errors that happen before invoke() is called,
         such as invalid option types or missing required arguments.
         """
-        # We need to check if --json-errors was passed before Click parses it
-        # because validation errors can occur during parsing itself.
-        # Check sys.argv directly for the flag.
-        json_errors_requested = "--json-errors" in sys.argv
+        # Click's global options generally must come before subcommands, but focusgroup
+        # users frequently wrote: `mx search "q" --json-errors`.
+        #
+        # When --json-errors is present anywhere, we:
+        # - normalize args to move it to the front (so Click parses it as a global flag)
+        # - run with standalone_mode=False so Click raises exceptions instead of printing
+        #   plain text and calling sys.exit().
+        argv = list(args) if args is not None else list(sys.argv[1:])
+        json_errors_requested = "--json-errors" in argv
 
         if not json_errors_requested:
             return super().main(args, prog_name, complete_var, standalone_mode, **extra)
 
+        # Normalize misplaced --json-errors to be a true global flag.
+        if "--json-errors" in argv:
+            argv = [a for a in argv if a != "--json-errors"]
+            argv.insert(0, "--json-errors")
+
         try:
-            return super().main(args, prog_name, complete_var, standalone_mode, **extra)
-        except SystemExit:
-            # Click calls sys.exit() on errors; re-raise to preserve exit code
-            raise
+            return super().main(
+                argv,
+                prog_name,
+                complete_var,
+                standalone_mode=False,
+                **extra,
+            )
         except ClickException as e:
-            # Format as JSON and exit
             code = get_error_code_for_exception(e)
             click.echo(format_json_error(code, e.format_message()), err=True)
-            sys.exit(1)
+            raise SystemExit(1)
+        except SystemExit:
+            # In case a subcommand calls sys.exit explicitly, preserve it.
+            raise
         except Exception as e:
-            # Unexpected errors
             click.echo(format_json_error("INTERNAL_ERROR", str(e)), err=True)
-            sys.exit(1)
+            raise SystemExit(1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -892,9 +1023,20 @@ If no KB is configured:
 
 - `title`
 - `tags`
+- `created` (ISO timestamp or YYYY-MM-DD)
 
 README.md inside the KB should include frontmatter or be excluded (prefix "_" or move it).
 Quick fix: add frontmatter or rename it to _README.md.
+
+Example frontmatter:
+
+```yaml
+---
+title: My Entry
+tags: [tag1, tag2]
+created: 2026-02-06T00:00:00Z
+---
+```
 
 ## CLI Quick Reference
 
@@ -977,6 +1119,44 @@ def prime(as_json: bool):
     if session_result:
         content = session_result.content
 
+    # Always compute a small context snapshot for JSON output (and as a fallback for
+    # PRIME_OUTPUT when KB discovery works but session-context could not render).
+    kb_root_value: str | None = None
+    kb_scope_value: str | None = None
+    primary_category_value: str | None = None
+    context_file_value: str | None = None
+    try:
+        from .config import get_kb_root, get_project_kb_root, get_user_kb_root
+        from .context import get_kb_context
+
+        kb_root = get_kb_root()
+        kb_root_value = str(kb_root)
+
+        project_kb = get_project_kb_root()
+        user_kb = get_user_kb_root()
+        if project_kb and kb_root == project_kb:
+            kb_scope_value = "project"
+        elif user_kb and kb_root == user_kb:
+            kb_scope_value = "user"
+
+        kb_ctx = get_kb_context()
+        if kb_ctx:
+            primary_category_value = kb_ctx.primary or None
+            context_file_value = str(kb_ctx.source_file) if kb_ctx.source_file else None
+    except Exception:
+        pass
+
+    if session_result is None and kb_root_value:
+        content = (
+            content
+            + "\n\n## Context snapshot\n\n"
+            + f"write_kb={kb_root_value}"
+            + (f" | scope={kb_scope_value}" if kb_scope_value else "")
+            + (f" | primary={primary_category_value}" if primary_category_value else " | primary=(not set)")
+            + (f" | context={context_file_value}" if context_file_value else "")
+            + "\n"
+        )
+
     # Help agents understand limitations when optional search deps aren't installed.
     import importlib.util
 
@@ -996,7 +1176,13 @@ def prime(as_json: bool):
         )
 
     if as_json:
-        payload: dict[str, Any] = {"content": content}
+        payload: dict[str, Any] = {
+            "content": content,
+            "kb_root": kb_root_value,
+            "kb_scope": kb_scope_value,
+            "primary_category": primary_category_value,
+            "context_file": context_file_value,
+        }
         if session_result:
             payload["project"] = session_result.project
             payload["entries"] = session_result.entries
@@ -2101,11 +2287,16 @@ def add(
 
     \b
     Examples:
-      mx add --title="My Entry" --tags="foo,bar" --content="# Content here"
-      mx add --title="My Entry" --tags="foo,bar" --file=content.md
-      cat content.md | mx add --title="My Entry" --tags="foo,bar" --stdin
-      mx add --title="My Entry" --tags="foo" --content="..." \\
+      mx add --title="My Entry" --tags="foo,bar" --category=guides --content="# Content here"
+      mx add --title="My Entry" --tags="foo,bar" --category=guides --file=content.md
+      cat content.md | mx add --title="My Entry" --tags="foo,bar" --category=guides --stdin
+      mx add --title="My Entry" --tags="foo" --category=guides --content="..." \\
         --semantic-links='[{"path": "ref/other.md", "score": 0.8, "reason": "related"}]'
+
+    \b
+    Category behavior:
+      - If --category is omitted and .kbconfig sets primary, primary is used.
+      - If --category is omitted and no primary is set, mx writes to KB root (.) and warns.
 
     \b
     Scope Selection:
@@ -2142,6 +2333,7 @@ def add(
     from .models import SemanticLink
 
     local_warnings: list[str] = []
+    metadata_overrides: dict[str, Any] | None = None
 
     # Validate mutual exclusivity of content sources
     sources = sum([bool(content), bool(file_path), stdin])
@@ -2155,19 +2347,27 @@ def add(
 
     # Resolve content source
     if stdin:
-        content = sys.stdin.read()
-    elif file_path:
-        content = Path(file_path).read_text()
-        if _has_yaml_frontmatter(content):
+        raw = sys.stdin.read()
+        had_frontmatter, metadata_overrides, content = _extract_input_frontmatter_overrides(raw)
+        if had_frontmatter:
             click.echo(
-                "Warning: input file already has YAML frontmatter. "
-                "mx add will add another. "
-                "Use mx ingest or remove the frontmatter first.",
+                "Warning: input already has YAML frontmatter; mx add will merge optional fields "
+                "(e.g., description/status/aliases) and avoid duplicating frontmatter.",
+                err=True,
+            )
+    elif file_path:
+        raw = Path(file_path).read_text()
+        had_frontmatter, metadata_overrides, content = _extract_input_frontmatter_overrides(raw)
+        if had_frontmatter:
+            click.echo(
+                "Warning: input file already has YAML frontmatter; mx add will merge optional fields "
+                "(e.g., description/status/aliases) and avoid duplicating frontmatter.",
                 err=True,
             )
     elif content:
         # Decode escape sequences in --content (e.g., \n -> newline)
-        content = decode_escape_sequences(content)
+        raw = decode_escape_sequences(content)
+        _, metadata_overrides, content = _extract_input_frontmatter_overrides(raw)
 
     # Content is guaranteed to be set by one of the branches above (validated earlier)
     assert content is not None, "content must be set by this point"
@@ -2237,6 +2437,7 @@ def add(
                 scope=scope,
                 semantic_links=semantic_links,
                 relations=relations,
+                metadata_overrides=metadata_overrides,
             )
         )
     except Exception as e:
@@ -3742,6 +3943,7 @@ def info(ctx: click.Context, as_json: bool):
     )
     from .context import get_kb_context
     from .core import get_valid_categories
+    from .parser import ParseError, parse_entry
 
     try:
         primary_kb = get_kb_root()
@@ -3753,15 +3955,35 @@ def info(ctx: click.Context, as_json: bool):
     project_kb = get_project_kb_root()
     user_kb = get_user_kb_root()
 
-    # Count entries per KB
-    def count_entries(kb_path):
+    def scan_counts(kb_path: Path | None) -> tuple[int, int]:
+        """Return (parsed_entries, parse_errors) using the same parsing rules as mx health."""
         if not kb_path or not kb_path.exists():
-            return 0
-        return sum(1 for p in kb_path.rglob("*.md") if not p.name.startswith((".", "_")))
+            return (0, 0)
+        parsed = 0
+        errors = 0
+        for md_file in kb_path.rglob("*.md"):
+            if md_file.name.startswith("_"):
+                continue
+            try:
+                parse_entry(md_file)
+            except ParseError:
+                errors += 1
+            else:
+                parsed += 1
+        return (parsed, errors)
 
-    project_count = count_entries(project_kb)
-    user_count = count_entries(user_kb)
+    project_count, project_parse_errors = scan_counts(project_kb)
+    user_count, user_parse_errors = scan_counts(user_kb)
     total_count = project_count + user_count
+
+    primary_scope: str | None = None
+    try:
+        if project_kb and primary_kb == project_kb:
+            primary_scope = "project"
+        elif user_kb and primary_kb == user_kb:
+            primary_scope = "user"
+    except Exception:
+        primary_scope = None
 
     categories = get_valid_categories()
     context = get_kb_context()
@@ -3771,12 +3993,27 @@ def info(ctx: click.Context, as_json: bool):
     # Build payload
     kbs_info = []
     if project_kb:
-        kbs_info.append({"scope": "project", "path": str(project_kb), "entries": project_count})
+        kbs_info.append(
+            {
+                "scope": "project",
+                "path": str(project_kb),
+                "entries": project_count,
+                "parse_errors": project_parse_errors,
+            }
+        )
     if user_kb:
-        kbs_info.append({"scope": "user", "path": str(user_kb), "entries": user_count})
+        kbs_info.append(
+            {
+                "scope": "user",
+                "path": str(user_kb),
+                "entries": user_count,
+                "parse_errors": user_parse_errors,
+            }
+        )
 
     payload = {
         "primary_kb": str(primary_kb),
+        "primary_scope": primary_scope,
         "index_root": str(index_root),
         "kbs": kbs_info,
         "total_entries": total_count,
@@ -3792,23 +4029,25 @@ def info(ctx: click.Context, as_json: bool):
     click.echo("Memex Info")
     click.echo("=" * 40)
     click.echo(f"Primary KB: {primary_kb}")
+    click.echo(f"Primary Scope: {primary_scope or '(unknown)'}")
     click.echo(f"Index Root: {index_root}")
     click.echo()
     click.echo("Active KBs:")
     if project_kb:
-        click.echo(f"  project:  {project_kb} ({project_count} entries)")
+        extra = f", {project_parse_errors} parse errors" if project_parse_errors else ""
+        click.echo(f"  project:  {project_kb} ({project_count} entries{extra})")
     else:
         click.echo("  project:  (none)")
     if user_kb:
-        click.echo(f"  user:     {user_kb} ({user_count} entries)")
+        extra = f", {user_parse_errors} parse errors" if user_parse_errors else ""
+        click.echo(f"  user:     {user_kb} ({user_count} entries{extra})")
     else:
         click.echo("  user:     (none)")
     click.echo()
     click.echo(f"Total:      {total_count} entries")
     if categories:
         click.echo(f"Categories: {', '.join(categories)}")
-    if primary_category:
-        click.echo(f"Primary:    {primary_category}")
+    click.echo(f"Primary:    {primary_category or '(not set)'}")
     if context_file:
         click.echo(f"Context:    {context_file}")
 

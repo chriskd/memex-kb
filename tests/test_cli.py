@@ -1798,6 +1798,92 @@ class TestInfoCommand:
         assert "primary_kb" in data
         assert "kbs" in data
         assert "total_entries" in data
+        assert "primary_scope" in data
+
+
+def _count_frontmatter_blocks(text: str) -> int:
+    # Count YAML frontmatter start markers at beginning-of-line.
+    return sum(1 for line in text.splitlines() if line.strip() == "---")
+
+
+class TestP2Tickets:
+    def test_add_file_with_frontmatter_is_merged_not_duplicated(self, runner, tmp_kb, tmp_path):
+        """mx add --file should not create duplicate YAML blocks when input already has frontmatter."""
+        input_file = tmp_path / "input.md"
+        input_file.write_text(
+            """---
+title: Input Title
+description: Preserved description
+tags: [ignored]
+created: 2024-01-15T10:30:00
+status: draft
+aliases: [Alt Name]
+---
+
+# Body
+
+Hello world.
+"""
+        )
+
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title",
+                "CLI Title",
+                "--tags",
+                "test",
+                "--category",
+                ".",
+                "--file",
+                str(input_file),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+
+        created = next(p for p in tmp_kb.rglob("*.md") if p.name != "kbconfig.yaml")
+        text = created.read_text()
+
+        # There should be a single frontmatter block in the output file.
+        assert text.lstrip().startswith("---")
+        # Start + end markers means 2 lines with "---"
+        assert _count_frontmatter_blocks(text) == 2
+        assert "description: Preserved description" in text
+        assert "status: draft" in text
+        assert "aliases:" in text
+        assert "# Body" in text
+
+
+class TestCountsConsistency:
+    def test_info_primary_entries_match_health_total_entries(self, runner, tmp_kb):
+        """mx info and mx health should use consistent entry counting for the primary KB."""
+        # One valid entry, one invalid (parse error) entry.
+        (tmp_kb / "good.md").write_text(
+            """---
+title: Good
+tags: [test]
+created: 2024-01-15
+---
+
+ok
+"""
+        )
+        (tmp_kb / "bad.md").write_text("# Missing frontmatter\n")
+
+        info = runner.invoke(cli, ["info", "--json"])
+        assert info.exit_code == 0, info.output
+        info_data = json.loads(info.output)
+        primary_entries = None
+        for kb in info_data.get("kbs", []):
+            if kb.get("scope") == "user":
+                primary_entries = kb.get("entries")
+        assert primary_entries is not None
+
+        health = runner.invoke(cli, ["health", "--json"])
+        assert health.exit_code == 0, health.output
+        health_data = json.loads(health.output)
+        assert health_data["summary"]["total_entries"] == primary_entries
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2201,6 +2287,14 @@ class TestJsonErrorMode:
         data = json.loads(result.stderr_bytes.decode())
         assert "error" in data
 
+    def test_json_errors_flag_after_command_still_outputs_json(self, runner, tmp_kb):
+        """Misplaced --json-errors (after subcommand) should still produce JSON (focusgroup)."""
+        result = runner.invoke(cli, ["search", "test", "--mode", "invalid", "--json-errors"])
+        assert result.exit_code != 0
+        payload = (result.stderr_bytes or b"").decode() or result.output
+        data = json.loads(payload)
+        assert "error" in data
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Typo Suggestion Tests
@@ -2283,6 +2377,31 @@ class TestInputValidation:
         result = runner.invoke(cli, ["list", "--category", "nonexistent"])
         # Should handle gracefully (either error or empty results), never traceback
         assert "Traceback" not in result.output
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Search Dependency Error Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestSearchDeps:
+    def test_search_dependency_missing_whoosh_no_traceback_and_install_hint(self, runner, tmp_kb):
+        """Search should fail gracefully with install hint if whoosh is missing."""
+        from memex.errors import MemexError
+
+        with patch("memex.core.get_searcher") as mock_get_searcher:
+            mock_get_searcher.side_effect = MemexError.dependency_missing(
+                feature="search",
+                missing="whoosh",
+                suggestion="pip install whoosh-reloaded; or pip install 'memex-kb[search]'",
+            )
+            result = runner.invoke(cli, ["search", "test"])
+
+        assert result.exit_code == 1
+        combined = (getattr(result, "stderr", "") or "") + result.output
+        assert "Traceback" not in combined
+        assert "whoosh" in combined.lower()
+        assert "memex-kb[search]" in combined
 
 
 # ─────────────────────────────────────────────────────────────────────────────

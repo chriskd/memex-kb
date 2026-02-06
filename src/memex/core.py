@@ -262,20 +262,35 @@ def get_searcher() -> "HybridSearcher":
     if _searcher is None:
         from .errors import MemexError
 
-        install_hint = "uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'"
+        def _install_hint(missing: str | None) -> str:
+            semantic_hint = (
+                "uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'"
+            )
+            # Keyword search is expected to ship by default, but handle environments where
+            # packaging/install went wrong (focusgroup hit: ModuleNotFoundError: whoosh).
+            if missing and missing.split(".", 1)[0] == "whoosh":
+                return (
+                    "Install keyword search dependency: pip install whoosh-reloaded "
+                    "(or reinstall memex-kb). "
+                    f"For semantic search: {semantic_hint}"
+                )
+            return f"Install search deps: {semantic_hint}"
+
         try:
             from .indexer import HybridSearcher
         except ModuleNotFoundError as exc:
             missing = getattr(exc, "name", None) or str(exc)
-            raise MemexError.dependency_missing("search", missing, suggestion=install_hint) from exc
+            raise MemexError.dependency_missing("search", missing, suggestion=_install_hint(missing)) from exc
         except ImportError as exc:
-            raise MemexError.dependency_missing("search", "unknown", suggestion=install_hint) from exc
+            raise MemexError.dependency_missing(
+                "search", "unknown", suggestion=_install_hint("unknown")
+            ) from exc
 
         try:
             _searcher = HybridSearcher()
         except ModuleNotFoundError as exc:
             missing = getattr(exc, "name", None) or str(exc)
-            raise MemexError.dependency_missing("search", missing, suggestion=install_hint) from exc
+            raise MemexError.dependency_missing("search", missing, suggestion=_install_hint(missing)) from exc
     _maybe_initialize_searcher(_searcher)
     return _searcher
 
@@ -1218,6 +1233,7 @@ async def add_entry(
     scope: str | None = None,
     semantic_links: list | None = None,
     relations: list | None = None,
+    metadata_overrides: dict | None = None,
 ) -> dict:
     """Create a new KB entry.
 
@@ -1236,6 +1252,8 @@ async def add_entry(
                If not provided, uses auto-discovery (project KB if in project, else user KB).
         semantic_links: Optional list of SemanticLink objects for manual linking.
         relations: Optional list of RelationLink objects for typed relations.
+        metadata_overrides: Optional dict of EntryMetadata fields to merge into the generated
+            metadata before frontmatter serialization (used for preserving input frontmatter).
 
     Returns:
         Dict with 'path' of created file, 'suggested_links' to consider adding,
@@ -1320,6 +1338,13 @@ async def add_entry(
         semantic_links=semantic_links,
         relations=relations,
     )
+    if metadata_overrides:
+        # Validate merged metadata to avoid writing invalid frontmatter.
+        from .models import EntryMetadata
+
+        merged = metadata.model_dump()
+        merged.update(metadata_overrides)
+        metadata = EntryMetadata.model_validate(merged)
     frontmatter = build_frontmatter(metadata)
 
     # Write the file. After this point, we should avoid failing the whole command
