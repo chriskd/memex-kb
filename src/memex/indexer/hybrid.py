@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import re
 from collections import defaultdict
@@ -22,6 +23,7 @@ from ..config import (
     get_kb_root,
 )
 from ..models import DocumentChunk, IndexStatus, SearchResult
+from ..errors import MemexError
 from .chroma_index import ChromaIndex
 from .whoosh_index import WhooshIndex
 
@@ -31,6 +33,14 @@ if TYPE_CHECKING:
     from ..context import KBContext
 
 SearchMode = Literal["hybrid", "keyword", "semantic"]
+
+
+def _semantic_deps_available() -> bool:
+    # Avoid importing heavyweight deps unless needed.
+    return (
+        importlib.util.find_spec("chromadb") is not None
+        and importlib.util.find_spec("sentence_transformers") is not None
+    )
 
 
 class HybridSearcher:
@@ -48,7 +58,9 @@ class HybridSearcher:
             chroma_index: Chroma index instance. Created if not provided.
         """
         self._whoosh = whoosh_index or WhooshIndex()
-        self._chroma = chroma_index or ChromaIndex()
+        # Semantic search is optional; allow keyword-only installs to work.
+        self.semantic_available = chroma_index is not None or _semantic_deps_available()
+        self._chroma = chroma_index or (ChromaIndex() if self.semantic_available else None)
         self._last_indexed: datetime | None = None
 
     def search(
@@ -84,20 +96,23 @@ class HybridSearcher:
             results = self._whoosh.search(query, limit=fetch_limit)
             results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
         elif mode == "semantic":
-            results = self._chroma.search(
-                query,
-                limit=fetch_limit,
-                min_similarity=min_similarity,
-            )
+            if not self._chroma:
+                raise MemexError.semantic_search_unavailable()
+            results = self._chroma.search(query, limit=fetch_limit, min_similarity=min_similarity)
             results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
         else:
-            results = self._hybrid_search(
-                query,
-                limit=limit,
-                project_context=project_context,
-                kb_context=kb_context,
-                min_similarity=min_similarity,
-            )
+            # If semantic deps aren't available, treat hybrid as keyword-only.
+            if not self._chroma:
+                results = self._whoosh.search(query, limit=fetch_limit)
+                results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
+            else:
+                results = self._hybrid_search(
+                    query,
+                    limit=limit,
+                    project_context=project_context,
+                    kb_context=kb_context,
+                    min_similarity=min_similarity,
+                )
 
         # Deduplicate by path, keeping highest-scoring chunk per document
         return self._deduplicate_by_path(results, limit)
@@ -139,11 +154,17 @@ class HybridSearcher:
                 kb_context,
             )
 
-        chroma_results = self._chroma.search(
-            query,
-            limit=fetch_limit,
-            min_similarity=min_similarity,
-        )
+        chroma_results: list[SearchResult] = []
+        try:
+            chroma_results = self._chroma.search(
+                query,
+                limit=fetch_limit,
+                min_similarity=min_similarity,
+            )
+        except Exception as e:
+            # Semantic search is optional; if it's broken/missing, degrade gracefully.
+            log.debug("Semantic search unavailable, falling back to keyword: %s", e)
+            chroma_results = []
 
         # If one index is empty, return the other
         if not whoosh_results and not chroma_results:
@@ -339,7 +360,8 @@ class HybridSearcher:
             chunk: The document chunk to index.
         """
         self._whoosh.index_document(chunk)
-        self._chroma.index_document(chunk)
+        if self._chroma:
+            self._chroma.index_document(chunk)
         self._last_indexed = datetime.now(UTC)
 
     def index_chunks(self, chunks: list[DocumentChunk]) -> None:
@@ -352,7 +374,8 @@ class HybridSearcher:
             return
 
         self._whoosh.index_documents(chunks)
-        self._chroma.index_documents(chunks)
+        if self._chroma:
+            self._chroma.index_documents(chunks)
         self._last_indexed = datetime.now(UTC)
 
     def delete_document(self, path: str) -> None:
@@ -362,7 +385,8 @@ class HybridSearcher:
             path: The document path to delete.
         """
         self._whoosh.delete_document(path)
-        self._chroma.delete_document(path)
+        if self._chroma:
+            self._chroma.delete_document(path)
 
     def reindex(
         self,
@@ -432,7 +456,8 @@ class HybridSearcher:
     def clear(self) -> None:
         """Clear both indices."""
         self._whoosh.clear()
-        self._chroma.clear()
+        if self._chroma:
+            self._chroma.clear()
         self._last_indexed = None
 
     def status(self) -> IndexStatus:
@@ -446,7 +471,7 @@ class HybridSearcher:
 
         return IndexStatus(
             whoosh_docs=self._whoosh.doc_count(),
-            chroma_docs=self._chroma.doc_count(),
+            chroma_docs=self._chroma.doc_count() if self._chroma else 0,
             last_indexed=self._last_indexed.isoformat() if self._last_indexed else None,
             kb_files=kb_files,
         )
@@ -456,4 +481,5 @@ class HybridSearcher:
 
         Call this at startup when MEMEX_PRELOAD=1 is set.
         """
-        self._chroma.preload()
+        if self._chroma:
+            self._chroma.preload()

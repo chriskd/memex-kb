@@ -241,7 +241,10 @@ def _maybe_initialize_searcher(searcher: "HybridSearcher") -> None:
         return
 
     status = searcher.status()
-    if status.kb_files > 0 and (status.whoosh_docs == 0 or status.chroma_docs == 0):
+    semantic_available = getattr(searcher, "semantic_available", True)
+    needs_keyword = status.whoosh_docs == 0
+    needs_semantic = semantic_available and status.chroma_docs == 0
+    if status.kb_files > 0 and (needs_keyword or needs_semantic):
         kb_root = get_kb_root()
         if kb_root.exists():
             searcher.reindex(kb_root)
@@ -253,13 +256,26 @@ def get_searcher() -> "HybridSearcher":
     """Get the HybridSearcher, initializing lazily.
 
     Raises:
-        ImportError: If search dependencies (chromadb, sentence-transformers) not installed.
+        MemexError: If optional search dependencies are not installed.
     """
     global _searcher
     if _searcher is None:
-        from .indexer import HybridSearcher
+        from .errors import MemexError
 
-        _searcher = HybridSearcher()
+        install_hint = "uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'"
+        try:
+            from .indexer import HybridSearcher
+        except ModuleNotFoundError as exc:
+            missing = getattr(exc, "name", None) or str(exc)
+            raise MemexError.dependency_missing("search", missing, suggestion=install_hint) from exc
+        except ImportError as exc:
+            raise MemexError.dependency_missing("search", "unknown", suggestion=install_hint) from exc
+
+        try:
+            _searcher = HybridSearcher()
+        except ModuleNotFoundError as exc:
+            missing = getattr(exc, "name", None) or str(exc)
+            raise MemexError.dependency_missing("search", missing, suggestion=install_hint) from exc
     _maybe_initialize_searcher(_searcher)
     return _searcher
 
@@ -466,11 +482,16 @@ def compute_link_suggestions(
     exclude_set = existing_links | {self_key, self_path} | _EXCLUDED_FROM_SUGGESTIONS
 
     # Use semantic search to find similar entries
-    searcher = get_searcher()
-
-    # Search using the entry's title and first part of content as query
-    query = f"{title} {content[:500]}"
-    search_results = searcher.search(query, limit=limit + len(exclude_set) + 10, mode="semantic")
+    search_results: list[SearchResult] = []
+    try:
+        searcher = get_searcher()
+        # Search using the entry's title and first part of content as query
+        query = f"{title} {content[:500]}"
+        search_results = searcher.search(query, limit=limit + len(exclude_set) + 10, mode="semantic")
+    except Exception as e:
+        # Semantic search is optional; if it's not installed, skip suggestions.
+        log.debug("Link suggestions unavailable (semantic search missing): %s", e)
+        return []
 
     suggestions = []
     tags_set = set(tags)
@@ -512,15 +533,11 @@ def compute_link_suggestions(
 class LinkingResult:
     """Result of creating bidirectional semantic links.
 
-    Contains both the forward links for the new entry and
-    the list of neighbors that may need evolution.
+    Contains the forward links for the new entry.
     """
 
     forward_links: list[SemanticLink]
     """Links to add to the new entry's semantic_links field."""
-
-    neighbors_for_evolution: list[tuple[str, float]]
-    """List of (neighbor_path, score) tuples for memory evolution."""
 
 
 def create_bidirectional_semantic_links(
@@ -538,7 +555,6 @@ def create_bidirectional_semantic_links(
     2. Creates SemanticLink objects for the new entry (forward links)
     3. Adds backlinks to neighbor entries
     4. Re-indexes affected entries
-    5. Collects neighbors for potential memory evolution
 
     Args:
         entry_path: Relative path of the new/updated entry (e.g., "guides/python.md")
@@ -549,24 +565,30 @@ def create_bidirectional_semantic_links(
         min_score: Minimum similarity score threshold (0.0-1.0)
 
     Returns:
-        LinkingResult with forward links and neighbors for evolution.
+        LinkingResult with forward links.
     """
     if not SEMANTIC_LINK_ENABLED:
-        return LinkingResult(forward_links=[], neighbors_for_evolution=[])
+        return LinkingResult(forward_links=[])
 
     kb_root = get_kb_root()
-    searcher = get_searcher()
+    try:
+        searcher = get_searcher()
+    except Exception as e:
+        log.debug("Semantic linking unavailable (semantic search missing): %s", e)
+        return LinkingResult(forward_links=[])
 
     # Normalize entry path for comparison
     entry_key = entry_path[:-3] if entry_path.endswith(".md") else entry_path
 
     # Search for similar entries using title and content
     query = f"{title} {content[:500]}"
-    search_results = searcher.search(query, limit=k + 10, mode="semantic")
+    try:
+        search_results = searcher.search(query, limit=k + 10, mode="semantic")
+    except Exception as e:
+        log.debug("Semantic linking unavailable (semantic search missing): %s", e)
+        return LinkingResult(forward_links=[])
 
     forward_links: list[SemanticLink] = []
-    neighbors_for_evolution: list[tuple[str, float]] = []
-
     for result in search_results:
         # Skip self
         result_key = result.path[:-3] if result.path.endswith(".md") else result.path
@@ -594,16 +616,10 @@ def create_bidirectional_semantic_links(
             searcher=searcher,
         )
 
-        # Collect for potential evolution
-        neighbors_for_evolution.append((result.path, result.score))
-
         if len(forward_links) >= k:
             break
 
-    return LinkingResult(
-        forward_links=forward_links,
-        neighbors_for_evolution=neighbors_for_evolution,
-    )
+    return LinkingResult(forward_links=forward_links)
 
 
 def _add_backlink_to_neighbor(
@@ -738,11 +754,17 @@ def compute_tag_suggestions(
     tag_scores: dict[str, float] = {}
     tag_reasons: dict[str, list[str]] = {}
 
-    # ===== Signal 1: Semantic similarity =====
-    # Find similar entries and collect their tags
-    searcher = get_searcher()
-    query = f"{title} {content[:500]}"
-    search_results = searcher.search(query, limit=10, mode="semantic")
+    # ===== Signal 1: Semantic similarity (optional) =====
+    # Find similar entries and collect their tags. If semantic search isn't installed,
+    # fall back to keyword matching + taxonomy frequency only.
+    search_results: list[SearchResult] = []
+    try:
+        searcher = get_searcher()
+        query = f"{title} {content[:500]}"
+        search_results = searcher.search(query, limit=10, mode="semantic")
+    except Exception as e:
+        log.debug("Tag semantic suggestions unavailable (semantic search missing): %s", e)
+        search_results = []
 
     # Weight tags by similarity score of the entry they come from
     for result in search_results:
@@ -1194,7 +1216,6 @@ async def add_entry(
     links: list[str] | None = None,
     kb_context: KBContext | None = None,
     scope: str | None = None,
-    keywords: list[str] | None = None,
     semantic_links: list | None = None,
     relations: list | None = None,
 ) -> dict:
@@ -1213,7 +1234,6 @@ async def add_entry(
                    Used for default directory (primary) and tag suggestions (default_tags).
         scope: Optional scope for KB selection ("project" or "user").
                If not provided, uses auto-discovery (project KB if in project, else user KB).
-        keywords: Optional list of key concepts for semantic linking.
         semantic_links: Optional list of SemanticLink objects for manual linking.
         relations: Optional list of RelationLink objects for typed relations.
 
@@ -1242,10 +1262,14 @@ async def add_entry(
         target_dir = abs_dir
         rel_dir = normalized_dir
     elif category:
-        # Auto-create category directory if it doesn't exist
-        target_dir = kb_root / category
-        target_dir.mkdir(parents=True, exist_ok=True)
-        rel_dir = category
+        if category in (".", "./"):
+            target_dir = kb_root
+            rel_dir = ""
+        else:
+            # Auto-create category directory if it doesn't exist
+            target_dir = kb_root / category
+            target_dir.mkdir(parents=True, exist_ok=True)
+            rel_dir = category
     elif kb_context and kb_context.primary:
         # Use context primary directory
         abs_dir, normalized_dir = validate_nested_path(kb_context.primary)
@@ -1258,12 +1282,9 @@ async def add_entry(
         target_dir = abs_dir
         rel_dir = normalized_dir
     else:
-        valid_categories = get_valid_categories()
-        context_hint = " (no .kbconfig with 'primary' set)" if kb_context is None else ""
-        raise ValueError(
-            f"Either 'category' or 'directory' must be provided{context_hint}. "
-            f"Existing categories: {', '.join(valid_categories)}"
-        )
+        # Default to KB root when no category/primary is provided.
+        target_dir = kb_root
+        rel_dir = ""
 
     if not tags:
         raise ValueError("At least one tag is required")
@@ -1274,7 +1295,7 @@ async def add_entry(
         raise ValueError("Title must contain at least one alphanumeric character")
 
     file_path = target_dir / f"{slug}.md"
-    rel_path = f"{rel_dir}/{slug}.md"
+    rel_path = f"{rel_dir}/{slug}.md" if rel_dir else f"{slug}.md"
 
     if file_path.exists():
         raise ValueError(f"Entry already exists at {rel_path}")
@@ -1296,7 +1317,6 @@ async def add_entry(
         model=get_llm_model(),
         git_branch=get_git_branch(),
         actor=get_actor_identity(),
-        keywords=keywords,
         semantic_links=semantic_links,
         relations=relations,
     )
@@ -1446,18 +1466,19 @@ async def preview_add_entry(
         target_dir = abs_dir
         rel_dir = normalized_dir
     elif category:
-        target_dir = kb_root / category
-        rel_dir = category
+        if category in (".", "./"):
+            target_dir = kb_root
+            rel_dir = ""
+        else:
+            target_dir = kb_root / category
+            rel_dir = category
     elif kb_context and kb_context.primary:
         abs_dir, normalized_dir = validate_nested_path(kb_context.primary)
         target_dir = abs_dir
         rel_dir = normalized_dir
     else:
-        valid_categories = get_valid_categories()
-        raise ValueError(
-            f"Either 'category' or 'directory' must be provided. "
-            f"Existing categories: {', '.join(valid_categories)}"
-        )
+        target_dir = kb_root
+        rel_dir = ""
 
     if not tags:
         raise ValueError("At least one tag is required")
@@ -1467,7 +1488,7 @@ async def preview_add_entry(
         raise ValueError("Title must contain at least one alphanumeric character")
 
     file_path = target_dir / f"{slug}.md"
-    rel_path = f"{rel_dir}/{slug}.md"
+    rel_path = f"{rel_dir}/{slug}.md" if rel_dir else f"{slug}.md"
 
     if file_path.exists():
         raise ValueError(f"Entry already exists at {rel_path}")
@@ -1888,7 +1909,6 @@ async def update_entry(
     content: str | None = None,
     tags: list[str] | None = None,
     section_updates: dict[str, str] | None = None,
-    keywords: list[str] | None = None,
     semantic_links: list | None = None,
     relations: list | None = None,
 ) -> dict:
@@ -1899,7 +1919,6 @@ async def update_entry(
         content: New markdown content (without frontmatter).
         tags: Optional new list of tags. If provided, replaces existing tags.
         section_updates: Optional dict of section heading -> new content.
-        keywords: Optional new list of keywords. If provided, replaces existing keywords.
         semantic_links: Optional list of SemanticLink objects. If provided, replaces existing.
         relations: Optional list of RelationLink objects. If provided, replaces existing.
 
@@ -1920,13 +1939,10 @@ async def update_entry(
         content is None
         and not section_updates
         and tags is None
-        and keywords is None
         and semantic_links is None
         and relations is None
     ):
-        raise ValueError(
-            "Provide new content, section_updates, tags, keywords, semantic_links, or relations"
-        )
+        raise ValueError("Provide new content, section_updates, tags, semantic_links, or relations")
 
     # Parse existing entry to get metadata
     try:
@@ -1947,7 +1963,6 @@ async def update_entry(
         model=get_llm_model(),
         git_branch=get_git_branch(),
         actor=get_actor_identity(),
-        keywords=keywords,
         semantic_links=semantic_links,
         relations=relations,
     )
@@ -1979,7 +1994,7 @@ async def update_entry(
         log.error("Unexpected error re-indexing %s: %s", relative_path, e)
 
     # Auto-create bidirectional semantic links if enabled and no manual links provided
-    # Only run when content is updated (not just tags/keywords)
+    # Only run when content is updated (not just tags)
     content_changed = content is not None or section_updates
     if semantic_links is None and content_changed and SEMANTIC_LINK_ENABLED:
         linking_result = create_bidirectional_semantic_links(
@@ -3850,4 +3865,3 @@ def resolve_entry_by_title(
             raise AmbiguousMatchError(matches)
 
     return matches[0]
-

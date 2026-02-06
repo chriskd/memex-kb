@@ -656,15 +656,16 @@ class TestEdgeCases:
         assert "dir2" in result2["path"]
 
     def test_add_without_category_fails(self, tmp_kb, monkeypatch):
-        """add_entry without category or directory fails."""
-        with pytest.raises(ValueError, match="category.*directory"):
-            run_async(
-                core.add_entry(
-                    title="No Category",
-                    content="# No Category\n\nContent.",
-                    tags=["test"],
-                )
+        """add_entry without category/directory defaults to KB root."""
+        result = run_async(
+            core.add_entry(
+                title="No Category",
+                content="# No Category\n\nContent.",
+                tags=["test"],
             )
+        )
+        assert result["path"].endswith(".md")
+        assert "/" not in result["path"]
 
     def test_add_without_tags_fails(self, tmp_kb):
         """add_entry without tags fails."""

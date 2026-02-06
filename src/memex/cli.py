@@ -49,6 +49,26 @@ def decode_escape_sequences(s: str) -> str:
     return codecs.decode(s, "unicode_escape")
 
 
+def _has_yaml_frontmatter(content: str) -> bool:
+    lines = content.splitlines()
+    start_index = None
+    for i, line in enumerate(lines):
+        if line.strip() == "":
+            continue
+        if line.strip() != "---":
+            return False
+        start_index = i + 1
+        break
+
+    if start_index is None:
+        return False
+
+    for line in lines[start_index : start_index + 200]:
+        if line.strip() in ("---", "..."):
+            return True
+    return False
+
+
 if TYPE_CHECKING:
     from .models import RelationLink
 
@@ -178,6 +198,9 @@ def _handle_error(
             click.echo(error.to_json(), err=True)
         else:
             click.echo(f"Error: {_normalize_error_message(error.message)}", err=True)
+            suggestion = error.details.get("suggestion") if error.details else None
+            if suggestion:
+                click.echo(f"Hint: {_normalize_error_message(str(suggestion))}", err=True)
     else:
         message = fallback_message or str(error)
         if json_errors:
@@ -425,6 +448,11 @@ def _show_status() -> None:
     from .config import ConfigurationError, get_kb_root
     from .context import get_kb_context
 
+    # Search is an optional extra; don't push users into a crash loop on first run.
+    import importlib.util
+
+    has_keyword_search = importlib.util.find_spec("whoosh") is not None
+
     # Track what we successfully loaded
     kb_root = None
     context = None
@@ -519,11 +547,29 @@ def _output_status(
             lines.append("         Run 'mx init' to configure")
         else:
             lines.append("Context: (none)")
+        lines.append("Tip: Run 'mx prime' for a short agent walkthrough.")
     else:
         lines.append("KB Root: NOT CONFIGURED")
         lines.append("")
         lines.append("Set MEMEX_USER_KB_ROOT environment variable or run 'mx init'")
         lines.append("to point to your knowledge base directory.")
+
+    # Start here section
+    lines.append("")
+    lines.append("Start here")
+    lines.append("-" * 40)
+    lines.append("  mx prime            Quick agent walkthrough")
+    if not kb_root:
+        lines.append("  mx init             Create project KB in ./kb")
+        lines.append("  mx init --user      Create personal KB in ~/.memex/kb")
+    lines.append("  mx info             KB paths + categories")
+    lines.append("  mx context show     .kbconfig (primary + default tags)")
+    lines.append('  mx add --title="..." --tags="..." --category=... --content="..."')
+    if has_keyword_search:
+        lines.append('  mx search "query"   Search entries')
+    else:
+        lines.append("  mx doctor           Check search deps + install hint")
+    lines.append("  mx get path/to/entry.md")
 
     # Recent entries section
     if entries:
@@ -558,16 +604,22 @@ def _output_status(
     lines.append("-" * 40)
 
     if not kb_root:
+        lines.append("  mx prime           Quick agent onboarding")
+        lines.append("  mx init            Create project KB in ./kb")
         lines.append("  mx --help           Show all commands")
     else:
+        lines.append("  mx prime            Quick agent onboarding")
         if entries:
             # KB has content
-            lines.append('  mx search "query"   Search the knowledge base')
+            if has_keyword_search:
+                lines.append('  mx search "query"   Search the knowledge base')
+            else:
+                lines.append("  mx doctor           Check search deps + install hint")
             lines.append("  mx whats-new        Recent changes")
             lines.append("  mx tree             Browse structure")
         else:
             # Empty KB
-            lines.append('  mx add --title="..." --tags="..."  Add first entry')
+            lines.append('  mx add --title="..." --tags="..." --category=...  Add first entry')
             lines.append("  mx tree             Browse structure")
 
         if not context:
@@ -607,20 +659,42 @@ def cli(ctx: click.Context, json_errors: bool, quiet: bool):
 
     \b
     Quick start:
-      mx search "deployment"         # Find entries
-      mx get guides/quick-start.md   # Read an entry
+      mx search "deployment"         # Find entries (keyword; semantic if installed)
+      mx get path/to/entry.md        # Read an entry
       mx tree                        # Browse structure
       mx health                      # Check KB health
+      Tip: For semantic search: uv tool install 'memex-kb[search]'
 
     \b
     Create content:
-      mx add --title="Title" --tags="a,b" --content="..."
+      mx add --title="Title" --tags="a,b" --category=... --content="..."
+      mx quick-add --content="..."           # Suggest title/tags/category
+      mx ingest notes.md                     # Import file, adds frontmatter
       mx append "Existing Title" --content="append this"
+      Note: if --category is omitted and no .kbconfig primary exists, mx add defaults
+            to KB root (.) and prints a warning.
 
     \b
     Modify content:
       mx patch path.md --find "old text" --replace "new text"
-      mx replace path.md --tags="new,tags"
+      mx replace path.md --tags="new,tags"   # Overwrite tags/content
+
+    \b
+    New to mx:
+      mx prime                              # Agent onboarding + required frontmatter
+      mx info                               # KB paths + categories
+      mx context show                       # .kbconfig (primary + default tags)
+
+    \b
+    Browse vs recency:
+      mx list --tags=foo                    # Filtered list
+      mx tree                               # Directory structure
+      mx whats-new --days=7                 # Recent changes
+
+    \b
+    Agent helpers:
+      mx schema --compact                   # CLI schema for LLMs
+      mx batch < commands.txt               # Multiple commands, one run
 
     \b
     For programmatic error handling:
@@ -646,13 +720,113 @@ def cli(ctx: click.Context, json_errors: bool, quiet: bool):
         _show_status()
 
 
+@cli.command("help")
+@click.argument("command", required=False)
+@click.pass_context
+def help_cmd(ctx: click.Context, command: str | None):
+    """Show help for a command (alias: mx --help).
+
+    Examples:
+      mx help
+      mx help search
+    """
+    parent = ctx.parent or ctx
+    if not command:
+        click.echo(parent.get_help())
+        return
+
+    cmd = parent.command.get_command(parent, command)
+    if cmd is None:
+        raise UsageError(f"No such command '{command}'. Try 'mx --help' for a list.")
+    click.echo(cmd.get_help(parent))
+
+
+@cli.command()
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def doctor(ctx: click.Context, as_json: bool):
+    """Check installation, KB config, and optional dependency availability."""
+    import importlib.util
+    import sys
+
+    from .config import ConfigurationError, get_kb_root
+
+    deps = {
+        "whoosh": importlib.util.find_spec("whoosh") is not None,
+        "chromadb": importlib.util.find_spec("chromadb") is not None,
+        "sentence_transformers": importlib.util.find_spec("sentence_transformers") is not None,
+    }
+
+    kb_root = None
+    kb_configured = True
+    try:
+        kb_root = str(get_kb_root())
+    except ConfigurationError:
+        kb_configured = False
+
+    install_hint = "uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'"
+    data = {
+        "version": MEMEX_VERSION,
+        "python": sys.executable,
+        "kb_configured": kb_configured,
+        "kb_root": kb_root,
+        "deps": deps,
+        "suggestion": None,
+    }
+
+    if not deps["whoosh"] or not deps["chromadb"] or not deps["sentence_transformers"]:
+        data["suggestion"] = f"Install search deps for full functionality: {install_hint}"
+
+    if as_json:
+        output(data, as_json=True)
+        return
+
+    click.echo("mx doctor")
+    click.echo("=" * 40)
+    click.echo(f"version: {MEMEX_VERSION}")
+    click.echo(f"python:  {sys.executable}")
+    click.echo(f"kb:      {kb_root if kb_configured else '(not configured)'}")
+    click.echo("")
+    click.echo("deps")
+    click.echo("-" * 40)
+    click.echo(f"whoosh:               {'OK' if deps['whoosh'] else 'MISSING'}")
+    click.echo(f"chromadb:             {'OK' if deps['chromadb'] else 'MISSING'}")
+    click.echo(f"sentence-transformers: {'OK' if deps['sentence_transformers'] else 'MISSING'}")
+    if data["suggestion"]:
+        click.echo("")
+        click.echo(f"Next step: {data['suggestion']}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Prime Command (Agent Context Injection)
 # ─────────────────────────────────────────────────────────────────────────────
 
 PRIME_OUTPUT = """# Memex Knowledge Base
 
-> Search organizational knowledge before reinventing. Add discoveries for future agents.
+Search org knowledge before reinventing. Add discoveries for future agents.
+
+## Quick start (agents)
+
+1) `mx info` - active KB paths + categories
+2) `mx context show` - .kbconfig (primary category + default tags)
+3) `mx add --title="..." --tags="..." --category=... --content="..."` - create entry
+   (omit --category if `.kbconfig` sets `primary`; otherwise defaults to KB root (.) with a warning)
+4) `mx list --limit=5` - confirm entry path
+   Optional: `mx search "query"` - verify indexing
+5) `mx get path/to/entry.md` - read entry
+6) `mx health` - audit (orphans = entries with no incoming links)
+
+If no KB is configured:
+  `mx init`        # project KB in ./kb
+  `mx init --user` # personal KB in ~/.memex/kb
+
+## Required frontmatter
+
+- `title`
+- `tags`
+
+README.md inside the KB should include frontmatter or be excluded (prefix "_" or move it).
+Quick fix: add frontmatter or rename it to _README.md.
 
 ## CLI Quick Reference
 
@@ -663,8 +837,8 @@ mx search "docker" --tags=infra     # Filter by tag
 mx search "api" --mode=semantic     # Semantic only
 
 # Read entries
-mx get guides/quick-start.md             # Full entry
-mx get guides/quick-start.md --metadata  # Just metadata
+mx get path/to/entry.md             # Full entry
+mx get path/to/entry.md --metadata  # Just metadata
 
 # Browse
 mx tree                             # Directory structure
@@ -674,9 +848,8 @@ mx whats-new --days=7               # Recent changes
 mx whats-new --scope=project        # Project KB only
 
 # Contribute
-mx add --title="My Entry" --tags="foo,bar" --content="..."
+mx add --title="My Entry" --tags="foo,bar" --category=tooling --content="..."
 mx add --title="..." --tags="..." --file=content.md
-mx add --title="..." --tags="..." --category=tooling --content="..."
 cat notes.md | mx add --title="..." --tags="..." --stdin
 
 # Maintenance
@@ -686,15 +859,15 @@ mx suggest-links path/entry.md      # Find related entries
 
 ## When to Search KB
 
-- ✅ Looking for org patterns, guides, troubleshooting
-- ✅ Before implementing something that might exist
-- ✅ Understanding infrastructure or deployment
+- Looking for org patterns, guides, troubleshooting
+- Before implementing something that might exist
+- Understanding infrastructure or deployment
 
 ## When to Contribute
 
-- ✅ Discovered reusable pattern or solution
-- ✅ Troubleshooting steps worth preserving
-- ✅ Infrastructure or deployment knowledge
+- Discovered reusable pattern or solution
+- Troubleshooting steps worth preserving
+- Infrastructure or deployment knowledge
 
 ## Entry Format
 
@@ -1189,17 +1362,21 @@ def search(
     # Cast mode to literal type (validated by click.Choice above)
     mode_literal = cast(Literal["hybrid", "keyword", "semantic"], mode)
 
-    result = run_async(
-        core_search(
-            query=query,
-            limit=limit,
-            mode=mode_literal,
-            tags=tag_list,
-            include_content=content,
-            strict=strict,
-            scope=scope,
+    try:
+        result = run_async(
+            core_search(
+                query=query,
+                limit=limit,
+                mode=mode_literal,
+                tags=tag_list,
+                include_content=content,
+                strict=strict,
+                scope=scope,
+            )
         )
-    )
+    except Exception as exc:
+        # Most common case for first-time users: optional search deps not installed.
+        _handle_error(ctx, exc, fallback_message="Search failed.")
 
     # Record search in history
     from . import search_history
@@ -1754,10 +1931,6 @@ def relations_lint(ctx: click.Context, scope: str | None, strict: bool, as_json:
     help="Target KB scope (default: auto-detect)",
 )
 @click.option(
-    "--keywords",
-    help="Key concepts for semantic linking (comma-separated)",
-)
-@click.option(
     "--semantic-links",
     "semantic_links_json",
     help=(
@@ -1787,7 +1960,6 @@ def add(
     file_path: str | None,
     stdin: bool,
     scope: str | None,
-    keywords: str | None,
     semantic_links_json: str | None,
     relation_items: tuple[str, ...],
     relations_json: str | None,
@@ -1832,8 +2004,11 @@ def add(
     See also:
       mx append - Append content to existing entry (or create new)
     """
+    from .context import get_kb_context
     from .core import add_entry
     from .models import SemanticLink
+
+    warnings: list[str] = []
 
     # Validate mutual exclusivity of content sources
     sources = sum([bool(content), bool(file_path), stdin])
@@ -1849,6 +2024,13 @@ def add(
         content = sys.stdin.read()
     elif file_path:
         content = Path(file_path).read_text()
+        if _has_yaml_frontmatter(content):
+            click.echo(
+                "Warning: input file already has YAML frontmatter. "
+                "mx add will add another. "
+                "Use mx ingest or remove the frontmatter first.",
+                err=True,
+            )
     elif content:
         # Decode escape sequences in --content (e.g., \n -> newline)
         content = decode_escape_sequences(content)
@@ -1857,7 +2039,18 @@ def add(
     assert content is not None, "content must be set by this point"
 
     tag_list = [t.strip() for t in tags.split(",")]
-    keyword_list = [k.strip() for k in keywords.split(",")] if keywords else None
+    context = get_kb_context()
+    if not category and not (context and context.primary):
+        warning = (
+            "No --category provided; defaulting to KB root (.). "
+            "Use --category=. to be explicit. "
+            "Set a default in .kbconfig (see 'mx context show') or move the file later "
+            "and run 'mx reindex'."
+        )
+        if as_json:
+            warnings.append(warning)
+        else:
+            click.echo(f"Warning: {warning}", err=True)
 
     # Parse semantic links JSON if provided
     semantic_links: list[SemanticLink] | None = None
@@ -1905,7 +2098,6 @@ def add(
                 tags=tag_list,
                 category=category,
                 scope=scope,
-                keywords=keyword_list,
                 semantic_links=semantic_links,
                 relations=relations,
             )
@@ -1918,6 +2110,8 @@ def add(
         # Include scope in JSON output if explicitly set
         if scope:
             result["scope"] = scope
+        if warnings:
+            result["warnings"] = warnings
         output(result, as_json=True)
     else:
         # Show path with scope prefix if explicitly set
@@ -2147,10 +2341,6 @@ def append(
     type=click.Path(exists=True),
     help="Read content from file",
 )
-@click.option(
-    "--keywords",
-    help="New keywords for semantic linking (comma-separated)",
-)
 @click.option("--find", "find_flag", hidden=True, help="(Intent detection)")
 @click.option("--replace", "replace_flag", hidden=True, help="(Intent detection)")
 @click.option(
@@ -2180,7 +2370,6 @@ def replace_cmd(
     tags: str | None,
     content: str | None,
     file_path: str | None,
-    keywords: str | None,
     find_flag: str | None,
     replace_flag: str | None,
     semantic_links_json: str | None,
@@ -2240,8 +2429,6 @@ def replace_cmd(
         content = decode_escape_sequences(content)
 
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
-    keyword_list = [k.strip() for k in keywords.split(",")] if keywords else None
-
     # Parse semantic links JSON if provided
     semantic_links: list[SemanticLink] | None = None
     if semantic_links_json:
@@ -2286,7 +2473,6 @@ def replace_cmd(
                 path=path,
                 content=content,
                 tags=tag_list,
-                keywords=keyword_list,
                 semantic_links=semantic_links,
                 relations=relations,
             )
@@ -2313,14 +2499,10 @@ def replace_cmd(
     type=click.Path(exists=True),
     help="Read content from file",
 )
-@click.option(
-    "--keywords",
-    help="New keywords for semantic linking (comma-separated)",
-)
 @click.option("--semantic-links", "semantic_links_json", help="Semantic links as JSON array")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def update_alias(ctx, path, tags, content, file_path, keywords, semantic_links_json, as_json):
+def update_alias(ctx, path, tags, content, file_path, semantic_links_json, as_json):
     """(Deprecated: use 'mx replace' instead)"""
     ctx.invoke(
         replace_cmd,
@@ -2328,7 +2510,6 @@ def update_alias(ctx, path, tags, content, file_path, keywords, semantic_links_j
         tags=tags,
         content=content,
         file_path=file_path,
-        keywords=keywords,
         semantic_links_json=semantic_links_json,
         as_json=as_json,
     )
@@ -2534,6 +2715,10 @@ def health(ctx: click.Context, as_json: bool):
             click.echo(f"\n⚠ Orphaned entries ({len(orphans)}):")
             for o in orphans[:10]:
                 click.echo(f"  - {o['path']}")
+            click.echo(
+                "  Note: orphans have no incoming links yet. "
+                "This is common in new KBs; add links or use mx suggest-links."
+            )
         else:
             click.echo("\n✓ No orphaned entries")
 
@@ -3394,6 +3579,7 @@ def info(ctx: click.Context, as_json: bool):
         get_project_kb_root,
         get_user_kb_root,
     )
+    from .context import get_kb_context
     from .core import get_valid_categories
 
     try:
@@ -3417,6 +3603,9 @@ def info(ctx: click.Context, as_json: bool):
     total_count = project_count + user_count
 
     categories = get_valid_categories()
+    context = get_kb_context()
+    primary_category = context.primary if context else None
+    context_file = str(context.source_file) if context and context.source_file else None
 
     # Build payload
     kbs_info = []
@@ -3431,6 +3620,8 @@ def info(ctx: click.Context, as_json: bool):
         "kbs": kbs_info,
         "total_entries": total_count,
         "categories": categories,
+        "primary_category": primary_category,
+        "context_file": context_file,
     }
 
     if as_json:
@@ -3455,6 +3646,10 @@ def info(ctx: click.Context, as_json: bool):
     click.echo(f"Total:      {total_count} entries")
     if categories:
         click.echo(f"Categories: {', '.join(categories)}")
+    if primary_category:
+        click.echo(f"Primary:    {primary_category}")
+    if context_file:
+        click.echo(f"Context:    {context_file}")
 
 
 @cli.command("config")
@@ -3770,8 +3965,11 @@ def eval(
     as_json: bool,
 ):
     """Evaluate search accuracy against a query dataset."""
-    from .core import search as core_search
-    from .evaluation import aggregate_metrics, compute_metrics, load_eval_cases
+    try:
+        from .core import search as core_search
+        from .evaluation import aggregate_metrics, compute_metrics, load_eval_cases
+    except Exception as exc:
+        _handle_error(ctx, exc, fallback_message="Eval is unavailable (missing dependencies).")
 
     if not dataset.exists():
         raise UsageError(f"Dataset not found: {dataset}")
@@ -3788,17 +3986,20 @@ def eval(
         case_strict = case.strict if case.strict is not None else strict
         case_tags = case.tags
 
-        result = run_async(
-            core_search(
-                query=case.query,
-                limit=limit,
-                mode=cast(Literal["hybrid", "keyword", "semantic"], case_mode),
-                tags=case_tags,
-                include_content=False,
-                strict=case_strict,
-                scope=case_scope,
+        try:
+            result = run_async(
+                core_search(
+                    query=case.query,
+                    limit=limit,
+                    mode=cast(Literal["hybrid", "keyword", "semantic"], case_mode),
+                    tags=case_tags,
+                    include_content=False,
+                    strict=case_strict,
+                    scope=case_scope,
+                )
             )
-        )
+        except Exception as exc:
+            _handle_error(ctx, exc, fallback_message="Evaluation search failed.")
 
         result_paths = [item.path for item in result.results]
         metrics = compute_metrics(result_paths, case.expected, limit)

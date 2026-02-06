@@ -78,6 +78,9 @@ class ErrorCode(IntEnum):
     BATCH_UNKNOWN_COMMAND = 1502
     BATCH_MISSING_ARGUMENT = 1503
 
+    # Dependency/runtime errors (1601-1699)
+    DEPENDENCY_MISSING = 1601
+
 
 # Human-readable names for error codes
 ERROR_NAMES: dict[ErrorCode, str] = {
@@ -104,6 +107,7 @@ ERROR_NAMES: dict[ErrorCode, str] = {
     ErrorCode.BATCH_PARSE_ERROR: "BATCH_PARSE_ERROR",
     ErrorCode.BATCH_UNKNOWN_COMMAND: "BATCH_UNKNOWN_COMMAND",
     ErrorCode.BATCH_MISSING_ARGUMENT: "BATCH_MISSING_ARGUMENT",
+    ErrorCode.DEPENDENCY_MISSING: "DEPENDENCY_MISSING",
 }
 
 
@@ -212,7 +216,7 @@ class MemexError(Exception):
             message="Semantic search is not available",
             details={
                 "reason": "ChromaDB or sentence-transformers not installed",
-                "suggestion": "Install with: pip install 'memex-kb[semantic]'",
+                "suggestion": "Install with: uv tool install 'memex-kb[search]' or pip install 'memex-kb[search]'",
             },
         )
 
@@ -235,6 +239,26 @@ class MemexError(Exception):
             code=ErrorCode.MISSING_REQUIRED_FIELD,
             message=f"Missing required field: {field}",
             details=details,
+        )
+
+    @classmethod
+    def dependency_missing(
+        cls,
+        feature: str,
+        missing: str | list[str],
+        suggestion: str,
+    ) -> MemexError:
+        missing_list = [missing] if isinstance(missing, str) else list(missing)
+        missing_list = [m for m in missing_list if m]
+        missing_str = ", ".join(missing_list) if missing_list else "unknown"
+        return cls(
+            code=ErrorCode.DEPENDENCY_MISSING,
+            message=f"Optional dependency missing for {feature}: {missing_str}",
+            details={
+                "feature": feature,
+                "missing": missing_list,
+                "suggestion": suggestion,
+            },
         )
 
     @classmethod

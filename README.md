@@ -19,14 +19,21 @@ CLI-first knowledge base with hybrid search, typed relations, and static site pu
 # With uv (recommended)
 uv tool install memex-kb
 
+# Enable semantic search (optional heavier deps)
+uv tool install 'memex-kb[search]'
+
 # With pip
 pip install memex-kb
+
+# Enable semantic search (optional heavier deps)
+pip install 'memex-kb[search]'
 
 # Verify
 mx --version
 ```
 
-Semantic search is included. First run downloads the embedding model (~90MB).
+Keyword search ships by default. Semantic search is optional (to avoid heavyweight ML installs by default).
+If semantic search is missing, run `mx doctor` for an install hint.
 Requires Python 3.11+.
 
 ## Quick Start
@@ -35,7 +42,7 @@ Requires Python 3.11+.
 mx init                                    # Create kb/ and .kbconfig
 mx add --title="Setup" --tags="docs" \
        --category=guides --content="..."   # Add an entry
-mx search "setup"                          # Search
+mx search "setup"                          # Search (keyword; semantic if installed)
 mx get guides/setup.md                     # Read an entry
 ```
 

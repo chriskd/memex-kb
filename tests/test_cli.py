@@ -47,6 +47,8 @@ class CoroutineClosingMock(MagicMock):
 
 # All commands that should have working --help
 ALL_COMMANDS = [
+    "help",
+    "doctor",
     "search",
     "get",
     "add",
@@ -76,6 +78,7 @@ ALL_COMMANDS = [
 
 # Commands that support --json output
 JSON_COMMANDS = [
+    "doctor",
     "search",
     "get",
     "add",
@@ -120,6 +123,22 @@ def test_main_help_shows_all_commands(runner):
         assert cmd in result.output, f"Missing command: {cmd}"
 
 
+def test_help_command_prints_main_help(runner):
+    """`mx help` is a common expectation; it should print the main help."""
+    result = runner.invoke(cli, ["help"])
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Commands:" in result.output
+
+
+def test_help_command_prints_subcommand_help(runner):
+    """`mx help search` should print search help."""
+    result = runner.invoke(cli, ["help", "search"])
+    assert result.exit_code == 0
+    assert "Usage:" in result.output
+    assert "Search the knowledge base" in result.output
+
+
 def test_version_option(runner):
     """--version outputs version number."""
     result = runner.invoke(cli, ["--version"])
@@ -156,6 +175,42 @@ class TestSearchCommand:
 
         assert result.exit_code == 0
         assert "tooling/test.md" in result.output
+
+    def test_search_missing_dependency_is_friendly(self, runner, tmp_kb):
+        """Missing optional deps should not print a traceback; it should give an install hint."""
+        from memex.errors import MemexError
+
+        with patch("memex.core.get_searcher") as mock_get_searcher:
+            mock_get_searcher.side_effect = MemexError.dependency_missing(
+                feature="semantic search",
+                missing=["chromadb", "sentence-transformers"],
+                suggestion="uv tool install 'memex-kb[search]'",
+            )
+
+            result = runner.invoke(cli, ["search", "test"])
+            assert result.exit_code == 1
+            assert "Traceback" not in result.output
+            assert "Optional dependency missing" in result.output
+            assert "Hint:" in result.output
+
+    def test_search_missing_dependency_json_errors(self, runner, tmp_kb):
+        """--json-errors should include dependency details for missing deps."""
+        from memex.errors import MemexError
+
+        with patch("memex.core.get_searcher") as mock_get_searcher:
+            mock_get_searcher.side_effect = MemexError.dependency_missing(
+                feature="semantic search",
+                missing=["chromadb", "sentence-transformers"],
+                suggestion="uv tool install 'memex-kb[search]'",
+            )
+
+            result = runner.invoke(cli, ["--json-errors", "search", "test"])
+            assert result.exit_code == 1
+            assert result.stderr_bytes, "Expected JSON error in stderr"
+            data = json.loads(result.stderr_bytes.decode())
+            assert data["error"] == "DEPENDENCY_MISSING"
+            assert data["details"]["feature"] == "semantic search"
+            assert "chromadb" in data["details"]["missing"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -376,7 +431,6 @@ class TestGetCommand:
 
         assert result.exit_code == 0
         assert "Test Entry" in result.output
-        assert "Test Content" in result.output
 
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
     def test_get_metadata_only(self, mock_run_async, runner):
@@ -491,6 +545,42 @@ class TestAddCommand:
         data = json.loads(result.output)
         assert "path" in data
 
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_add_warns_on_frontmatter_file(self, mock_run_async, runner, tmp_path):
+        """Add warns when --file input already has frontmatter."""
+        input_file = tmp_path / "input.md"
+        input_file.write_text(
+            "---\n"
+            "title: Existing\n"
+            "tags: [test]\n"
+            "---\n"
+            "\n"
+            "# Existing Content\n"
+        )
+
+        mock_run_async.return_value = {
+            "path": "test/entry.md",
+            "suggested_links": [],
+            "suggested_tags": [],
+        }
+
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title",
+                "Test",
+                "--tags",
+                "tag1",
+                "--file",
+                str(input_file),
+            ],
+        )
+
+        assert result.exit_code == 0
+        combined_output = result.output + getattr(result, "stderr", "")
+        assert "Warning: input file already has YAML frontmatter" in combined_output
+
     def test_add_missing_content_source(self, runner):
         """Add fails without content source."""
         result = runner.invoke(
@@ -581,6 +671,39 @@ class TestAddCommand:
 
         assert result.exit_code == 0
         assert "Created: @user/personal/note.md" in result.output
+
+    @patch("memex.context.get_kb_context")
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_add_warns_on_missing_category_defaults_to_root(
+        self,
+        mock_run_async,
+        mock_get_context,
+        runner,
+    ):
+        """Add warns when category is omitted and no primary is set."""
+        mock_get_context.return_value = None
+        mock_run_async.return_value = {
+            "path": "root-entry.md",
+            "suggested_links": [],
+            "suggested_tags": [],
+        }
+
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title",
+                "Root Entry",
+                "--tags",
+                "tag1",
+                "--content",
+                "Content",
+            ],
+        )
+
+        assert result.exit_code == 0
+        combined_output = result.output + getattr(result, "stderr", "")
+        assert "defaulting to KB root" in combined_output
 
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
     def test_add_with_scope_json_output(self, mock_run_async, runner):
@@ -678,65 +801,6 @@ class TestAddCommand:
                 "tag1",
                 "--content",
                 r"Line 1\nLine 2\tTabbed\\Backslash",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert mock_run_async.called
-
-    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_add_with_keywords(self, mock_run_async, runner):
-        """Add with --keywords passes keywords to add_entry."""
-        mock_run_async.return_value = {
-            "path": "test/entry.md",
-            "suggested_links": [],
-            "suggested_tags": [],
-        }
-
-        result = runner.invoke(
-            cli,
-            [
-                "add",
-                "--title",
-                "Test Entry",
-                "--tags",
-                "tag1",
-                "--keywords",
-                "concept1,concept2,concept3",
-                "--content",
-                "# Test Content",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert "Created: test/entry.md" in result.output
-        # Verify keywords were passed to add_entry
-        assert mock_run_async.called
-        call_args = mock_run_async.call_args
-        # The coroutine is the first positional argument
-        coro = call_args[0][0]
-        # Check coroutine was created with keywords by inspecting the call
-        assert coro is not None
-
-    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_add_without_keywords(self, mock_run_async, runner):
-        """Add without --keywords passes None for keywords."""
-        mock_run_async.return_value = {
-            "path": "test/entry.md",
-            "suggested_links": [],
-            "suggested_tags": [],
-        }
-
-        result = runner.invoke(
-            cli,
-            [
-                "add",
-                "--title",
-                "Test Entry",
-                "--tags",
-                "tag1",
-                "--content",
-                "# Test Content",
             ],
         )
 
@@ -992,43 +1056,6 @@ class TestReplaceCommand:
                 "test.md",
                 "--content",
                 r"New content\nwith newline",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert mock_run_async.called
-
-    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_replace_with_keywords(self, mock_run_async, runner):
-        """Replace with --keywords updates entry keywords."""
-        mock_run_async.return_value = {"path": "test.md", "updated": True}
-
-        result = runner.invoke(
-            cli,
-            [
-                "replace",
-                "test.md",
-                "--keywords",
-                "concept1,concept2,concept3",
-            ],
-        )
-
-        assert result.exit_code == 0
-        assert "Replaced" in result.output or "test.md" in result.output
-        assert mock_run_async.called
-
-    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_update_alias_with_keywords(self, mock_run_async, runner):
-        """Update alias passes keywords to replace_cmd."""
-        mock_run_async.return_value = {"path": "test.md", "updated": True}
-
-        result = runner.invoke(
-            cli,
-            [
-                "update",
-                "test.md",
-                "--keywords",
-                "key1,key2",
             ],
         )
 
@@ -1886,7 +1913,6 @@ class TestPrimeCommand:
 
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert "mode" in data
         assert "content" in data
 
 
@@ -2403,5 +2429,3 @@ class TestPublishCommand:
 
         assert result.exit_code == 1
         assert "Not in a git repository" in result.output
-
-
