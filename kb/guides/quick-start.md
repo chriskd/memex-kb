@@ -22,6 +22,8 @@ mx health                               # Confirms basic KB health
 ```
 
 Optional check: `mx search "Hello KB"` to verify indexing.
+If `mx search` fails, run `mx doctor` for an install hint. If you see `No module named 'whoosh'`, install
+keyword search deps with `pip install whoosh-reloaded` (or reinstall `memex-kb`).
 
 ## 1. Set Up Your Knowledge Base
 
