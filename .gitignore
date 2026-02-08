@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 .venv/
+.venv*/
 venv/
 *.egg-info/
 dist/
@@ -23,6 +24,7 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+._*
 
 # Plugin local settings
 .claude/*.local.md

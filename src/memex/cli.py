@@ -289,6 +289,62 @@ def output(data, as_json: bool = False):
         click.echo(data)
 
 
+def _json_dumps(data: Any, *, compact: bool) -> str:
+    if compact:
+        return json.dumps(data, separators=(",", ":"), default=str)
+    return json.dumps(data, indent=2, default=str)
+
+
+def _emit_json(
+    payload: dict[str, Any],
+    *,
+    compact: bool,
+    max_bytes: int | None = None,
+) -> None:
+    """Emit JSON, optionally compact and best-effort bounded by max_bytes.
+
+    The bounding logic is intentionally conservative: it only truncates list-valued
+    fields commonly used by agent hooks ("entries", "recent_entries").
+    """
+    if max_bytes is not None and not compact:
+        raise UsageError("--max-bytes requires compact JSON output")
+
+    if max_bytes is None:
+        click.echo(_json_dumps(payload, compact=compact))
+        return
+
+    # Best-effort truncation for bounded hook output.
+    import copy
+
+    data = copy.deepcopy(payload)
+    dropped: dict[str, int] = {}
+
+    def _size() -> int:
+        return len(_json_dumps(data, compact=True).encode("utf-8"))
+
+    if _size() <= max_bytes:
+        click.echo(_json_dumps(data, compact=True))
+        return
+
+    for field in ("recent_entries", "entries"):
+        value = data.get(field)
+        if not isinstance(value, list) or not value:
+            continue
+        original_len = len(value)
+        while value and _size() > max_bytes:
+            value.pop()
+        if len(value) != original_len:
+            dropped[field] = original_len - len(value)
+
+    if dropped:
+        data["truncated"] = dropped
+
+    if _size() > max_bytes:
+        raise UsageError("--max-bytes is too small to fit the requested payload")
+
+    click.echo(_json_dumps(data, compact=True))
+
+
 def _handle_error(
     ctx: click.Context,
     error: Exception,
@@ -630,6 +686,22 @@ def _suggest_similar_paths(path: str, limit: int = 5) -> list[str]:
                 if len(matches) >= limit:
                     break
     return matches[:limit]
+
+
+def _require_kb_configured(ctx: click.Context, scope: str | None = None) -> None:
+    """Fail fast with friendly guidance when no KB is configured.
+
+    Many read-only commands can otherwise look like an empty KB on cold start.
+    """
+    from .config import ConfigurationError, get_kb_root, get_kb_root_by_scope
+
+    try:
+        if scope:
+            get_kb_root_by_scope(scope)
+        else:
+            get_kb_root()
+    except ConfigurationError as exc:
+        _handle_error(ctx, exc)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1101,7 +1173,31 @@ Use `[[path/to/entry.md|Display Text]]` for links.
 
 @cli.command()
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def prime(as_json: bool):
+@click.option(
+    "--compact",
+    is_flag=True,
+    help="Compact JSON output (omit large markdown content). Requires --json.",
+)
+@click.option(
+    "--max-entries",
+    type=int,
+    default=4,
+    show_default=True,
+    help="Maximum relevant entries to include.",
+)
+@click.option(
+    "--max-recent",
+    type=int,
+    default=5,
+    show_default=True,
+    help="Maximum recent entries to include.",
+)
+@click.option(
+    "--max-bytes",
+    type=int,
+    help="Best-effort output size bound for compact JSON (bytes). Requires --compact.",
+)
+def prime(as_json: bool, compact: bool, max_entries: int, max_recent: int, max_bytes: int | None):
     """Output agent workflow context for session start.
 
     Designed for Claude Code hooks (SessionStart, PreCompact) to prevent
@@ -1111,11 +1207,17 @@ def prime(as_json: bool):
     Examples:
       mx prime              # Output context
       mx prime --json       # Output as JSON
+      mx prime --json --compact  # Compact JSON for agent hooks
     """
     from .session_context import build_session_context
 
+    if compact and not as_json:
+        raise UsageError("--compact requires --json")
+    if max_bytes is not None and not compact:
+        raise UsageError("--max-bytes requires --compact")
+
     content = PRIME_OUTPUT
-    session_result = build_session_context()
+    session_result = build_session_context(max_entries=max_entries, recent_limit=max_recent)
     if session_result:
         content = session_result.content
 
@@ -1176,19 +1278,34 @@ def prime(as_json: bool):
         )
 
     if as_json:
-        payload: dict[str, Any] = {
-            "content": content,
-            "kb_root": kb_root_value,
-            "kb_scope": kb_scope_value,
-            "primary_category": primary_category_value,
-            "context_file": context_file_value,
-        }
-        if session_result:
-            payload["project"] = session_result.project
-            payload["entries"] = session_result.entries
-            payload["recent_entries"] = session_result.recent_entries
-            payload["cached"] = session_result.cached
-        output(payload, as_json=True)
+        if compact:
+            payload: dict[str, Any] = {
+                "kb_root": kb_root_value,
+                "kb_scope": kb_scope_value,
+                "primary_category": primary_category_value,
+                "context_file": context_file_value,
+                "missing_search_deps": missing,
+            }
+            if session_result:
+                payload["project"] = session_result.project
+                payload["entries"] = session_result.entries
+                payload["recent_entries"] = session_result.recent_entries
+                payload["cached"] = session_result.cached
+            _emit_json(payload, compact=True, max_bytes=max_bytes)
+        else:
+            payload = {
+                "content": content,
+                "kb_root": kb_root_value,
+                "kb_scope": kb_scope_value,
+                "primary_category": primary_category_value,
+                "context_file": context_file_value,
+            }
+            if session_result:
+                payload["project"] = session_result.project
+                payload["entries"] = session_result.entries
+                payload["recent_entries"] = session_result.recent_entries
+                payload["cached"] = session_result.cached
+            output(payload, as_json=True)
     else:
         click.echo(content)
 
@@ -1207,6 +1324,13 @@ def prime(as_json: bool):
     help="Maximum relevant entries to include.",
 )
 @click.option(
+    "--max-recent",
+    type=int,
+    default=5,
+    show_default=True,
+    help="Maximum recent entries to include.",
+)
+@click.option(
     "--install",
     is_flag=True,
     help="Update .claude/settings.json with mx session-context SessionStart hook",
@@ -1217,8 +1341,24 @@ def prime(as_json: bool):
     help="Custom path for Claude settings.json (implies --install).",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.option(
+    "--compact",
+    is_flag=True,
+    help="Compact JSON output (omit large markdown content). Requires --json.",
+)
+@click.option(
+    "--max-bytes",
+    type=int,
+    help="Best-effort output size bound for compact JSON (bytes). Requires --compact.",
+)
 def session_context_command(
-    max_entries: int, install: bool, install_path: Path | None, as_json: bool
+    max_entries: int,
+    max_recent: int,
+    install: bool,
+    install_path: Path | None,
+    as_json: bool,
+    compact: bool,
+    max_bytes: int | None,
 ):
     """Output dynamic project-relevant KB context for session hooks.
 
@@ -1229,6 +1369,11 @@ def session_context_command(
         default_settings_path,
         install_session_hook,
     )
+
+    if compact and not as_json:
+        raise UsageError("--compact requires --json")
+    if max_bytes is not None and not compact:
+        raise UsageError("--max-bytes requires --compact")
 
     if install or install_path:
         target = install_path or default_settings_path(Path.cwd())
@@ -1242,27 +1387,42 @@ def session_context_command(
             "command": "mx session-context",
         }
         if as_json:
-            output(payload, as_json=True)
+            if compact:
+                _emit_json(payload, compact=True, max_bytes=max_bytes)
+            else:
+                output(payload, as_json=True)
         else:
             click.echo(f"✓ Updated Claude settings at {installed_path}")
             click.echo('SessionStart hook set to: "mx session-context"')
         return
 
-    result = build_session_context(max_entries=max_entries)
+    result = build_session_context(max_entries=max_entries, recent_limit=max_recent)
     if not result:
         return
 
     if as_json:
-        output(
-            {
-                "project": result.project,
-                "entries": result.entries,
-                "recent_entries": result.recent_entries,
-                "content": result.content,
-                "cached": result.cached,
-            },
-            as_json=True,
-        )
+        if compact:
+            _emit_json(
+                {
+                    "project": result.project,
+                    "entries": result.entries,
+                    "recent_entries": result.recent_entries,
+                    "cached": result.cached,
+                },
+                compact=True,
+                max_bytes=max_bytes,
+            )
+        else:
+            output(
+                {
+                    "project": result.project,
+                    "entries": result.entries,
+                    "recent_entries": result.recent_entries,
+                    "content": result.content,
+                    "cached": result.cached,
+                },
+                as_json=True,
+            )
     else:
         click.echo(result.content)
 
@@ -1334,6 +1494,10 @@ def init(path: str | None, user: bool, force: bool, as_json: bool):
 
     # Create directory structure
     kb_path.mkdir(parents=True, exist_ok=True)
+
+    # Default write directory for new entries so mx add doesn't warn on a fresh KB.
+    default_primary = "inbox"
+    (kb_path / default_primary).mkdir(parents=True, exist_ok=True)
 
     # Create README with scope-appropriate content
     readme_path = kb_path / "README.md"
@@ -1425,8 +1589,11 @@ This keeps project-specific knowledge close to the code.
     if user:
         # User scope: config lives inside the KB directory
         config_path = kb_path / LOCAL_KB_CONFIG_FILENAME
-        config_content = """# User KB Configuration
+        config_content = f"""# User KB Configuration
 # This file marks this directory as your personal memex knowledge base
+
+# Default write directory for new entries (relative to KB root)
+primary: {default_primary}
 
 # Optional: default tags for entries created here
 # default_tags:
@@ -1455,12 +1622,12 @@ kb_path: ./{relative_kb_path}
 # default_tags:
 #   - {Path.cwd().name}
 
-# Optional: default write directory for new entries
-# primary: guides
+# Default write directory for new entries (relative to KB root)
+primary: {default_primary}
 
 # Optional: boost these paths in search (glob patterns)
 # boost_paths:
-#   - guides/*
+#   - {default_primary}/*
 #   - reference/*
 
 # Optional: exclude patterns from indexing (glob)
@@ -1833,6 +2000,7 @@ def get(ctx: click.Context, path: str | None, by_title: str | None, as_json: boo
       mx search - Search entries by query
       mx list   - List entries with optional filters
     """
+    from .config import ConfigurationError
     from .errors import MemexError
     from .core import find_entries_by_title, get_entry, get_similar_titles
 
@@ -1844,11 +2012,18 @@ def get(ctx: click.Context, path: str | None, by_title: str | None, as_json: boo
 
     # If --title is used, find the entry by title
     if by_title:
-        matches = run_async(find_entries_by_title(by_title))
+        try:
+            matches = run_async(find_entries_by_title(by_title))
+        except ConfigurationError as exc:
+            # Surface KB configuration guidance (no traceback, no generic fallback).
+            _handle_error(ctx, exc)
 
         if len(matches) == 0:
             # No exact match - show suggestions
-            suggestions = run_async(get_similar_titles(by_title))
+            try:
+                suggestions = run_async(get_similar_titles(by_title))
+            except ConfigurationError as exc:
+                _handle_error(ctx, exc)
             if ctx.obj and ctx.obj.get("json_errors"):
                 err = MemexError.entry_not_found(
                     by_title,
@@ -1886,6 +2061,9 @@ def get(ctx: click.Context, path: str | None, by_title: str | None, as_json: boo
 
     try:
         entry = run_async(get_entry(path=path))
+    except ConfigurationError as exc:
+        # Avoid misleading "Get failed." fallback; show standard KB guidance.
+        _handle_error(ctx, exc)
     except Exception as e:
         message = str(e)
         if "not found" in message.lower():
@@ -1955,7 +2133,9 @@ def get(ctx: click.Context, path: str | None, by_title: str | None, as_json: boo
 @click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to KB scope")
 @click.option("--graph", "full_graph", is_flag=True, help="Output full graph (JSON only)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def relations(
+    ctx: click.Context,
     path: str | None,
     depth: int,
     direction: str,
@@ -1968,6 +2148,7 @@ def relations(
     """Query the unified relations graph."""
     from .relations_graph import ensure_relations_graph, query_relations_graph
 
+    _require_kb_configured(ctx, scope=scope)
     if full_graph:
         if not as_json:
             click.echo("Use --json with --graph to output the full relations graph.", err=True)
@@ -2895,7 +3076,8 @@ def format_tree(tree_data: dict, prefix: str = "") -> str:
 @click.option("--depth", "-d", default=3, help="Max depth")
 @click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def tree(path: str, depth: int, scope: str | None, as_json: bool):
+@click.pass_context
+def tree(ctx: click.Context, path: str, depth: int, scope: str | None, as_json: bool):
     """Display knowledge base directory structure.
 
     \b
@@ -2906,6 +3088,7 @@ def tree(path: str, depth: int, scope: str | None, as_json: bool):
     """
     from .core import tree as core_tree
 
+    _require_kb_configured(ctx, scope=scope)
     result = run_async(core_tree(path=path, depth=depth, scope=scope))
 
     if as_json:
@@ -2929,7 +3112,9 @@ def tree(path: str, depth: int, scope: str | None, as_json: bool):
 @click.option("--full-titles", is_flag=True, help="Show full titles without truncation")
 @click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def list_entries(
+    ctx: click.Context,
     tag: str | None,
     category: str | None,
     limit: int,
@@ -2949,6 +3134,7 @@ def list_entries(
     from .core import get_valid_categories
     from .core import list_entries as core_list_entries
 
+    _require_kb_configured(ctx, scope=scope)
     try:
         result = run_async(core_list_entries(tag=tag, category=category, limit=limit, scope=scope))
     except ValueError as e:
@@ -2999,7 +3185,8 @@ def list_entries(
 @click.option("--limit", "-n", default=10, help="Max results")
 @click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def whats_new(days: int, limit: int, scope: str | None, as_json: bool):
+@click.pass_context
+def whats_new(ctx: click.Context, days: int, limit: int, scope: str | None, as_json: bool):
     """Show recently created or updated entries.
 
     \b
@@ -3010,6 +3197,7 @@ def whats_new(days: int, limit: int, scope: str | None, as_json: bool):
     """
     from .core import whats_new as core_whats_new
 
+    _require_kb_configured(ctx, scope=scope)
     result = run_async(core_whats_new(days=days, limit=limit, scope=scope))
 
     if as_json:

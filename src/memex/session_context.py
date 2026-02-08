@@ -20,7 +20,9 @@ from .parser import ParseError, parse_entry
 CACHE_DIR = Path("/tmp")
 CACHE_TTL_SECONDS = 3600  # 1 hour
 DEFAULT_MAX_ENTRIES = 4
-CACHE_VERSION = 3
+DEFAULT_RECENT_DAYS = 14
+DEFAULT_RECENT_LIMIT = 5
+CACHE_VERSION = 4
 
 
 @dataclass
@@ -32,13 +34,42 @@ class SessionContextResult:
     cached: bool = False
 
 
-def _get_cache_path(project_name: str, max_entries: int) -> Path:
-    safe_name = re.sub(r"[^\w\-]", "_", project_name)
-    return CACHE_DIR / f"memex-context-{safe_name}-{max_entries}-v{CACHE_VERSION}.json"
+def _stable_cache_token(value: str) -> str:
+    # Keep filenames short and stable without leaking full paths.
+    return re.sub(r"[^\w\-]", "_", value)[-80:]
 
 
-def _load_cached_context(project_name: str, max_entries: int) -> SessionContextResult | None:
-    cache_path = _get_cache_path(project_name, max_entries)
+def _get_cache_path(
+    project_name: str,
+    *,
+    kb_root: Path,
+    max_entries: int,
+    recent_limit: int,
+    recent_days: int,
+) -> Path:
+    safe_name = _stable_cache_token(project_name)
+    safe_kb = _stable_cache_token(str(kb_root.resolve()))
+    return (
+        CACHE_DIR
+        / f"memex-context-{safe_name}-{safe_kb}-{max_entries}-{recent_limit}-{recent_days}-v{CACHE_VERSION}.json"
+    )
+
+
+def _load_cached_context(
+    project_name: str,
+    *,
+    kb_root: Path,
+    max_entries: int,
+    recent_limit: int,
+    recent_days: int,
+) -> SessionContextResult | None:
+    cache_path = _get_cache_path(
+        project_name,
+        kb_root=kb_root,
+        max_entries=max_entries,
+        recent_limit=recent_limit,
+        recent_days=recent_days,
+    )
     if not cache_path.exists():
         return None
 
@@ -56,21 +87,6 @@ def _load_cached_context(project_name: str, max_entries: int) -> SessionContextR
         return None
 
     return None
-
-
-def _save_cached_context(result: SessionContextResult, max_entries: int) -> None:
-    cache_path = _get_cache_path(result.project, max_entries)
-    payload = {
-        "timestamp": time.time(),
-        "project": result.project,
-        "entries": result.entries,
-        "recent_entries": result.recent_entries,
-        "content": result.content,
-    }
-    try:
-        cache_path.write_text(json.dumps(payload))
-    except OSError:
-        pass
 
 
 def _get_git_remote(cwd: Path) -> str | None:
@@ -244,11 +260,11 @@ def _resolve_recent_scope() -> str | None:
     return None
 
 
-def _get_recent_entries(scope: str | None, limit: int = 5) -> list[dict]:
+def _get_recent_entries(scope: str | None, *, days: int, limit: int) -> list[dict]:
     from .core import whats_new as core_whats_new
 
     try:
-        return asyncio.run(core_whats_new(days=14, limit=limit, scope=scope))
+        return asyncio.run(core_whats_new(days=days, limit=limit, scope=scope))
     except Exception:
         return []
 
@@ -359,14 +375,15 @@ def _format_output(
     return "\n".join(lines)
 
 
-def build_session_context(*, max_entries: int = DEFAULT_MAX_ENTRIES) -> SessionContextResult | None:
+def build_session_context(
+    *,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
+    recent_limit: int = DEFAULT_RECENT_LIMIT,
+    recent_days: int = DEFAULT_RECENT_DAYS,
+) -> SessionContextResult | None:
     cwd = Path.cwd()
     context = get_kb_context()
     project_name = _resolve_project_name(cwd, context)
-
-    cached = _load_cached_context(project_name, max_entries)
-    if cached:
-        return cached
 
     try:
         kb_root = get_kb_root()
@@ -376,11 +393,21 @@ def build_session_context(*, max_entries: int = DEFAULT_MAX_ENTRIES) -> SessionC
     if not kb_root.exists():
         return None
 
+    cached = _load_cached_context(
+        project_name,
+        kb_root=kb_root,
+        max_entries=max_entries,
+        recent_limit=recent_limit,
+        recent_days=recent_days,
+    )
+    if cached:
+        return cached
+
     project_tokens = _get_project_tokens(project_name, cwd)
     entries = _scan_kb_entries(kb_root)
     relevant = _select_relevant_entries(entries, project_name, project_tokens, context, max_entries)
     scope = _resolve_recent_scope()
-    recent_entries = _get_recent_entries(scope)
+    recent_entries = _get_recent_entries(scope, days=recent_days, limit=recent_limit)
     content = _format_output(
         relevant,
         project_name,
@@ -397,7 +424,24 @@ def build_session_context(*, max_entries: int = DEFAULT_MAX_ENTRIES) -> SessionC
         content=content,
         cached=False,
     )
-    _save_cached_context(result, max_entries)
+    cache_path = _get_cache_path(
+        result.project,
+        kb_root=kb_root,
+        max_entries=max_entries,
+        recent_limit=recent_limit,
+        recent_days=recent_days,
+    )
+    payload = {
+        "timestamp": time.time(),
+        "project": result.project,
+        "entries": result.entries,
+        "recent_entries": result.recent_entries,
+        "content": result.content,
+    }
+    try:
+        cache_path.write_text(json.dumps(payload))
+    except OSError:
+        pass
     return result
 
 

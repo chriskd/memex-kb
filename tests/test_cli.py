@@ -412,6 +412,42 @@ Content B
 class TestGetCommand:
     """Tests for 'mx get' command."""
 
+    def test_get_no_kb_configured_no_generic_fallback(self, runner):
+        """Get surfaces ConfigurationError guidance and avoids generic 'Get failed.' fallback."""
+        from memex.config import ConfigurationError
+
+        with patch("memex.config.get_kb_root") as mock_get_kb_root:
+            mock_get_kb_root.side_effect = ConfigurationError(
+                "No knowledge base found. Options:\n"
+                "  1. Run 'mx init' to create a project KB at ./kb/\n"
+                "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
+                "  3. Set MEMEX_USER_KB_ROOT to an existing KB directory"
+            )
+
+            result = runner.invoke(cli, ["get", "test.md"])
+
+            assert result.exit_code == 1
+            assert "No knowledge base found" in result.output
+            assert "Get failed." not in result.output
+
+    def test_get_title_no_kb_configured_no_traceback(self, runner):
+        """Get --title without a KB should not print a traceback."""
+        from memex.config import ConfigurationError
+
+        with patch("memex.config.get_kb_root") as mock_get_kb_root:
+            mock_get_kb_root.side_effect = ConfigurationError(
+                "No knowledge base found. Options:\n"
+                "  1. Run 'mx init' to create a project KB at ./kb/\n"
+                "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
+                "  3. Set MEMEX_USER_KB_ROOT to an existing KB directory"
+            )
+
+            result = runner.invoke(cli, ["get", "--title", "Some Title"])
+
+            assert result.exit_code == 1
+            assert "Traceback" not in result.output
+            assert "No knowledge base found" in result.output
+
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
     def test_get_by_path(self, mock_run_async, runner):
         """Get reads entry by path."""
@@ -1245,9 +1281,11 @@ class TestDeleteCommand:
 class TestListCommand:
     """Tests for 'mx list' command."""
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_list_entries(self, mock_run_async, runner):
+    def test_list_entries(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """List shows entries."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = [
             {"path": "a.md", "title": "Entry A"},
             {"path": "b.md", "title": "Entry B"},
@@ -1259,9 +1297,11 @@ class TestListCommand:
         assert "a.md" in result.output
         assert "b.md" in result.output
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_list_no_entries(self, mock_run_async, runner):
+    def test_list_no_entries(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """List handles empty results."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = []
 
         result = runner.invoke(cli, ["list"])
@@ -1269,9 +1309,11 @@ class TestListCommand:
         assert result.exit_code == 0
         assert "No entries found" in result.output
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_list_json_output(self, mock_run_async, runner):
+    def test_list_json_output(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """List --json outputs valid JSON."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = [{"path": "a.md", "title": "A"}]
 
         result = runner.invoke(cli, ["list", "--json"])
@@ -1279,6 +1321,23 @@ class TestListCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert len(data) == 1
+
+    def test_list_no_kb_configured(self, runner):
+        """List shows friendly error when no KB configured."""
+        from memex.config import ConfigurationError
+
+        with patch("memex.config.get_kb_root") as mock_get_kb_root:
+            mock_get_kb_root.side_effect = ConfigurationError(
+                "No knowledge base found. Options:\n"
+                "  1. Run 'mx init' to create a project KB at ./kb/\n"
+                "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
+                "  3. Set MEMEX_USER_KB_ROOT to an existing KB directory"
+            )
+
+            result = runner.invoke(cli, ["list"])
+
+            assert result.exit_code == 1
+            assert "No knowledge base found" in result.output
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1289,9 +1348,11 @@ class TestListCommand:
 class TestTreeCommand:
     """Tests for 'mx tree' command."""
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_tree_shows_structure(self, mock_run_async, runner):
+    def test_tree_shows_structure(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """Tree displays directory structure."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = {
             "tree": {
                 "tooling": {
@@ -1309,9 +1370,11 @@ class TestTreeCommand:
         assert "tooling/" in result.output
         assert "1 directories, 1 files" in result.output
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_tree_json_output(self, mock_run_async, runner):
+    def test_tree_json_output(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """Tree --json outputs valid JSON."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = {
             "tree": {},
             "directories": 0,
@@ -1323,6 +1386,23 @@ class TestTreeCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "directories" in data
+
+    def test_tree_no_kb_configured(self, runner):
+        """Tree shows friendly error when no KB configured."""
+        from memex.config import ConfigurationError
+
+        with patch("memex.config.get_kb_root") as mock_get_kb_root:
+            mock_get_kb_root.side_effect = ConfigurationError(
+                "No knowledge base found. Options:\n"
+                "  1. Run 'mx init' to create a project KB at ./kb/\n"
+                "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
+                "  3. Set MEMEX_USER_KB_ROOT to an existing KB directory"
+            )
+
+            result = runner.invoke(cli, ["tree"])
+
+            assert result.exit_code == 1
+            assert "No knowledge base found" in result.output
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1650,9 +1730,11 @@ class TestInitCommand:
         assert "Initialized" in result.output
         assert "--local" not in result.output
         assert (tmp_path / "kb").exists()
+        assert (tmp_path / "kb" / "inbox").is_dir()
         assert (tmp_path / "kb" / "README.md").exists()
         # Verify .kbconfig was written to tmp_path, not project root
         assert (tmp_path / ".kbconfig").exists()
+        assert "primary: inbox" in (tmp_path / ".kbconfig").read_text()
 
         from memex.parser import parse_entry
 
@@ -1894,9 +1976,11 @@ ok
 class TestWhatsNewCommand:
     """Tests for 'mx whats-new' command."""
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_whats_new_shows_recent(self, mock_run_async, runner):
+    def test_whats_new_shows_recent(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """Whats-new lists recent entries."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = [
             {"path": "new.md", "title": "New Entry", "activity_date": "2024-01-20"},
         ]
@@ -1906,9 +1990,11 @@ class TestWhatsNewCommand:
         assert result.exit_code == 0
         assert "new.md" in result.output
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_whats_new_no_entries(self, mock_run_async, runner):
+    def test_whats_new_no_entries(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """Whats-new handles no recent entries."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = []
 
         result = runner.invoke(cli, ["whats-new"])
@@ -1916,9 +2002,11 @@ class TestWhatsNewCommand:
         assert result.exit_code == 0
         assert "No entries" in result.output
 
+    @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
-    def test_whats_new_json_output(self, mock_run_async, runner):
+    def test_whats_new_json_output(self, mock_run_async, mock_get_kb_root, runner, tmp_path):
         """Whats-new --json outputs valid JSON."""
+        mock_get_kb_root.return_value = tmp_path
         mock_run_async.return_value = [
             {"path": "new.md", "title": "New", "activity_date": "2024-01-20"}
         ]
@@ -1928,6 +2016,44 @@ class TestWhatsNewCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert len(data) == 1
+
+    def test_whats_new_no_kb_configured(self, runner):
+        """Whats-new shows friendly error when no KB configured."""
+        from memex.config import ConfigurationError
+
+        with patch("memex.config.get_kb_root") as mock_get_kb_root:
+            mock_get_kb_root.side_effect = ConfigurationError(
+                "No knowledge base found. Options:\n"
+                "  1. Run 'mx init' to create a project KB at ./kb/\n"
+                "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
+                "  3. Set MEMEX_USER_KB_ROOT to an existing KB directory"
+            )
+
+            result = runner.invoke(cli, ["whats-new"])
+
+            assert result.exit_code == 1
+            assert "No knowledge base found" in result.output
+
+
+class TestRelationsCommand:
+    """Tests for 'mx relations' command."""
+
+    def test_relations_no_kb_configured(self, runner):
+        """Relations shows friendly error when no KB configured."""
+        from memex.config import ConfigurationError
+
+        with patch("memex.config.get_kb_root") as mock_get_kb_root:
+            mock_get_kb_root.side_effect = ConfigurationError(
+                "No knowledge base found. Options:\n"
+                "  1. Run 'mx init' to create a project KB at ./kb/\n"
+                "  2. Run 'mx init --user' to create a personal KB at ~/.memex/kb/\n"
+                "  3. Set MEMEX_USER_KB_ROOT to an existing KB directory"
+            )
+
+            result = runner.invoke(cli, ["relations", "tooling/test.md"])
+
+            assert result.exit_code == 1
+            assert "No knowledge base found" in result.output
 
 
 # ─────────────────────────────────────────────────────────────────────────────
