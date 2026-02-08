@@ -15,15 +15,22 @@ Run these in order; each step confirms the previous one worked.
 
 ```bash
 mx init                                 # Creates KB + .kbconfig
-mx add --title="First Entry" --tags=docs --category=guides --content="Hello KB"
-mx list --limit=5                       # Confirms entry path
+mx add --title="First Entry" --tags=docs --category=guides --content="Hello KB"  # Confirms write path
+mx list --limit=5                       # Confirms entry exists (path printed)
 mx get guides/first-entry.md            # Confirms read path
-mx health                               # Confirms basic KB health
+mx health                               # Confirms basic KB health (warnings are OK early)
 ```
 
 Optional check: `mx search "Hello KB"` to verify indexing.
 If `mx search` fails, run `mx doctor` for an install hint. If you see `No module named 'whoosh'`, install
 keyword search deps with `pip install whoosh-reloaded` (or reinstall `memex-kb`).
+
+Optional: set a default category (so you can omit `--category` in `mx add`):
+
+```yaml
+# .kbconfig (project root)
+primary: guides
+```
 
 ## 1. Set Up Your Knowledge Base
 
@@ -112,6 +119,9 @@ Audits your KB for:
 - Index sync issues
 
 Orphans are entries with no incoming links yet. This is normal for new KBs; add links or use `mx suggest-links` when you have more entries.
+Quick fixes:
+- Create a simple index entry (e.g., `guides/index.md`) and link to key entries with `[[wikilinks]]`.
+- Add at least one link from an existing entry to each orphan (typed relations count too).
 
 ## Essential Commands
 

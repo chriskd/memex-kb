@@ -280,7 +280,13 @@ Checks for:
 - Stale content (>90 days)
 - Missing frontmatter
 
-Note: Orphans are normal in new KBs. Add links from other entries or use `mx suggest-links` to connect them.
+Orphans are entries with no incoming links (no `[[wikilinks]]` or typed relations pointing at them).
+This is normal in new KBs.
+
+Quick fixes:
+- Add an index/hub entry that links to everything important.
+- Add at least one link from an existing entry to each orphan.
+- Use `mx suggest-links path/to/entry.md` to find candidates to connect.
 
 ### mx relations-lint
 
@@ -386,6 +392,13 @@ mx context validate --json  # JSON output
 ```
 
 **Note:** `.kbconfig` is created by `mx init`.
+
+Common next step: set a default write directory so you can omit `--category` in `mx add`:
+
+```yaml
+# .kbconfig (project root)
+primary: guides
+```
 
 ## Automation Commands
 

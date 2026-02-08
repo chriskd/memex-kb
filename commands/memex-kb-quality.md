@@ -31,3 +31,13 @@ mx health --json    # JSON format for programmatic use
 - **Broken links**: `[[links]]` pointing to non-existent entries
 - **Stale content**: Entries not updated in a long time
 - **Empty directories**: Folders with no entries
+
+## Orphan Warnings (What To Do)
+
+Orphans are entries with no incoming links yet (no `[[wikilinks]]` or typed relations pointing at them).
+This is expected in a brand-new KB.
+
+Quick fixes:
+- Create an index/hub entry (e.g., `guides/index.md`) and link to key entries.
+- Add at least one link from an existing entry to each orphan.
+- Use `mx suggest-links path/to/entry.md` to find candidates to connect.

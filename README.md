@@ -44,11 +44,14 @@ Requires Python 3.11+.
 mx init                                    # Create kb/ and .kbconfig
 mx add --title="Setup" --tags="docs" \
        --category=guides --content="..."   # Add an entry
-mx search "setup"                          # Search (keyword; semantic if installed)
+mx list --limit=5                          # Confirm entry path
 mx get guides/setup.md                     # Read an entry
+mx health                                  # Audit KB (orphans are normal early)
+mx search "setup"                          # Optional: search (keyword; semantic if installed)
 ```
 
 Note: If `--category` is omitted and no `.kbconfig` `primary` exists, `mx add` defaults to the KB root (`.`) and prints a warning.
+Tip: Set `.kbconfig` `primary: guides` to make `--category` optional. Check scope/config with `mx info` and `mx context show`.
 
 ## Entries
 

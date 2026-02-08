@@ -2109,6 +2109,24 @@ class TestContextCommand:
         assert "projects/myapp" in result.output
 
     @patch("memex.context.get_kb_context")
+    def test_context_show_primary_unset_shows_hint(self, mock_get_context, runner):
+        """Context show includes next-step guidance when primary is unset."""
+        mock_ctx = MagicMock()
+        mock_ctx.source_file = Path("/project/.kbconfig")
+        mock_ctx.primary = None
+        mock_ctx.paths = []
+        mock_ctx.default_tags = []
+        mock_ctx.project = None
+        mock_get_context.return_value = mock_ctx
+
+        result = runner.invoke(cli, ["context", "show"])
+
+        assert result.exit_code == 0
+        assert "Primary:" in result.output
+        assert "Hint:" in result.output
+        assert "primary" in result.output
+
+    @patch("memex.context.get_kb_context")
     def test_context_show_not_found(self, mock_get_context, runner):
         """Context show handles missing context."""
         mock_get_context.return_value = None

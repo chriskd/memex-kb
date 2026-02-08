@@ -1004,20 +1004,20 @@ PRIME_OUTPUT = """# Memex Knowledge Base
 
 Search org knowledge before reinventing. Add discoveries for future agents.
 
-## Quick start (agents)
+## 5-minute onboarding (new KB)
 
-1) `mx info` - active KB paths + categories
-2) `mx context show` - .kbconfig (primary category + default tags)
-3) `mx add --title="..." --tags="..." --category=... --content="..."` - create entry
-   (omit --category if `.kbconfig` sets `primary`; otherwise defaults to KB root (.) with a warning)
-4) `mx list --limit=5` - confirm entry path
-   Optional: `mx search "query"` - verify indexing
-5) `mx get path/to/entry.md` - read entry
-6) `mx health` - audit (orphans = entries with no incoming links)
+1) `mx init` - create project KB in ./kb + .kbconfig
+   (or `mx init --user` for personal KB in ~/.memex/kb)
+2) `mx add --title="First Entry" --tags="docs" --category=guides --content="Hello KB"` - create entry
+   Tip: set `.kbconfig` `primary: guides` to make `--category` optional.
+3) `mx list --limit=5` - confirm entry path
+4) `mx get guides/first-entry.md` - confirm read path
+5) `mx health` - audit (orphans = entries with no incoming links; common early)
 
-If no KB is configured:
-  `mx init`        # project KB in ./kb
-  `mx init --user` # personal KB in ~/.memex/kb
+## Scope / config checks
+
+- `mx info` - active KB paths + categories
+- `mx context show` - project .kbconfig (primary + default tags)
 
 ## Required frontmatter
 
@@ -3070,9 +3070,12 @@ def health(ctx: click.Context, as_json: bool):
             for o in orphans[:10]:
                 click.echo(f"  - {o['path']}")
             click.echo(
-                "  Note: orphans have no incoming links yet. "
-                "This is common in new KBs; add links or use mx suggest-links."
+                "  Note: orphans have no incoming links yet (no [[wikilinks]] or relations pointing at them)."
             )
+            click.echo(
+                "  Fix: add a link from an index/hub entry, or use `mx suggest-links path/to/entry.md` to connect."
+            )
+            click.echo("  Ignore: it's fine in a new KB; rerun after you add a few links.")
         else:
             click.echo("\n✓ No orphaned entries")
 
@@ -3346,6 +3349,10 @@ def context_show(as_json: bool):
     else:
         click.echo(f"Context file: {ctx.source_file}")
         click.echo(f"Primary:      {ctx.primary or '(not set)'}")
+        if not ctx.primary:
+            click.echo(
+                "Hint: Set `primary` in .kbconfig (e.g., `primary: guides`) or pass `--category=...` to `mx add`."
+            )
         click.echo(f"Paths:        {', '.join(ctx.paths) if ctx.paths else '(none)'}")
         click.echo(f"Default tags: {', '.join(ctx.default_tags) if ctx.default_tags else '(none)'}")
         if ctx.project:
@@ -4050,6 +4057,10 @@ def info(ctx: click.Context, as_json: bool):
     click.echo(f"Primary:    {primary_category or '(not set)'}")
     if context_file:
         click.echo(f"Context:    {context_file}")
+    if not primary_category:
+        click.echo(
+            "Tip: Set `primary` in .kbconfig to choose a default directory for `mx add`. See: `mx context show`."
+        )
 
 
 @cli.command("config")

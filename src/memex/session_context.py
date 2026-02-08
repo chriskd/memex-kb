@@ -299,6 +299,7 @@ def _format_output(
     lines.extend(
         [
             "**5-minute flow:**",
+            "If you don't have a KB yet: `mx init` (project) or `mx init --user` (personal).",
             "1) `mx info` - active KB paths + categories",
             "2) `mx context show` - .kbconfig (primary category + default tags)",
             "3) `mx add --title=\"...\" --tags=\"...\" --category=... --content=\"...\"` - create entry",
@@ -306,7 +307,7 @@ def _format_output(
             "4) `mx list --limit=5` - confirm entry path",
             "   Optional: `mx search \"query\"` - verify indexing",
             "5) `mx get path/to/entry.md` - read entry",
-            "6) `mx health` - audit (orphans = entries with no incoming links)",
+            "6) `mx health` - audit (orphans = entries with no incoming links; normal early)",
             "",
             "**Required frontmatter:**",
             "- `title`",
@@ -317,6 +318,8 @@ def _format_output(
             "**Quick reference:**",
             "| Action | Command |",
             "|--------|---------|",
+            "| Inspect scope | `mx info` |",
+            "| Inspect .kbconfig | `mx context show` |",
             "| Search | `mx search <query>` |",
             "| Browse | `mx list` or `mx tree` |",
             "| Read entry | `mx get <path>` |",
