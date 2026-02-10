@@ -77,6 +77,26 @@ mx add --title="OAuth2 Setup" --tags="auth,patterns" --category=patterns \
   --content="..."
 ```
 
+### JSON Output vs JSON Errors (Important for Agents)
+
+Many `mx` subcommands support `--json`, which controls **success** output formatting.
+Errors are still human-readable text by default.
+
+For machine-parseable errors with stable error codes, use the global flag:
+
+```bash
+# JSON error on stderr (with {"error": "...", "code": 1234, "message": "..."}):
+mx --json-errors get nonexistent.md
+
+# Success JSON on stdout, JSON errors on stderr:
+mx --json-errors add --title="Entry" --tags="a,b" --content="..." --json
+```
+
+Notes:
+- `--json-errors` is global, so it is best placed before the subcommand (the CLI also accepts it
+  later and normalizes it).
+- `--json-errors` implies a quieter "machine mode" (warnings are suppressed) to keep stderr parseable.
+
 ## Codex CLI
 
 Codex can use memex via shell commands in AGENTS.md:

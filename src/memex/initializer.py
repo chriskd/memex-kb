@@ -63,9 +63,11 @@ def initialize_kb(
 
     kb_path.mkdir(parents=True, exist_ok=True)
 
-    # Create a convenience directory most KBs want, but do not set it as the default.
+    # Create a couple of common top-level categories so the first-run "prime" flow
+    # doesn't immediately require directory creation.
     default_primary = "inbox"
     (kb_path / default_primary).mkdir(parents=True, exist_ok=True)
+    (kb_path / "guides").mkdir(parents=True, exist_ok=True)
 
     # Create README entry with scope-appropriate content
     readme_path = kb_path / "README.md"
@@ -160,8 +162,8 @@ This keeps project-specific knowledge close to the code.
         config_content = f"""# User KB Configuration
 # This file marks this directory as your personal memex knowledge base
 
-# Optional: default write directory for new entries (relative to KB root)
-# primary: {default_primary}
+# Default write directory for new entries (relative to KB root)
+primary: {default_primary}
 
 # Optional: warn when `mx add` omits --category and no primary is set
 # (defaults to KB root (.)). Set to false to silence that warning.
@@ -192,8 +194,8 @@ kb_path: ./{relative_kb_path}
 # default_tags:
 #   - {cwd.name}
 
-# Optional: default write directory for new entries (relative to KB root)
-# primary: {default_primary}
+# Default write directory for new entries (relative to KB root)
+primary: {default_primary}
 
 # Optional: warn when `mx add` omits --category and no primary is set
 # (defaults to KB root (.)). Set to false to silence that warning.

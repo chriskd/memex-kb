@@ -664,6 +664,79 @@ class TestAddCommand:
         assert result.exit_code == 1
         assert "Must provide --content, --file, or --stdin" in result.output
 
+    def test_add_json_errors_invalid_title_is_validation_error(self, runner):
+        """--json-errors should classify title validation as VALIDATION_ERROR (not FILE_READ_ERROR)."""
+        result = runner.invoke(
+            cli,
+            [
+                "--json-errors",
+                "add",
+                "--title=",
+                "--tags=x",
+                "--content=y",
+            ],
+        )
+
+        assert result.exit_code == 1
+        raw = (
+            (result.stderr_bytes.decode() if getattr(result, "stderr_bytes", b"") else "")
+            or getattr(result, "stderr", "")
+            or result.output
+        )
+        data = json.loads(raw)
+        assert data["error"] == "VALIDATION_ERROR"
+        assert data["code"] == 1304
+        assert "Title must contain" in data["message"]
+
+    def test_add_json_errors_aggregates_multiple_validation_errors(self, runner):
+        """--json-errors should return all obvious validation errors in one response."""
+        result = runner.invoke(
+            cli,
+            [
+                "--json-errors",
+                "add",
+                "--title=",
+                "--tags=",
+                "--content=",
+            ],
+        )
+
+        assert result.exit_code == 1
+        raw = (
+            (result.stderr_bytes.decode() if getattr(result, "stderr_bytes", b"") else "")
+            or getattr(result, "stderr", "")
+            or result.output
+        )
+        data = json.loads(raw)
+        assert data["error"] == "VALIDATION_ERROR"
+        errs = data.get("details", {}).get("errors", [])
+        assert isinstance(errs, list)
+        fields = {e.get("field") for e in errs if isinstance(e, dict)}
+        assert {"title", "tags", "content"} <= fields
+
+    def test_add_new_category_prints_note(self, runner, tmp_kb):
+        """Creating a brand-new category directory should be informational, not alarming."""
+        # tmp_kb fixture sets MEMEX_USER_KB_ROOT; run the real add command.
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title",
+                "First Entry",
+                "--tags",
+                "docs",
+                "--category",
+                "guides",
+                "--content",
+                "Hello KB",
+            ],
+        )
+
+        assert result.exit_code == 0, (result.output + getattr(result, "stderr", ""))
+        combined = result.output + getattr(result, "stderr", "")
+        assert "Note: Category directory does not exist" in combined
+        assert "Created: guides/first-entry.md" in result.output
+
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
     def test_add_error_handling(self, mock_run_async, runner):
         """Add handles errors gracefully."""
@@ -1860,6 +1933,38 @@ class TestHealthCommand:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Onboard Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestOnboardCommand:
+    """Tests for 'mx onboard' command."""
+
+    def test_onboard_init_cwd_only_ignores_parent_kb(self, runner, tmp_path, monkeypatch):
+        """onboard --init --cwd-only should create a local KB even when a parent .kbconfig exists."""
+        parent = tmp_path / "parent"
+        parent.mkdir()
+        (parent / "kb").mkdir()
+        (parent / ".kbconfig").write_text("kb_path: ./kb\n", encoding="utf-8")
+
+        child = parent / "child"
+        child.mkdir()
+        monkeypatch.chdir(child)
+
+        # Ensure we don't accidentally discover a real user KB on this host.
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("MEMEX_USER_KB_ROOT", raising=False)
+
+        result = runner.invoke(cli, ["onboard", "--init", "--yes", "--cwd-only", "--json"])
+
+        assert result.exit_code == 0, (result.output + getattr(result, "stderr", ""))
+        data = json.loads(result.output)
+        assert data["kb_configured"] is True
+        assert (child / ".kbconfig").exists()
+        assert (child / "kb").is_dir()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Init Command Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1882,8 +1987,7 @@ class TestInitCommand:
         # Verify .kbconfig was written to tmp_path, not project root
         assert (tmp_path / ".kbconfig").exists()
         kbconfig = (tmp_path / ".kbconfig").read_text()
-        assert "# primary: inbox" in kbconfig
-        assert "\nprimary: inbox\n" not in kbconfig
+        assert "\nprimary: inbox\n" in kbconfig or kbconfig.rstrip().endswith("primary: inbox")
 
         from memex.parser import parse_entry
 
@@ -2507,6 +2611,30 @@ class TestPrimeCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "content" in data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Schema Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestSchemaCommand:
+    """Tests for 'mx schema' command."""
+
+    def test_schema_compact_includes_publish_and_option_metadata(self, runner):
+        """schema --compact should include all commands and structured option metadata."""
+        result = runner.invoke(cli, ["schema", "--compact"])
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert "commands" in data
+        assert "publish" in data["commands"]
+
+        publish = data["commands"]["publish"]
+        assert "--kb-root" in publish.get("options", [])
+        options_meta = publish.get("options_meta")
+        assert isinstance(options_meta, list)
+        assert any(o.get("name") == "--kb-root" for o in options_meta if isinstance(o, dict))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

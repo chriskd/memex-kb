@@ -21,14 +21,16 @@ def get_project_kb_root() -> Path | None:
         Path to project KB if found, None otherwise.
 
     Note:
-        Set MEMEX_SKIP_PROJECT_KB=1 to disable project KB discovery.
-        This is useful for testing to ensure isolation.
+        Set MEMEX_SKIP_PROJECT_KB=1 to disable project KB discovery entirely.
+        Set MEMEX_CONTEXT_NO_PARENT=1 to only consider a .kbconfig in the current
+        directory (no parent walk).
     """
-    # Allow tests to disable project KB discovery
+    # Allow tests to disable project KB discovery.
     if os.environ.get("MEMEX_SKIP_PROJECT_KB"):
         return None
 
-    project_config = _discover_project_config()
+    max_depth = 1 if os.environ.get("MEMEX_CONTEXT_NO_PARENT") else 10
+    project_config = _discover_project_config(max_depth=max_depth)
     if project_config:
         config_path, kb_path = project_config
         return kb_path
@@ -263,8 +265,9 @@ def _discover_project_config(
             try:
                 content = config_file.read_text(encoding="utf-8")
                 data = yaml.safe_load(content) or {}
-                if "kb_path" in data:
-                    kb_path = (current / data["kb_path"]).resolve()
+                kb_path_value = data.get("kb_path") or data.get("project_kb")
+                if kb_path_value:
+                    kb_path = (current / str(kb_path_value)).resolve()
                     if kb_path.exists() and kb_path.is_dir():
                         return (config_file, kb_path)
             except (OSError, yaml.YAMLError):
@@ -452,5 +455,3 @@ SEMANTIC_LINK_MIN_SCORE = 0.6
 # Maximum number of semantic links to create per entry.
 # Higher values create denser link graphs but may add noise.
 SEMANTIC_LINK_K = 5
-
-

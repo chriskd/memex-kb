@@ -5,7 +5,7 @@ A .kbconfig file tells the KB which paths are most relevant for that project.
 
 Example .kbconfig file:
     primary: projects/memex    # Default write directory
-    paths:                           # Boost these in search (supports globs)
+    boost_paths:                     # Boost these in search (supports globs)
       - projects/memex
       - guides/*
       - infrastructure/*
@@ -240,7 +240,8 @@ def discover_kb_context(start_dir: Path | None = None) -> KBContext | None:
     Discovery order:
     1. Walk up from start_dir (or cwd) looking for .kbconfig
     2. Stop at first config file found
-    Skips discovery entirely when MEMEX_SKIP_PROJECT_KB=1.
+    Set MEMEX_SKIP_PROJECT_KB=1 to disable discovery entirely.
+    Set MEMEX_CONTEXT_NO_PARENT=1 to only consider a .kbconfig in the current directory.
 
     Args:
         start_dir: Directory to start searching from. Defaults to cwd.
@@ -254,8 +255,9 @@ def discover_kb_context(start_dir: Path | None = None) -> KBContext | None:
     # Walk up from start_dir looking for .kbconfig
     current = (start_dir or Path.cwd()).resolve()
     depth = 0
+    max_depth = 1 if os.environ.get("MEMEX_CONTEXT_NO_PARENT") else MAX_CONTEXT_SEARCH_DEPTH
 
-    while depth < MAX_CONTEXT_SEARCH_DEPTH:
+    while depth < max_depth:
         kbconfig_file = current / ".kbconfig"
         if kbconfig_file.exists():
             context = _load_kbconfig_as_context(kbconfig_file)

@@ -14,22 +14,32 @@ Get productive with memex in 5 minutes.
 Run these in order; each step confirms the previous one worked.
 
 ```bash
-mx onboard --init --yes                 # Creates KB + .kbconfig (+ sample entry)
+mx onboard --init --yes                 # Creates KB + .kbconfig (+ sample entry; use --no-sample for blank KB)
 mx add --title="First Entry" --tags=docs --category=guides --content="Hello KB"  # Confirms write path
 mx list --limit=5                       # Confirms entry exists (path printed)
 mx get guides/first-entry.md            # Confirms read path
 mx health                               # Confirms basic KB health (warnings are OK early)
 ```
 
-Optional check: `mx search "Hello KB"` to verify indexing.
+Note: `mx` will walk up to parent directories to find an existing project `.kbconfig`.
+If you want to force a brand-new KB in the current directory (common in sandboxes), use:
+- `mx onboard --init --yes --cwd-only`
+- Or set `MEMEX_CONTEXT_NO_PARENT=1` for the session (prevents parent discovery).
+
+Optional checks:
+- `mx search "Hello KB"` to verify indexing (hybrid/keyword)
+- `mx search "Hello KB" --mode=semantic` to verify semantic search specifically
 If `mx search` fails, run `mx doctor` for an install hint. If you see `No module named 'whoosh'`, install
 keyword search deps with `pip install whoosh-reloaded` (or reinstall `memex-kb`).
 
-Optional: set a default category (so you can omit `--category` in `mx add`):
+Optional: choose your default write category (so you can omit `--category` in `mx add`):
+
+- `mx init` / `mx onboard --init` sets `primary: inbox` by default.
+- Set `primary: guides` if you prefer writing docs by default.
 
 ```yaml
 # .kbconfig (project root)
-primary: guides
+primary: guides  # or inbox
 ```
 
 ## 1. Set Up Your Knowledge Base

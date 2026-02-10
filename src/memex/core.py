@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .indexer import HybridSearcher
 
 from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
+from . import config as _config
 from .config import (
     DUPLICATE_DETECTION_LIMIT,
     DUPLICATE_DETECTION_MIN_SCORE,
@@ -31,12 +32,6 @@ from .config import (
     SEMANTIC_LINK_MIN_SCORE,
     SIMILAR_ENTRY_TAG_WEIGHT,
     TAG_SUGGESTION_MIN_SCORE,
-    get_kb_root,
-    get_kb_root_by_scope,
-    get_kb_roots_for_indexing,
-    get_project_kb_root,
-    get_user_kb_root,
-    parse_scoped_path,
 )
 from .context import KBContext, get_kb_context, get_kbconfig
 from .frontmatter import build_frontmatter, create_new_metadata, update_metadata_for_edit
@@ -58,6 +53,35 @@ from .parser import ParseError, extract_links, parse_entry, update_links_batch
 from .relation_types import CANONICAL_RELATION_TYPES, normalize_relation_type
 
 log = logging.getLogger(__name__)
+
+
+# NOTE: Avoid importing config functions by value.
+# Some tests patch `memex.config.get_kb_root` before importing this module. If we
+# bind those patched objects here, the patch can "leak" past its scope. These
+# wrappers resolve the config functions at call time, so patches behave as
+# intended and don't poison module globals.
+def get_kb_root() -> Path:
+    return _config.get_kb_root()
+
+
+def get_kb_root_by_scope(scope: str) -> Path:
+    return _config.get_kb_root_by_scope(scope)
+
+
+def get_kb_roots_for_indexing(scope: str | None = None) -> list[tuple[str | None, Path]]:
+    return _config.get_kb_roots_for_indexing(scope=scope)
+
+
+def get_project_kb_root() -> Path | None:
+    return _config.get_project_kb_root()
+
+
+def get_user_kb_root() -> Path | None:
+    return _config.get_user_kb_root()
+
+
+def parse_scoped_path(path: str) -> tuple[str | None, str]:
+    return _config.parse_scoped_path(path)
 
 
 def _ensure_aware(dt: datetime | None) -> datetime | None:
@@ -3317,7 +3341,14 @@ async def health(
         for dir_path in kb_root.rglob("*"):
             if not dir_path.is_dir():
                 continue
-            if dir_path.name.startswith(".") or dir_path.name.startswith("_"):
+            # Ignore hidden/internal directories (and anything inside them), e.g.:
+            # - .indices/ (search indices)
+            # - _drafts/  (user-excluded content)
+            try:
+                rel_parts = dir_path.relative_to(kb_root).parts
+            except Exception:  # pragma: no cover - defensive
+                rel_parts = ()
+            if any(part.startswith(".") or part.startswith("_") for part in rel_parts):
                 continue
 
             # Check if directory has any .md files

@@ -382,12 +382,18 @@ def _handle_error(
         ConfigurationError = None  # type: ignore[assignment]
 
     if ConfigurationError is not None and isinstance(error, ConfigurationError):
+        original_message = str(error)
+        message = "No knowledge base found" if "No knowledge base found" in original_message else original_message
         user_kb = str(Path.home() / ".memex" / "kb")
         suggestion_lines = [
-            "First run:",
+            "Recommended:",
             "  mx onboard --init --yes",
+            "",
+            "Alternatives:",
             "  mx init --sample",
             "  mx init --user --sample",
+            "",
+            "Diagnostics:",
             "  mx doctor",
             "",
             "Config locations:",
@@ -397,8 +403,9 @@ def _handle_error(
         ]
         error = MemexError(
             ErrorCode.KB_NOT_CONFIGURED,
-            str(error),
+            message,
             details={
+                "original_error": original_message,
                 "suggestion": "\n".join(suggestion_lines),
                 "suggested_commands": [
                     "mx onboard --init --yes",
@@ -475,6 +482,11 @@ def _infer_error_code(error: Exception, message: str):
     if "parse" in message_lower or "frontmatter" in message_lower:
         return ErrorCode.PARSE_ERROR
 
+    # ValueError/TypeError in CLI paths are overwhelmingly input validation issues.
+    # Prefer VALIDATION_ERROR over a generic file error for agent retry logic.
+    if isinstance(error, (ValueError, TypeError)):
+        return ErrorCode.VALIDATION_ERROR
+
     # Default to a generic file error
     return ErrorCode.FILE_READ_ERROR
 
@@ -517,7 +529,13 @@ def _format_missing_category_error(tags: list[str], message: str) -> str:
     return "\n".join(lines)
 
 
-def _handle_add_error(ctx: click.Context, error: Exception, tags: list[str]) -> None:
+def _handle_add_error(
+    ctx: click.Context,
+    error: Exception,
+    tags: list[str],
+    *,
+    title: str | None = None,
+) -> None:
     """Handle errors from add/quick-add with special category error formatting.
 
     Supports --json-errors output while preserving the category error guidance
@@ -527,6 +545,48 @@ def _handle_add_error(ctx: click.Context, error: Exception, tags: list[str]) -> 
 
     message = str(error)
     json_errors = ctx.obj.get("json_errors", False) if ctx.obj else False
+
+    # Entry already exists: suggest the next best command (append/replace) instead of a dead-end.
+    if message.startswith("Entry already exists at "):
+        from .errors import ErrorCode, MemexError
+
+        rel_path = message.split("Entry already exists at ", 1)[1].strip()
+        # Keep suggested commands conservative and copy-pastable.
+        suggested_commands: list[str] = []
+        if title:
+            suggested_commands.append(f'mx append "{title}" --content="..."')
+        suggested_commands.extend(
+            [
+                f"mx get {rel_path}",
+                f'mx replace {rel_path} --content="..."',
+            ]
+        )
+
+        hint_lines = [
+            "Next actions:",
+            *(f"  {cmd}" for cmd in suggested_commands),
+            "  (Or choose a different --title to create a distinct entry.)",
+        ]
+
+        if json_errors:
+            click.echo(
+                MemexError(
+                    ErrorCode.ENTRY_EXISTS,
+                    f"Entry already exists at {rel_path}",
+                    details={
+                        "path": rel_path,
+                        "suggestion": "\n".join(hint_lines),
+                        "suggested_commands": suggested_commands,
+                    },
+                ).to_json(),
+                err=True,
+            )
+        else:
+            click.echo(f"Error: Entry already exists at {rel_path}", err=True)
+            click.echo(f"Hint: {hint_lines[0]}", err=True)
+            for line in hint_lines[1:]:
+                click.echo(line, err=True)
+        sys.exit(1)
 
     # Special handling for category errors
     if "Either 'category' or 'directory' must be provided" in message:
@@ -880,10 +940,14 @@ def _output_status(
     else:
         lines.append("KB Root: NOT CONFIGURED")
         lines.append("")
-        lines.append("First run:")
+        lines.append("Recommended:")
         lines.append("  mx onboard --init --yes")
+        lines.append("")
+        lines.append("Alternatives:")
         lines.append("  mx init --sample        # project: ./kb + ./.kbconfig")
         lines.append("  mx init --user --sample # user: ~/.memex/kb")
+        lines.append("")
+        lines.append("Diagnostics:")
         lines.append("  mx doctor               # deps + install hints")
         lines.append("")
         lines.append("Config locations:")
@@ -1051,10 +1115,34 @@ def cli(ctx: click.Context, json_errors: bool, quiet: bool):
     # Store options in context for subcommands to access
     ctx.ensure_object(dict)
     ctx.obj["json_errors"] = json_errors
-    ctx.obj["quiet"] = quiet
+    # Treat --json-errors as a "machine mode": keep stderr parseable by suppressing warnings.
+    effective_quiet = quiet or json_errors
+    ctx.obj["quiet"] = effective_quiet
 
-    if quiet:
+    # Guard against a common (but currently unsupported) assumption that MEMEX_HOME isolates the KB.
+    if os.environ.get("MEMEX_HOME") and not effective_quiet:
+        click.echo(
+            "Note: MEMEX_HOME is not used by mx. For isolation, use: mx onboard --init --yes --cwd-only "
+            "(or set MEMEX_CONTEXT_NO_PARENT=1), or point explicitly with MEMEX_USER_KB_ROOT.",
+            err=True,
+        )
+
+    if effective_quiet:
+        # Avoid leaking quiet mode across multiple CLI invocations in the same process
+        # (pytest, embedded uses). Click will close the context at the end of each
+        # invocation, so we can restore log levels there.
+        memex_logger = logging.getLogger("memex")
+        prev_logger_level = memex_logger.level
+        prev_handler_levels = [h.level for h in memex_logger.handlers]
+
         set_quiet_mode(True)
+
+        def _restore_logging_levels() -> None:
+            memex_logger.setLevel(prev_logger_level)
+            for handler, prev_level in zip(memex_logger.handlers, prev_handler_levels):
+                handler.setLevel(prev_level)
+
+        ctx.call_on_close(_restore_logging_levels)
 
     # Show status when no subcommand is provided
     if ctx.invoked_subcommand is None:
@@ -1129,8 +1217,10 @@ def doctor(ctx: click.Context, as_json: bool):
     click.echo(f"kb:      {kb_root if kb_configured else '(not configured)'}")
     if not kb_configured:
         click.echo("")
-        click.echo("First run:")
+        click.echo("Recommended:")
         click.echo("  mx onboard --init --yes")
+        click.echo("")
+        click.echo("Alternatives:")
         click.echo("  mx init --sample")
         click.echo("  mx init --user --sample")
     click.echo("")
@@ -1149,9 +1239,19 @@ def doctor(ctx: click.Context, as_json: bool):
     "--init",
     "do_init",
     is_flag=True,
-    help="If no KB is configured, initialize one (project by default; includes a sample entry).",
+    help="If no KB is configured, initialize one (project by default).",
 )
 @click.option("--user", is_flag=True, help="When initializing, create a user KB at ~/.memex/kb/")
+@click.option(
+    "--sample/--no-sample",
+    default=True,
+    help="When initializing, create a small sample entry under inbox/ (recommended for first run).",
+)
+@click.option(
+    "--cwd-only",
+    is_flag=True,
+    help="Only consider a .kbconfig in the current directory (ignore parent/user KBs). Useful for sandboxes.",
+)
 @click.option(
     "--yes",
     "-y",
@@ -1160,7 +1260,15 @@ def doctor(ctx: click.Context, as_json: bool):
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def onboard(ctx: click.Context, do_init: bool, user: bool, yes: bool, as_json: bool):
+def onboard(
+    ctx: click.Context,
+    do_init: bool,
+    user: bool,
+    sample: bool,
+    cwd_only: bool,
+    yes: bool,
+    as_json: bool,
+):
     """Guided setup check for first-time mx users/agents.
 
     This command does not integrate with any external apps (e.g. tickets). It only inspects
@@ -1184,10 +1292,21 @@ def onboard(ctx: click.Context, do_init: bool, user: bool, yes: bool, as_json: b
     init_result: dict[str, Any] | None = None
     kb_error: Exception | None = None
 
-    try:
-        kb_root = get_kb_root()
-    except ConfigurationError as exc:
-        kb_error = exc
+    if cwd_only:
+        from .config import _discover_project_config
+
+        project_cfg = _discover_project_config(start_dir=Path.cwd(), max_depth=1)
+        if project_cfg:
+            _config_path, kb_root = project_cfg
+        else:
+            kb_error = ConfigurationError(
+                "No knowledge base found in the current directory (cwd-only mode)."
+            )
+    else:
+        try:
+            kb_root = get_kb_root()
+        except ConfigurationError as exc:
+            kb_error = exc
 
     if kb_root is None and do_init:
         # For non-interactive invocations (common for agents), require explicit confirmation.
@@ -1210,7 +1329,7 @@ def onboard(ctx: click.Context, do_init: bool, user: bool, yes: bool, as_json: b
                 sys.exit(2)
 
         try:
-            res = initialize_kb(cwd=Path.cwd(), path=None, user=user, force=False, sample=True)
+            res = initialize_kb(cwd=Path.cwd(), path=None, user=user, force=False, sample=sample)
             init_result = {
                 "created": str(res.kb_path),
                 "config": str(res.config_path),
@@ -1226,18 +1345,32 @@ def onboard(ctx: click.Context, do_init: bool, user: bool, yes: bool, as_json: b
             _handle_error(ctx, exc, fallback_message=str(exc), exit_code=1)
 
     if kb_root is None:
-        suggested = [
-            "mx onboard --init --yes",
+        recommended_command = "mx onboard --init --yes"
+        alternative_commands = [
             "mx init --sample",
             "mx init --user --sample",
+        ]
+        diagnostic_commands = [
             "mx doctor",
+        ]
+        extra_commands = [
             "mx prime",
+        ]
+        suggested = [
+            recommended_command,
+            *alternative_commands,
+            *diagnostic_commands,
+            *extra_commands,
         ]
         if as_json:
             output(
                 {
                     "kb_configured": False,
                     "deps": deps,
+                    "recommended_command": recommended_command,
+                    "alternative_commands": alternative_commands,
+                    "diagnostic_commands": diagnostic_commands,
+                    "extra_commands": extra_commands,
                     "suggested_commands": suggested,
                     "error": str(kb_error) if kb_error else "No KB configured",
                 },
@@ -1250,8 +1383,19 @@ def onboard(ctx: click.Context, do_init: bool, user: bool, yes: bool, as_json: b
             if kb_error:
                 click.echo(f"Reason: {kb_error}")
             click.echo("")
-            click.echo("Next:")
-            for cmd in suggested:
+            click.echo("Recommended:")
+            click.echo(f"  {recommended_command}")
+            click.echo("")
+            click.echo("Alternatives:")
+            for cmd in alternative_commands:
+                click.echo(f"  {cmd}")
+            click.echo("")
+            click.echo("Diagnostics:")
+            for cmd in diagnostic_commands:
+                click.echo(f"  {cmd}")
+            click.echo("")
+            click.echo("Also useful:")
+            for cmd in extra_commands:
                 click.echo(f"  {cmd}")
         sys.exit(2)
 
@@ -1338,9 +1482,11 @@ Search org knowledge before reinventing. Add discoveries for future agents.
 ## 5-minute onboarding (new KB)
 
 1) `mx onboard --init --yes` - guided setup + init if missing (recommended for agents)
+   (Tip: add `--no-sample` if you want a blank KB with no sample entries.)
    (or `mx init --sample` / `mx init --user --sample`)
 2) `mx add --title="First Entry" --tags="docs" --category=guides --content="Hello KB"` - create entry
-   Tip: set `.kbconfig` `primary: guides` to make `--category` optional.
+   Tip: `mx init`/`mx onboard --init` sets `primary: inbox` by default. Change it to `guides`
+        if you want docs to be the default write location.
 3) `mx list --limit=5` - confirm entry path
 4) `mx get guides/first-entry.md` - confirm read path
 5) `mx health` - audit (orphans = entries with no incoming links; common early)
@@ -1527,15 +1673,30 @@ def prime(as_json: bool, compact: bool, max_entries: int, max_recent: int, max_b
         "chromadb": importlib.util.find_spec("chromadb") is not None,
         "sentence_transformers": importlib.util.find_spec("sentence_transformers") is not None,
     }
-    missing = [k for k, ok in deps.items() if not ok]
+    missing_keyword = ["whoosh"] if not deps["whoosh"] else []
+    missing_semantic = [
+        name
+        for name, ok in (("chromadb", deps["chromadb"]), ("sentence_transformers", deps["sentence_transformers"]))
+        if not ok
+    ]
+    missing = missing_keyword + missing_semantic
     if missing:
-        content = (
-            content
-            + "\n\n## Search Dependencies\n\n"
-            + f"Search deps are missing ({', '.join(missing)}).\n"
-            + "Fallback: use `mx list --tags=<tag>`, `mx categories`, and `mx tree`.\n"
-            + "Install: uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'\n"
-        )
+        content += "\n\n## Search Dependencies\n\n"
+        if missing_semantic and not missing_keyword:
+            content += f"Semantic search deps are missing ({', '.join(missing_semantic)}).\n"
+            content += "Keyword search still works; hybrid search falls back to keyword-only.\n"
+            content += 'Tip: `mx search "query"` or `mx search "query" --mode=keyword`.\n'
+            content += "Install: uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'\n"
+        else:
+            content += f"Search deps are missing ({', '.join(missing)}).\n"
+            content += "Fallback: use `mx list --tags=<tag>`, `mx categories`, and `mx tree`.\n"
+            if missing_keyword and not missing_semantic:
+                content += (
+                    "Install: pip install whoosh-reloaded (or reinstall memex-kb), "
+                    "or install the full extra: uv tool install 'memex-kb[search]' (recommended)\n"
+                )
+            else:
+                content += "Install: uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'\n"
 
     if as_json:
         if compact:
@@ -2111,6 +2272,8 @@ def get(ctx: click.Context, path: str | None, by_title: str | None, as_json: boo
     \b
     Examples:
       mx get guides/quick-start.md
+      mx get @project/guides/quick-start.md
+      mx get @user/inbox/first-task.md
       mx get guides/quick-start.md --json
       mx get guides/quick-start.md --metadata
       mx get --title="Docker Guide"
@@ -2632,42 +2795,84 @@ def add(
     """
     from .context import get_kb_context
     from .config import get_kb_root, get_kb_root_by_scope
-    from .core import add_entry
+    from .core import add_entry, slugify
     from .errors import MemexError
     from .models import SemanticLink
 
     local_warnings: list[str] = []
     metadata_overrides: dict[str, Any] | None = None
+    quiet = ctx.obj.get("quiet", False) if ctx.obj else False
+    json_errors = ctx.obj.get("json_errors", False) if ctx.obj else False
 
-    # Validate mutual exclusivity of content sources
+    # Validate inputs (aggregate common failures so agents can fix in one pass).
+    validation_errors: list[dict[str, str]] = []
+
+    if not slugify(title):
+        validation_errors.append(
+            {
+                "field": "title",
+                "message": "Title must contain at least one alphanumeric character",
+            }
+        )
+
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    if not tag_list:
+        validation_errors.append(
+            {
+                "field": "tags",
+                "message": "At least one non-empty tag is required",
+            }
+        )
+
     sources = sum([bool(content), bool(file_path), stdin])
     if sources > 1:
-        _handle_error(
-            ctx,
-            MemexError.validation_error("Only one of --content, --file, or --stdin can be used"),
+        validation_errors.append(
+            {
+                "field": "content",
+                "message": "Only one of --content, --file, or --stdin can be used",
+            }
         )
     if sources == 0:
-        _handle_error(ctx, MemexError.validation_error("Must provide --content, --file, or --stdin"))
+        validation_errors.append(
+            {
+                "field": "content",
+                "message": "Must provide --content, --file, or --stdin",
+            }
+        )
+
+    if validation_errors:
+        if len(validation_errors) == 1:
+            message = validation_errors[0]["message"]
+        else:
+            message = "Validation errors:\n" + "\n".join(
+                f"- {e['field']}: {e['message']}" for e in validation_errors
+            )
+        _handle_error(
+            ctx,
+            MemexError.validation_error(message, details={"errors": validation_errors}),
+        )
 
     # Resolve content source
     if stdin:
         raw = sys.stdin.read()
         had_frontmatter, metadata_overrides, content = _extract_input_frontmatter_overrides(raw)
         if had_frontmatter:
-            click.echo(
-                "Warning: input already has YAML frontmatter; mx add will merge optional fields "
-                "(e.g., description/status/aliases) and avoid duplicating frontmatter.",
-                err=True,
-            )
+            if not quiet and not json_errors:
+                click.echo(
+                    "Warning: input already has YAML frontmatter; mx add will merge optional fields "
+                    "(e.g., description/status/aliases) and avoid duplicating frontmatter.",
+                    err=True,
+                )
     elif file_path:
         raw = Path(file_path).read_text()
         had_frontmatter, metadata_overrides, content = _extract_input_frontmatter_overrides(raw)
         if had_frontmatter:
-            click.echo(
-                "Warning: input file already has YAML frontmatter; mx add will merge optional fields "
-                "(e.g., description/status/aliases) and avoid duplicating frontmatter.",
-                err=True,
-            )
+            if not quiet and not json_errors:
+                click.echo(
+                    "Warning: input file already has YAML frontmatter; mx add will merge optional fields "
+                    "(e.g., description/status/aliases) and avoid duplicating frontmatter.",
+                    err=True,
+                )
     elif content:
         # Decode escape sequences in --content (e.g., \n -> newline)
         raw = decode_escape_sequences(content)
@@ -2675,8 +2880,6 @@ def add(
 
     # Content is guaranteed to be set by one of the branches above (validated earlier)
     assert content is not None, "content must be set by this point"
-
-    tag_list = [t.strip() for t in tags.split(",")]
     context = get_kb_context()
 
     kb_root: Path | None = None
@@ -2690,14 +2893,30 @@ def add(
     if category and category not in (".", "./") and kb_root is not None:
         target_dir = kb_root / category
         if not target_dir.exists():
-            warning = (
-                f"Category directory does not exist and will be created: {category!r}. "
-                "Tip: run 'mx categories' to see existing categories."
+            categories_hint = ""
+            try:
+                categories = sorted(
+                    d.name
+                    for d in kb_root.iterdir()
+                    if d.is_dir() and not d.name.startswith("_") and not d.name.startswith(".")
+                )
+                if categories:
+                    shown = ", ".join(categories[:8])
+                    extra = f" (+{len(categories) - 8} more)" if len(categories) > 8 else ""
+                    categories_hint = f" Existing categories: {shown}{extra}."
+            except Exception:
+                categories_hint = ""
+
+            note = (
+                f"Category directory does not exist; it will be created: {category!r}. "
+                "If this was a typo, run 'mx categories' to see existing categories."
+                + categories_hint
             )
             if as_json:
-                local_warnings.append(warning)
+                local_warnings.append(note)
             else:
-                click.echo(f"Warning: {warning}", err=True)
+                if not quiet and not json_errors:
+                    click.echo(f"Note: {note}", err=True)
 
     if (
         not category
@@ -2730,7 +2949,8 @@ def add(
         if as_json:
             local_warnings.append(warning)
         else:
-            click.echo(f"Warning: {warning}", err=True)
+            if not quiet and not json_errors:
+                click.echo(f"Warning: {warning}", err=True)
 
     # Parse semantic links JSON if provided
     semantic_links: list[SemanticLink] | None = None
@@ -2787,7 +3007,7 @@ def add(
             )
         )
     except Exception as e:
-        _handle_add_error(ctx, e, tag_list)
+        _handle_add_error(ctx, e, tag_list, title=title)
 
     core_warnings: list[str] = []
     if isinstance(result, dict) and isinstance(result.get("warnings"), list):
@@ -2803,8 +3023,7 @@ def add(
             result["scope"] = scope
         output(result, as_json=True)
     else:
-        quiet = ctx.obj.get("quiet", False) if ctx.obj else False
-        if combined_warnings and not quiet:
+        if combined_warnings and not quiet and not json_errors:
             for w in combined_warnings:
                 click.echo(f"Warning: {w}", err=True)
 
@@ -3485,6 +3704,9 @@ def health(ctx: click.Context, as_json: bool):
                 "  Note: orphans have no incoming links yet (no [[wikilinks]] or relations pointing at them)."
             )
             click.echo(
+                "        (semantic_links are suggestions and don't count until you add real links/relations.)"
+            )
+            click.echo(
                 "  Fix: add a link from an index/hub entry, or use `mx suggest-links path/to/entry.md` to connect."
             )
             click.echo("  Ignore: it's fine in a new KB; rerun after you add a few links.")
@@ -3710,7 +3932,7 @@ def context(ctx):
     The .kbconfig file configures KB behavior for a project:
     - primary: Default directory for new entries
     - warn_on_implicit_category: Warn when mx add omits --category and no primary is set
-    - paths: Boost these paths in search results
+    - boost_paths: Boost these paths in search results
     - default_tags: Suggested tags for new entries
 
     \b
@@ -4380,13 +4602,126 @@ def info(ctx: click.Context, show_errors: bool, max_errors: int, as_json: bool):
     from .core import get_valid_categories
     from .parser import ParseError, parse_entry
 
+    primary_kb: Path | None = None
+    index_root: Path | None = None
+    kb_error: Exception | None = None
     try:
         primary_kb = get_kb_root()
         index_root = get_index_root()
     except ConfigurationError as exc:
-        _handle_error(ctx, exc)
+        # Unlike most commands, `mx info` is a status/probing command. Treat "no KB"
+        # as a first-class state instead of a hard error (helps agent pipelines).
+        kb_error = exc
+        primary_kb = None
+        # Best-effort: show explicitly configured index root (if any).
+        env_index_root = os.environ.get("MEMEX_INDEX_ROOT")
+        if env_index_root:
+            try:
+                index_root = Path(env_index_root).expanduser()
+            except Exception:
+                index_root = None
+
+    if primary_kb is None:
+        deps = {
+            "whoosh": importlib.util.find_spec("whoosh") is not None,
+            "chromadb": importlib.util.find_spec("chromadb") is not None,
+            "sentence_transformers": importlib.util.find_spec("sentence_transformers") is not None,
+        }
+        keyword_available = deps["whoosh"]
+        semantic_available = deps["chromadb"] and deps["sentence_transformers"]
+        missing_search_deps = [
+            name
+            for name, ok in (
+                ("chromadb", deps["chromadb"]),
+                ("sentence_transformers", deps["sentence_transformers"]),
+            )
+            if not ok
+        ]
+        install_hint = "uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'"
+
+        user_kb = str(Path.home() / ".memex" / "kb")
+        recommended_command = "mx onboard --init --yes"
+        alternative_commands = [
+            "mx init --sample",
+            "mx init --user --sample",
+        ]
+        diagnostic_commands = [
+            "mx doctor",
+        ]
+        suggested_commands = [
+            recommended_command,
+            *alternative_commands,
+            *diagnostic_commands,
+        ]
+        payload = {
+            "kb_configured": False,
+            "error": str(kb_error) if kb_error else "No knowledge base found",
+            "primary_kb": None,
+            "primary_scope": None,
+            "index_root": str(index_root) if index_root else None,
+            "kbs": [],
+            "total_entries": 0,
+            "categories": [],
+            "primary_category": None,
+            "context_file": None,
+            "search": {
+                "keyword_available": keyword_available,
+                "semantic_available": semantic_available,
+                "missing_search_deps": missing_search_deps,
+                "install_hint": None if semantic_available else install_hint,
+            },
+            "parse_errors": [],
+            "parse_errors_truncated": False,
+            "recommended_command": recommended_command,
+            "alternative_commands": alternative_commands,
+            "diagnostic_commands": diagnostic_commands,
+            "suggested_commands": suggested_commands,
+            "config_locations": {
+                "project": {"kb": "./kb", "config": "./.kbconfig"},
+                "user": {"kb": user_kb, "config": f"{user_kb}/.kbconfig"},
+                "env": {"MEMEX_USER_KB_ROOT": "/path/to/kb"},
+            },
+        }
+
+        if as_json:
+            output(payload, as_json=True)
+            return
+
+        click.echo("Memex Info")
+        click.echo("=" * 40)
+        click.echo("KB: (not configured)")
+        if kb_error:
+            click.echo(f"Reason: {kb_error}")
+        click.echo("")
+        click.echo(
+            "Search: keyword "
+            + ("OK" if keyword_available else "MISSING")
+            + ", semantic "
+            + ("OK" if semantic_available else f"MISSING ({', '.join(missing_search_deps)})")
+        )
+        if not semantic_available:
+            click.echo(f"Tip: Install semantic deps: {install_hint}")
+        click.echo("")
+        click.echo("Config locations:")
+        click.echo("  project: ./.kbconfig + ./kb/")
+        click.echo(f"  user:    {user_kb}/.kbconfig")
+        click.echo("  env:     MEMEX_USER_KB_ROOT=/path/to/kb")
+        click.echo("")
+        click.echo("Recommended:")
+        click.echo(f"  {recommended_command}")
+        click.echo("")
+        click.echo("Alternatives:")
+        for cmd in alternative_commands:
+            click.echo(f"  {cmd}")
+        click.echo("")
+        click.echo("Diagnostics:")
+        for cmd in diagnostic_commands:
+            click.echo(f"  {cmd}")
+        return
 
     # Get all active KBs
+    assert index_root is not None  # type narrowing after configuration check
+    assert primary_kb is not None  # type narrowing after configuration check
     project_kb = get_project_kb_root()
     user_kb = get_user_kb_root()
 
@@ -5040,6 +5375,139 @@ def _build_schema() -> dict:
     Returns a dict containing all commands, their options, related commands,
     and common mistakes for agent introspection.
     """
+
+    def _type_to_schema(t: click.ParamType) -> tuple[str, dict[str, Any]]:
+        """Best-effort Click type -> (schema_type, extra_fields)."""
+        extra: dict[str, Any] = {}
+        try:
+            if isinstance(t, click.Choice):
+                return ("choice", {"choices": list(getattr(t, "choices", []) or [])})
+            if isinstance(t, click.IntRange):
+                extra = {"min": getattr(t, "min", None), "max": getattr(t, "max", None)}
+                return ("integer", {k: v for k, v in extra.items() if v is not None})
+            if isinstance(t, click.FloatRange):
+                extra = {"min": getattr(t, "min", None), "max": getattr(t, "max", None)}
+                return ("float", {k: v for k, v in extra.items() if v is not None})
+            if isinstance(t, click.Path):
+                return ("path", {})
+        except Exception:  # pragma: no cover - defensive
+            pass
+        # Fall back to basic primitives
+        name = (getattr(t, "name", None) or "").lower()
+        if "int" in name:
+            return ("integer", {})
+        if "float" in name:
+            return ("float", {})
+        return ("string", {})
+
+    def _option_to_schema(opt: click.Option) -> dict[str, Any]:
+        long_opts = [o for o in (opt.opts or []) if o.startswith("--")]
+        short_opts = [o for o in (opt.opts or []) if o.startswith("-") and not o.startswith("--")]
+
+        name = max(long_opts, key=len) if long_opts else (opt.opts[0] if opt.opts else opt.name)
+        entry: dict[str, Any] = {"name": name}
+        if short_opts:
+            entry["short"] = min(short_opts, key=len)
+
+        # Type
+        if getattr(opt, "is_flag", False) or getattr(opt, "flag_value", None) is not None:
+            entry["type"] = "flag"
+        else:
+            t, extra = _type_to_schema(opt.type)
+            entry["type"] = t
+            entry.update(extra)
+
+        # Help/metadata
+        help_text = (opt.help or "").strip()
+        if help_text:
+            entry["description"] = help_text
+        if getattr(opt, "required", False):
+            entry["required"] = True
+        if getattr(opt, "multiple", False):
+            entry["multiple"] = True
+
+        # Defaults (avoid emitting Click sentinels)
+        default = getattr(opt, "default", None)
+        if default not in (None, (), []):
+            entry["default"] = default
+
+        # Paired boolean flags: --foo/--no-foo
+        secondary = [o for o in (getattr(opt, "secondary_opts", None) or []) if o.startswith("--")]
+        if secondary:
+            entry["secondary"] = secondary
+
+        return entry
+
+    def _argument_to_schema(arg: click.Argument) -> dict[str, Any]:
+        entry: dict[str, Any] = {"name": arg.name}
+        try:
+            entry["required"] = bool(getattr(arg, "required", True))
+        except Exception:  # pragma: no cover - defensive
+            entry["required"] = True
+        if getattr(arg, "nargs", None) not in (None, 1):
+            entry["nargs"] = getattr(arg, "nargs", None)
+        try:
+            t, extra = _type_to_schema(arg.type)
+            entry["type"] = t
+            entry.update(extra)
+        except Exception:  # pragma: no cover - defensive
+            pass
+        return entry
+
+    def _command_to_schema(cmd: click.Command) -> dict[str, Any]:
+        # Prefer a one-line description.
+        desc = (cmd.help or cmd.short_help or "").strip()
+        if desc:
+            desc = desc.splitlines()[0].strip()
+
+        args: list[dict[str, Any]] = []
+        opts: list[dict[str, Any]] = []
+        for p in getattr(cmd, "params", []) or []:
+            if isinstance(p, click.Argument):
+                args.append(_argument_to_schema(p))
+            elif isinstance(p, click.Option):
+                opts.append(_option_to_schema(p))
+
+        out: dict[str, Any] = {
+            "description": desc,
+            "aliases": [],
+            "arguments": args,
+            "options": opts,
+        }
+        if isinstance(cmd, click.Group):
+            out["subcommands"] = sorted(list(getattr(cmd, "commands", {}).keys()))
+        return out
+
+    def _merge_named_param_list(
+        *,
+        auto: list[dict[str, Any]],
+        manual: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        auto_by = {d.get("name"): d for d in auto if isinstance(d, dict) and d.get("name")}
+        out: list[dict[str, Any]] = []
+        used: set[str] = set()
+
+        for m in manual:
+            name = m.get("name") if isinstance(m, dict) else None
+            if name and name in auto_by:
+                merged = dict(auto_by[name])
+                merged.update(m)
+                out.append(merged)
+                used.add(name)
+            else:
+                out.append(m)
+                if name:
+                    used.add(name)
+
+        for a in auto:
+            name = a.get("name") if isinstance(a, dict) else None
+            if not name or name in used:
+                continue
+            out.append(a)
+            used.add(name)
+
+        return out
+
     schema = {
         "version": MEMEX_VERSION,
         "description": "Token-efficient CLI for memex knowledge base",
@@ -5796,6 +6264,12 @@ def _build_schema() -> dict:
                 "type": "flag",
                 "description": "Output errors as JSON (for programmatic use)",
             },
+            {
+                "name": "--quiet",
+                "short": "-q",
+                "type": "flag",
+                "description": "Suppress warnings, show only errors and essential output",
+            },
             {"name": "--version", "type": "flag", "description": "Show version"},
             {"name": "--help", "type": "flag", "description": "Show help"},
         ],
@@ -5821,6 +6295,35 @@ def _build_schema() -> dict:
             },
         },
     }
+
+    # Keep curated content, but ensure completeness by auto-introspecting the Click CLI.
+    try:
+        root = cli
+        if isinstance(root, click.Group):
+            for name, cmd in root.commands.items():
+                auto = _command_to_schema(cmd)
+                manual = schema["commands"].get(name)
+                if not manual:
+                    schema["commands"][name] = auto
+                    continue
+
+                merged = dict(auto)
+                for k, v in manual.items():
+                    if k in ("arguments", "options"):
+                        continue
+                    merged[k] = v
+                merged["arguments"] = _merge_named_param_list(
+                    auto=auto.get("arguments", []),
+                    manual=manual.get("arguments", []),
+                )
+                merged["options"] = _merge_named_param_list(
+                    auto=auto.get("options", []),
+                    manual=manual.get("options", []),
+                )
+                schema["commands"][name] = merged
+    except Exception:  # pragma: no cover - best-effort schema completeness
+        pass
+
     return schema
 
 
@@ -5874,6 +6377,9 @@ def schema(command_name: str | None, compact: bool):
                 "description": data["description"],
                 "arguments": data.get("arguments", []),
                 "options": [opt["name"] for opt in data.get("options", [])],
+                # Additive: structured option metadata for agents that need types/defaults
+                # without paying the full schema token cost (examples/common_mistakes/etc).
+                "options_meta": data.get("options", []),
             }
         output(compact_schema, as_json=True)
     else:
