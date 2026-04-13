@@ -32,6 +32,10 @@ from . import __version__ as MEMEX_VERSION
 # Lazy imports to speed up CLI startup
 # The heavy imports (chromadb, sentence-transformers) only load when needed
 
+# Stable, documented JSON output version for agent/tool integration.
+# (Separate from MEMEX_VERSION, which is the package/tool version.)
+MX_JSON_SCHEMA_VERSION = 1
+
 
 def run_async(coro):
     """Run async function synchronously."""
@@ -618,10 +622,18 @@ def _handle_add_error(
 
 def format_json_error(code: str, message: str, details: dict | None = None) -> str:
     """Format an error as JSON for --json-errors output."""
-    error: dict[str, dict[str, object]] = {"error": {"code": code, "message": message}}
+    from .errors import ErrorCode
+
+    payload: dict[str, object] = {
+        "schema_version": MX_JSON_SCHEMA_VERSION,
+        "version": MEMEX_VERSION,
+        "error": code,
+        "code": int(ErrorCode.VALIDATION_ERROR),
+        "message": message,
+    }
     if details:
-        error["error"]["details"] = details
-    return json.dumps(error)
+        payload["details"] = details
+    return json.dumps(payload, indent=2, default=str)
 
 
 def get_error_code_for_exception(exc: Exception) -> str:
@@ -1171,14 +1183,51 @@ def help_cmd(ctx: click.Context, command: str | None):
 
 
 @cli.command()
+@click.option("--timestamps", is_flag=True, help="Audit frontmatter created/updated timestamps")
+@click.option("--fix", is_flag=True, help="Write timestamp fixes in-place (requires --timestamps)")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview timestamp fixes without writing (requires --timestamps --fix)",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Overwrite valid timestamps from filesystem metadata (requires --timestamps)",
+)
+@click.option(
+    "--scope",
+    type=click.Choice(["project", "user"]),
+    help="Limit timestamp audit to KB scope",
+)
+@click.option(
+    "--limit",
+    type=click.IntRange(min=1),
+    help="Maximum entries to check for timestamp audit",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def doctor(ctx: click.Context, as_json: bool):
+def doctor(
+    ctx: click.Context,
+    timestamps: bool,
+    fix: bool,
+    dry_run: bool,
+    force: bool,
+    scope: str | None,
+    limit: int | None,
+    as_json: bool,
+):
     """Check installation, KB config, and optional dependency availability."""
     import importlib.util
     import sys
 
     from .config import ConfigurationError, get_kb_root
+    from .doctor import audit_frontmatter_timestamps
+
+    if dry_run and not fix:
+        raise UsageError("--dry-run requires --fix")
+    if (fix or force or dry_run or scope is not None or limit is not None) and not timestamps:
+        raise UsageError("--fix/--dry-run/--force/--scope/--limit require --timestamps")
 
     deps = {
         "whoosh": importlib.util.find_spec("whoosh") is not None,
@@ -1193,7 +1242,10 @@ def doctor(ctx: click.Context, as_json: bool):
     except ConfigurationError:
         kb_configured = False
 
-    install_hint = "uv tool install 'memex-kb[search]' (recommended) or pip install 'memex-kb[search]'"
+    install_hint = (
+        "uv tool install 'memex-kb[search]' (recommended) "
+        "or pip install 'memex-kb[search]'"
+    )
     data = {
         "version": MEMEX_VERSION,
         "python": sys.executable,
@@ -1202,12 +1254,29 @@ def doctor(ctx: click.Context, as_json: bool):
         "deps": deps,
         "suggestion": None,
     }
+    timestamp_report: dict[str, Any] | None = None
 
     if not deps["whoosh"] or not deps["chromadb"] or not deps["sentence_transformers"]:
         data["suggestion"] = f"Install search deps for full functionality: {install_hint}"
 
+    if timestamps:
+        timestamp_mode = "fix" if fix and not dry_run else "dry-run" if dry_run else "report"
+        timestamp_report = audit_frontmatter_timestamps(
+            fix=fix,
+            dry_run=dry_run,
+            force=force,
+            scope=scope,
+            limit=limit,
+        )
+        timestamp_report["mode"] = timestamp_mode
+        timestamp_report["scope"] = scope or "all"
+        timestamp_report["force"] = force
+        data["timestamps"] = timestamp_report
+
     if as_json:
         output(data, as_json=True)
+        if timestamp_report and timestamp_report["errors"]:
+            ctx.exit(1)
         return
 
     click.echo("mx doctor")
@@ -1232,6 +1301,59 @@ def doctor(ctx: click.Context, as_json: bool):
     if data["suggestion"]:
         click.echo("")
         click.echo(f"Next step: {data['suggestion']}")
+    if timestamp_report:
+        click.echo("")
+        _print_doctor_timestamp_report(timestamp_report)
+        if timestamp_report["errors"]:
+            ctx.exit(1)
+
+
+def _print_doctor_timestamp_report(report: dict[str, Any]) -> None:
+    """Render a human-readable timestamp audit summary."""
+
+    summary = report["summary"]
+    click.echo("timestamps")
+    click.echo("-" * 40)
+    click.echo(f"mode:     {report['mode']}")
+    click.echo(f"scope:    {report['scope']}")
+    click.echo(f"checked:  {summary['checked']}")
+    click.echo(f"candidates: {summary['candidates']}")
+    click.echo(f"changed:  {summary['changed']}")
+    if report["mode"] != "fix":
+        click.echo(f"would_change: {summary['would_change']}")
+    click.echo(f"skipped:  {summary['skipped']}")
+    click.echo(f"errors:   {summary['errors']}")
+
+    for entry in report["entries"]:
+        click.echo("")
+        click.echo(entry["path"])
+        for field_name in ("created", "updated"):
+            line = _format_timestamp_field_line(field_name, entry[field_name])
+            if line:
+                click.echo(f"  {line}")
+
+    if report["errors"]:
+        click.echo("")
+        click.echo("timestamp errors")
+        click.echo("-" * 40)
+        for error in report["errors"]:
+            click.echo(f"{error['path']}: {error['error']}")
+
+
+def _format_timestamp_field_line(field_name: str, field_data: dict[str, Any]) -> str | None:
+    """Format one timestamp field line for doctor output."""
+
+    after = field_data.get("after")
+    if after is None:
+        return None
+
+    before = field_data.get("before")
+    before_text = "(missing)" if before is None else before
+    verb = "changed" if field_data.get("changed") else "would change"
+    return (
+        f"{field_name}: {field_data['status']} {before_text} -> {after} "
+        f"({field_data['source']}, {verb})"
+    )
 
 
 @cli.command()
@@ -2140,8 +2262,16 @@ def search(
             # JSON output with is_neighbor and linked_from fields
             results_data = []
             for item in expanded_results:
+                raw_path = str(item["path"])
+                scope_value: str | None = None
+                path_value = raw_path
+                if raw_path.startswith("@") and "/" in raw_path:
+                    scope_value = raw_path.split("/", 1)[0][1:]
                 result_item = {
-                    "path": item["path"],
+                    "schema_version": MX_JSON_SCHEMA_VERSION,
+                    "version": MEMEX_VERSION,
+                    "path": path_value,
+                    "scope": scope_value,
                     "title": item["title"],
                     "score": item["score"],
                     "confidence": _score_confidence(item["score"]),
@@ -2154,7 +2284,14 @@ def search(
                 else:
                     result_item["snippet"] = item.get("snippet", "")
                 results_data.append(result_item)
-            output({"results": results_data}, as_json=True)
+            output(
+                {
+                    "schema_version": MX_JSON_SCHEMA_VERSION,
+                    "version": MEMEX_VERSION,
+                    "results": results_data,
+                },
+                as_json=True,
+            )
         elif terse:
             for item in expanded_results:
                 prefix = "[N] " if item["is_neighbor"] else ""
@@ -2196,10 +2333,26 @@ def search(
     else:
         # Original output without neighbor expansion
         if as_json:
+            from .config import get_project_kb_root, get_user_kb_root
+
+            is_multi_kb = bool(get_project_kb_root() and get_user_kb_root())
             results_data = []
             for r in filtered_results:
+                raw_path = str(r.path)
+                scope_value: str | None = None
+                path_value = raw_path
+                if raw_path.startswith("@") and "/" in raw_path:
+                    scope_value = raw_path.split("/", 1)[0][1:]
+                else:
+                    kb_scope = getattr(r, "kb_scope", None)
+                    if is_multi_kb and isinstance(kb_scope, str) and kb_scope in ("project", "user"):
+                        scope_value = kb_scope
+                        path_value = f"@{kb_scope}/{raw_path}"
                 item = {
-                    "path": r.path,
+                    "schema_version": MX_JSON_SCHEMA_VERSION,
+                    "version": MEMEX_VERSION,
+                    "path": path_value,
+                    "scope": scope_value,
                     "title": r.title,
                     "score": r.score,
                     "confidence": _score_confidence(r.score),
@@ -3018,17 +3171,36 @@ def add(
         result["warnings"] = combined_warnings
 
     if as_json:
-        # Include scope in JSON output if explicitly set
-        if scope:
-            result["scope"] = scope
-        output(result, as_json=True)
+        out = dict(result)
+        out["schema_version"] = MX_JSON_SCHEMA_VERSION
+        out["version"] = MEMEX_VERSION
+
+        # Make scope explicit in JSON output.
+        scope_value: str | None = None
+        if isinstance(out.get("scope"), str):
+            scope_value = cast(str, out["scope"])
+        elif scope:
+            scope_value = scope
+        else:
+            path_value = out.get("path")
+            if isinstance(path_value, str) and path_value.startswith("@") and "/" in path_value:
+                scope_value = path_value.split("/", 1)[0][1:]
+        out["scope"] = scope_value
+
+        output(out, as_json=True)
     else:
         if combined_warnings and not quiet and not json_errors:
             for w in combined_warnings:
                 click.echo(f"Warning: {w}", err=True)
 
-        # Show path with scope prefix if explicitly set
-        path_display = f"@{scope}/{result['path']}" if scope else result["path"]
+        # Show path with scope prefix when multi-KB is active (or when explicitly set).
+        path_value = str(result["path"])
+        if path_value.startswith("@"):
+            path_display = path_value
+        elif scope:
+            path_display = f"@{scope}/{path_value}"
+        else:
+            path_display = path_value
         click.echo(f"Created: {path_display}")
         if result.get("suggested_links"):
             click.echo("\nSuggested links:")
@@ -4654,6 +4826,8 @@ def info(ctx: click.Context, show_errors: bool, max_errors: int, as_json: bool):
             *diagnostic_commands,
         ]
         payload = {
+            "schema_version": MX_JSON_SCHEMA_VERSION,
+            "version": MEMEX_VERSION,
             "kb_configured": False,
             "error": str(kb_error) if kb_error else "No knowledge base found",
             "primary_kb": None,
@@ -4832,6 +5006,9 @@ def info(ctx: click.Context, show_errors: bool, max_errors: int, as_json: bool):
         )
 
     payload = {
+        "schema_version": MX_JSON_SCHEMA_VERSION,
+        "version": MEMEX_VERSION,
+        "kb_configured": True,
         "primary_kb": str(primary_kb),
         "primary_scope": primary_scope,
         "index_root": str(index_root),

@@ -41,6 +41,19 @@ class CoroutineClosingMock(MagicMock):
         return super().__call__(*args, **kwargs)
 
 
+class NoopSearcher:
+    """Minimal HybridSearcher stub for CLI tests (avoid optional deps)."""
+
+    def search(self, *args, **kwargs):
+        return []
+
+    def delete_document(self, path: str) -> None:
+        return None
+
+    def index_chunks(self, chunks) -> None:
+        return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Command Lists
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,6 +161,215 @@ def test_version_option(runner):
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
     assert MEMEX_VERSION in result.output
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Doctor Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestDoctorCommand:
+    """Tests for `mx doctor`."""
+
+    def test_timestamps_report_json(self, runner, tmp_kb, monkeypatch):
+        """`mx doctor --timestamps --json` reports missing/invalid timestamps."""
+        bad_entry = tmp_kb / "general" / "bad.md"
+        bad_entry.parent.mkdir(parents=True, exist_ok=True)
+        bad_entry.write_text(
+            """---
+title: Bad Entry
+tags: [test]
+created: definitely-not-a-date
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+        good_entry = tmp_kb / "general" / "good.md"
+        good_entry.write_text(
+            """---
+title: Good Entry
+tags: [test]
+created: 2024-01-15
+updated: 2024-01-16T00:00:00+00:00
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "memex.doctor._get_filesystem_timestamps",
+            lambda path: (
+                "ctime",
+                "2024-02-01T00:00:00+00:00",
+                "mtime",
+                "2024-02-02T00:00:00+00:00",
+            ),
+        )
+
+        result = runner.invoke(cli, ["doctor", "--timestamps", "--json"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        report = payload["timestamps"]
+        assert report["summary"]["checked"] == 2
+        assert report["summary"]["candidates"] == 1
+        assert report["summary"]["would_change"] == 1
+        assert report["summary"]["skipped"] == 1
+        assert len(report["entries"]) == 1
+        entry = report["entries"][0]
+        assert entry["path"] == "general/bad.md"
+        assert entry["created"]["status"] == "invalid"
+        assert entry["created"]["before"] == "definitely-not-a-date"
+        assert entry["created"]["after"] == "2024-02-01T00:00:00+00:00"
+        assert entry["updated"]["status"] == "missing"
+        assert entry["updated"]["after"] == "2024-02-02T00:00:00+00:00"
+
+    def test_timestamps_fix_updates_frontmatter_in_place(self, runner, tmp_kb, monkeypatch):
+        """`mx doctor --timestamps --fix` updates only timestamp lines."""
+        entry = tmp_kb / "tickets" / "sample.md"
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.write_text(
+            """---
+id: ticket-123
+title: Sample Ticket
+tags: [test]
+created: nope
+owner: alice
+---
+
+Body text
+""",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "memex.doctor._get_filesystem_timestamps",
+            lambda path: (
+                "ctime",
+                "2024-03-01T10:11:12+00:00",
+                "mtime",
+                "2024-03-04T05:06:07+00:00",
+            ),
+        )
+
+        result = runner.invoke(cli, ["doctor", "--timestamps", "--fix"])
+
+        assert result.exit_code == 0
+        text = entry.read_text(encoding="utf-8")
+        assert "created: 2024-03-01T10:11:12+00:00" in text
+        assert "updated: 2024-03-04T05:06:07+00:00" in text
+        assert "owner: alice" in text
+        assert "id: ticket-123" in text
+        assert text.endswith("\nBody text\n")
+        assert "changed:  1" in result.output
+
+    def test_timestamps_force_dry_run_json_does_not_write(self, runner, tmp_kb, monkeypatch):
+        """`--force --fix --dry-run` previews filesystem timestamp replacements without writing."""
+        entry = tmp_kb / "general" / "force.md"
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        original = """---
+title: Force Entry
+tags: [test]
+created: 2024-01-01T00:00:00+00:00
+updated: 2024-01-02T00:00:00+00:00
+---
+
+Body
+"""
+        entry.write_text(original, encoding="utf-8")
+
+        monkeypatch.setattr(
+            "memex.doctor._get_filesystem_timestamps",
+            lambda path: (
+                "ctime",
+                "2024-04-01T00:00:00+00:00",
+                "mtime",
+                "2024-04-02T00:00:00+00:00",
+            ),
+        )
+
+        result = runner.invoke(
+            cli,
+            ["doctor", "--timestamps", "--fix", "--dry-run", "--force", "--json"],
+        )
+
+        assert result.exit_code == 0
+        assert entry.read_text(encoding="utf-8") == original
+        payload = json.loads(result.output)
+        report = payload["timestamps"]
+        assert report["mode"] == "dry-run"
+        assert report["summary"]["changed"] == 0
+        assert report["summary"]["would_change"] == 1
+        audited = report["entries"][0]
+        assert audited["created"]["status"] == "valid"
+        assert audited["created"]["would_change"] is True
+        assert audited["updated"]["after"] == "2024-04-02T00:00:00+00:00"
+
+    def test_timestamps_scope_and_limit(self, runner, multi_kb, monkeypatch):
+        """Timestamp audit respects `--scope` and `--limit` in multi-KB mode."""
+        project_entry = multi_kb["project_kb"] / "one.md"
+        project_entry.write_text(
+            """---
+title: Project Entry
+tags: [test]
+created: bad
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+        second_project_entry = multi_kb["project_kb"] / "two.md"
+        second_project_entry.write_text(
+            """---
+title: Project Entry Two
+tags: [test]
+created: also-bad
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+        user_entry = multi_kb["user_kb"] / "three.md"
+        user_entry.write_text(
+            """---
+title: User Entry
+tags: [test]
+created: bad-user
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "memex.doctor._get_filesystem_timestamps",
+            lambda path: (
+                "ctime",
+                "2024-05-01T00:00:00+00:00",
+                "mtime",
+                "2024-05-02T00:00:00+00:00",
+            ),
+        )
+
+        result = runner.invoke(
+            cli,
+            ["doctor", "--timestamps", "--scope=project", "--limit=1", "--json"],
+        )
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        report = payload["timestamps"]
+        assert report["summary"]["checked"] == 1
+        assert len(report["entries"]) == 1
+        assert report["entries"][0]["path"].startswith("@project/")
+        assert all(not entry["path"].startswith("@user/") for entry in report["entries"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -360,6 +582,9 @@ Content B
         data = json.loads(result.output)
         assert isinstance(data, list)
         assert data[0]["path"] == "test.md"
+        assert data[0]["schema_version"] == 1
+        assert isinstance(data[0].get("version"), str) and data[0]["version"]
+        assert "scope" in data[0]
 
     @patch("memex.config.get_kb_root")
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
@@ -611,6 +836,9 @@ class TestAddCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "path" in data
+        assert data["schema_version"] == 1
+        assert isinstance(data.get("version"), str) and data["version"]
+        assert "scope" in data
 
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
     def test_add_warns_on_frontmatter_file(self, mock_run_async, runner, tmp_path):
@@ -1932,6 +2160,55 @@ class TestHealthCommand:
             assert "No knowledge base found" in result.output
 
 
+class TestHealthSmallKbHeuristics:
+    @staticmethod
+    def _write_fresh_entry(tmp_kb: Path, rel_path: str, title: str, content: str) -> None:
+        entry_path = tmp_kb / rel_path
+        entry_path.parent.mkdir(parents=True, exist_ok=True)
+        entry_path.write_text(
+            f"""---
+title: {title}
+tags: [test]
+created: 2030-01-15
+updated: 2030-01-15
+---
+
+{content}
+"""
+        )
+
+    def test_health_suppresses_orphans_for_small_kb(self, runner, tmp_kb):
+        """Orphan findings are suppressed for very small/new KBs."""
+        self._write_fresh_entry(tmp_kb, "a.md", "A", "one")
+        self._write_fresh_entry(tmp_kb, "b.md", "B", "two")
+        self._write_fresh_entry(tmp_kb, "c.md", "C", "three")
+
+        result = runner.invoke(cli, ["health", "--json"])
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["summary"]["total_entries"] == 3
+        assert data["summary"]["health_score"] == 100
+        assert data["summary"]["orphans_count"] == 0
+        assert data["orphans"] == []
+
+    def test_health_still_reports_broken_links_for_small_kb(self, runner, tmp_kb):
+        """Real issues still surface even when orphan findings are suppressed."""
+        self._write_fresh_entry(tmp_kb, "a.md", "A", "See [[missing]]")
+        self._write_fresh_entry(tmp_kb, "b.md", "B", "No links")
+
+        result = runner.invoke(cli, ["health", "--json"])
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["summary"]["total_entries"] == 2
+        assert data["summary"]["orphans_count"] == 0
+        assert data["orphans"] == []
+        assert data["summary"]["broken_links_count"] == 1
+        assert data["summary"]["health_score"] == 95
+        assert data["broken_links"] == [{"source": "a.md", "broken_link": "missing"}]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Onboard Command Tests
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2159,6 +2436,8 @@ class TestInfoCommand:
 
         assert result.exit_code == 0
         data = json.loads(result.output)
+        assert data["schema_version"] == 1
+        assert isinstance(data.get("version"), str) and data["version"]
         assert "primary_kb" in data
         assert "kbs" in data
         assert "total_entries" in data
@@ -2369,6 +2648,117 @@ ok
         assert health.exit_code == 0, health.output
         health_data = json.loads(health.output)
         assert health_data["summary"]["total_entries"] == primary_entries
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scoped Path + Multi-KB Tests (mem-o9tr)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestScopedPathsMultiKB:
+    def test_get_disambiguates_scopes_with_prefixes(self, runner, multi_kb):
+        from conftest import create_entry
+
+        project_kb = multi_kb["project_kb"]
+        user_kb = multi_kb["user_kb"]
+
+        create_entry(project_kb, "inbox/same.md", "Project Same", "project body", ["test"])
+        create_entry(user_kb, "inbox/same.md", "User Same", "user body", ["test"])
+
+        project = runner.invoke(cli, ["get", "inbox/same.md", "--metadata"])
+        assert project.exit_code == 0, project.output
+        assert "Title:    Project Same" in project.output
+
+        user = runner.invoke(cli, ["get", "@user/inbox/same.md", "--metadata"])
+        assert user.exit_code == 0, user.output
+        assert "Title:    User Same" in user.output
+
+    def test_add_outputs_scoped_path_in_multi_kb(self, runner, multi_kb, monkeypatch):
+        import memex.core as core
+
+        monkeypatch.setattr(core, "get_searcher", lambda: NoopSearcher())
+
+        result = runner.invoke(
+            cli,
+            [
+                "add",
+                "--title",
+                "Scoped Add",
+                "--tags",
+                "test",
+                "--category",
+                "notes",
+                "--content",
+                "hello",
+            ],
+        )
+        assert result.exit_code == 0, (result.output + getattr(result, "stderr", ""))
+        assert "Created: @project/notes/scoped-add.md" in result.output
+
+    def test_replace_accepts_scoped_path(self, runner, multi_kb, monkeypatch):
+        from conftest import create_entry
+
+        import memex.core as core
+
+        monkeypatch.setattr(core, "get_searcher", lambda: NoopSearcher())
+
+        user_kb = multi_kb["user_kb"]
+        p = create_entry(user_kb, "notes/u.md", "User Replace", "old", ["test"])
+
+        result = runner.invoke(
+            cli,
+            [
+                "replace",
+                "@user/notes/u.md",
+                "--content",
+                "new body",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Replaced:" in result.output
+        assert "@user/notes/u.md" in result.output
+        assert "new body" in p.read_text()
+
+    def test_patch_accepts_scoped_path(self, runner, multi_kb, monkeypatch):
+        from conftest import create_entry
+
+        import memex.core as core
+
+        monkeypatch.setattr(core, "get_searcher", lambda: NoopSearcher())
+
+        user_kb = multi_kb["user_kb"]
+        p = create_entry(user_kb, "notes/p.md", "User Patch", "hello old", ["test"])
+
+        result = runner.invoke(
+            cli,
+            [
+                "patch",
+                "@user/notes/p.md",
+                "--find",
+                "old",
+                "--replace",
+                "new",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Patched:" in result.output
+        assert "hello new" in p.read_text()
+
+    def test_delete_accepts_scoped_path(self, runner, multi_kb, monkeypatch):
+        from conftest import create_entry
+
+        import memex.core as core
+
+        monkeypatch.setattr(core, "get_searcher", lambda: NoopSearcher())
+
+        user_kb = multi_kb["user_kb"]
+        p = create_entry(user_kb, "notes/d.md", "User Delete", "bye", ["test"])
+        assert p.exists()
+
+        result = runner.invoke(cli, ["delete", "@user/notes/d.md"])
+        assert result.exit_code == 0, result.output
+        assert "Deleted: @user/notes/d.md" in result.output
+        assert not p.exists()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2939,9 +3329,17 @@ class TestInputValidation:
         """Empty query with --json-errors should return JSON error."""
         result = runner.invoke(cli, ["--json-errors", "search", ""])
         assert result.exit_code != 0
-        error_data = json.loads(result.output)
-        assert "error" in error_data
-        assert "Query cannot be empty" in error_data["error"]["message"]
+        raw = (
+            (result.stderr_bytes.decode() if getattr(result, "stderr_bytes", b"") else "")
+            or getattr(result, "stderr", "")
+            or result.output
+        )
+        error_data = json.loads(raw)
+        assert error_data["error"] == "USAGE_ERROR"
+        assert error_data["code"] == 1304
+        assert "Query cannot be empty" in error_data["message"]
+        assert error_data["schema_version"] == 1
+        assert isinstance(error_data.get("version"), str) and error_data["version"]
 
     # Invalid category validation (bug: e4sx)
 

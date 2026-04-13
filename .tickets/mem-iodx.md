@@ -1,6 +1,6 @@
 ---
 id: mem-iodx
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-02-08T08:00:19Z
@@ -38,14 +38,31 @@ Motivation: KBs often accumulate missing or incorrect timestamps (manual edits, 
 
 ## Acceptance Criteria
 
-- [ ] `mx doctor --timestamps` reports entries with missing/invalid `created` and/or `updated`.
-- [ ] `mx doctor --timestamps --fix` updates YAML frontmatter in-place using best-effort filesystem times (created from birthtime/ctime, updated from mtime).
-- [ ] Does not modify entries with valid timestamps unless `--force` is used.
-- [ ] Provides `--dry-run` and a clear summary (checked/changed/skipped); non-zero exit only on real errors.
-- [ ] `--json` includes per-file before/after timestamps and which source was used for each field.
+- [x] `mx doctor --timestamps` reports entries with missing/invalid `created` and/or `updated`.
+- [x] `mx doctor --timestamps --fix` updates YAML frontmatter in-place using best-effort filesystem times (created from birthtime/ctime, updated from mtime).
+- [x] Does not modify entries with valid timestamps unless `--force` is used.
+- [x] Provides `--dry-run` and a clear summary (checked/changed/skipped); non-zero exit only on real errors.
+- [x] `--json` includes per-file before/after timestamps and which source was used for each field.
 
 ## Notes
 
 **2026-02-08T08:01:25Z**
 
 Ticket body corrected (initial create command suffered shell backtick substitution).
+
+**2026-04-07T00:27:09Z**
+
+Implemented timestamp auditing/repair for `mx doctor` with new flags:
+`--timestamps`, `--fix`, `--dry-run`, `--force`, `--scope`, and `--limit`.
+Behavior:
+- report mode surfaces only files with missing/invalid timestamps
+- fix mode patches only `created` / `updated` lines in existing YAML frontmatter, preserving unknown keys/body content
+- force mode recomputes even valid timestamps from filesystem metadata
+- JSON includes per-file `before` / `after`, timestamp source, and changed/would-change state
+- missing-frontmatter markdown files are skipped; malformed YAML/write failures are reported as real errors
+
+Validation:
+- `uv run pytest tests/test_cli.py -k doctor`
+- `uv run pytest tests/test_cli.py`
+- `uv run ruff check src/memex/doctor.py`
+- `uv run mx doctor --timestamps --limit=3 --json`

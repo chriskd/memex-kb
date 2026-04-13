@@ -6,7 +6,7 @@ tags:
   - reference
   - commands
 created: 2026-01-06T00:00:00
-updated: 2026-01-25T23:32:00+00:00
+updated: 2026-04-06T00:00:00+00:00
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
 edit_sources:
@@ -116,6 +116,31 @@ mx history --rerun 1        # Re-run most recent
 mx history --clear          # Clear history
 ```
 
+### mx doctor
+
+Inspect installation status and optional dependency availability, or audit/fix
+frontmatter timestamps from filesystem metadata.
+
+```bash
+mx doctor                                   # Deps + KB detection
+mx doctor --json                            # Same as JSON
+mx doctor --timestamps                      # Report missing/invalid created/updated
+mx doctor --timestamps --fix                # Apply timestamp fixes
+mx doctor --timestamps --fix --dry-run      # Preview fixes without writing
+mx doctor --timestamps --force              # Recompute even valid timestamps
+mx doctor --timestamps --scope=project      # Audit project KB only
+mx doctor --timestamps --limit=25 --json    # Bound scan and emit per-file JSON
+```
+
+**Timestamp options:**
+- `--timestamps`: Audit `created` / `updated` frontmatter fields
+- `--fix`: Write proposed timestamp updates in-place
+- `--dry-run`: Preview `--fix` results without writing
+- `--force`: Overwrite valid timestamps from filesystem metadata
+- `--scope`: Limit timestamp audit to KB scope (project or user)
+- `--limit`: Maximum entries to check during timestamp audit
+- `--json`: Include per-file before/after values and timestamp source
+
 ## Read Commands
 
 ### mx get
@@ -126,6 +151,8 @@ Read a knowledge base entry.
 mx get tooling/my-entry.md            # Full entry by path
 mx get tooling/my-entry.md --metadata # Metadata only
 mx get tooling/my-entry.md --json     # JSON output
+mx get @project/tooling/my-entry.md   # Explicit project scope
+mx get @user/tooling/my-entry.md      # Explicit user scope
 mx get --title="Docker Guide"         # Get by title
 mx get --title "Python Tooling"       # Get by title (alt form)
 ```
@@ -210,6 +237,7 @@ Replace content or metadata in an existing entry.
 mx replace path/entry.md --tags="new,tags"
 mx replace path/entry.md --content="New content"
 mx replace path/entry.md --file=new-content.md
+mx replace @user/path/entry.md --content="New content"  # Explicit scope
 ```
 
 Note: For appending content, use `mx append`. For surgical edits, use `mx patch`.
@@ -222,6 +250,7 @@ Surgical find-replace edits.
 mx patch path/entry.md --find="old text" --replace="new text"
 mx patch path/entry.md --find="TODO" --replace="DONE" --replace-all
 mx patch path/entry.md --find="..." --replace="..." --dry-run
+mx patch @project/path/entry.md --find="old" --replace="new"  # Explicit scope
 ```
 
 **Intent Detection:** If you use flags that suggest a different command (e.g., `--content` without `--find`), the CLI will suggest the correct command:
@@ -254,6 +283,7 @@ Delete an entry.
 ```bash
 mx delete path/entry.md
 mx delete path/entry.md --force  # Delete even with backlinks
+mx delete @user/path/entry.md    # Explicit scope
 ```
 
 ### mx quick-add
@@ -298,7 +328,7 @@ Checks for:
 - Missing frontmatter
 
 Orphans are entries with no incoming links (no `[[wikilinks]]` or typed relations pointing at them).
-This is normal in new KBs.
+To reduce false alarms in brand-new KBs, orphan findings are suppressed until the KB has at least 5 entries.
 
 Quick fixes:
 - Add an index/hub entry that links to everything important.
@@ -564,6 +594,93 @@ Global flags:
 
 Per-command (when available):
 - `--json`: JSON output
+
+## Machine-Readable JSON Output (Stable v1)
+
+Many commands support `--json` for agent/tool integration.
+
+### Common fields
+
+All documented JSON outputs include:
+- `schema_version`: Stable output schema version (currently `1`)
+- `version`: `mx` tool version (string, e.g. `0.2.1`)
+
+### Scoped paths (@project/@user)
+
+When both a project KB and a user KB are active, paths in machine output (and many human outputs) are **scope-qualified**:
+- `@project/<relpath>.md`
+- `@user/<relpath>.md`
+
+Unscoped paths (e.g. `guides/x.md`) are still accepted and resolve to the **primary** KB (project if present, else user). If names collide across scopes, prefer explicit `@project/...` / `@user/...`.
+
+### mx info --json
+
+Top-level object (excerpt):
+
+```json
+{
+  "schema_version": 1,
+  "version": "0.2.1",
+  "kb_configured": true,
+  "primary_scope": "project",
+  "primary_kb": "/abs/path/to/kb",
+  "kbs": [
+    {"scope": "project", "path": "/abs/path/to/project/kb", "entries": 12},
+    {"scope": "user", "path": "/home/me/.memex/kb", "entries": 3}
+  ]
+}
+```
+
+### mx search --json
+
+JSON list of result objects:
+
+```json
+[
+  {
+    "schema_version": 1,
+    "version": "0.2.1",
+    "path": "@project/guides/first-entry.md",
+    "scope": "project",
+    "title": "First Entry",
+    "score": 1.0,
+    "confidence": "high",
+    "snippet": "..."
+  }
+]
+```
+
+### mx add --json
+
+Top-level object:
+
+```json
+{
+  "schema_version": 1,
+  "version": "0.2.1",
+  "path": "@project/guides/first-entry.md",
+  "scope": "project",
+  "suggested_links": [],
+  "suggested_tags": [],
+  "warnings": []
+}
+```
+
+### --json-errors (errors as JSON)
+
+Use the global `--json-errors` flag to get structured errors for **all** error sources (including Click usage/validation errors).
+
+Error payload shape:
+
+```json
+{
+  "schema_version": 1,
+  "version": "0.2.1",
+  "error": "USAGE_ERROR",
+  "code": 1304,
+  "message": "Query cannot be empty."
+}
+```
 
 ## See Also
 

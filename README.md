@@ -48,6 +48,8 @@ uv run mx prime
 
 Keyword search ships by default. Semantic search is optional (to avoid heavyweight ML installs by default).
 If semantic search is missing, run `mx doctor` for an install hint.
+For timestamp audits/repair on existing entries, use `mx doctor --timestamps`
+or `mx doctor --timestamps --fix`.
 If `mx search` fails with `ModuleNotFoundError: No module named 'whoosh'`, install keyword search deps with
 `pip install whoosh-reloaded` (or reinstall `memex-kb`), or install the full extra with `memex-kb[search]`.
 Requires Python 3.11+.
@@ -65,7 +67,7 @@ mx add --title="Setup" --tags="docs" \
        --category=guides --content="..."   # Add an entry
 mx list --limit=5                          # Confirm entry path
 mx get guides/setup.md                     # Read an entry
-mx health                                  # Audit KB (orphans are normal early)
+mx health                                  # Audit KB (orphan warnings start at 5+ entries)
 mx search "setup"                          # Optional: search (keyword; semantic if installed)
 ```
 

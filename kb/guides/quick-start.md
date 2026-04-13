@@ -29,7 +29,9 @@ If you want to force a brand-new KB in the current directory (common in sandboxe
 Optional checks:
 - `mx search "Hello KB"` to verify indexing (hybrid/keyword)
 - `mx search "Hello KB" --mode=semantic` to verify semantic search specifically
-If `mx search` fails, run `mx doctor` for an install hint. If you see `No module named 'whoosh'`, install
+If `mx search` fails, run `mx doctor` for an install hint. If you need to repair missing or invalid
+frontmatter timestamps, use `mx doctor --timestamps` or `mx doctor --timestamps --fix`. If you see
+`No module named 'whoosh'`, install
 keyword search deps with `pip install whoosh-reloaded` (or reinstall `memex-kb`).
 
 Optional: choose your default write category (so you can omit `--category` in `mx add`):
@@ -128,7 +130,7 @@ Audits your KB for:
 - Orphaned entries
 - Index sync issues
 
-Orphans are entries with no incoming links yet. This is normal for new KBs; add links or use `mx suggest-links` when you have more entries.
+Orphans are entries with no incoming links yet. In very small KBs (<5 entries), orphan findings are suppressed to avoid false alarms; after that, add links or use `mx suggest-links`.
 Quick fixes:
 - Create a simple index entry (e.g., `guides/index.md`) and link to key entries with `[[wikilinks]]`.
 - Add at least one link from an existing entry to each orphan (typed relations count too).
