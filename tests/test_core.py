@@ -1733,6 +1733,47 @@ class TestAutoSemanticLinks:
         assert "bidirectional" in neighbor_content
 
     @pytest.mark.asyncio
+    async def test_add_entry_resolves_scoped_neighbor_backlinks(
+        self, multi_kb, monkeypatch, caplog
+    ):
+        """add_entry updates scoped neighbors in the correct KB without warnings."""
+        from conftest import create_entry
+
+        user_kb = multi_kb["user_kb"]
+
+        create_entry(user_kb, "README.md", "User Readme", "User README content.", ["test"])
+
+        similar_results = [
+            SearchResult(
+                path="@user/README.md",
+                title="User Readme",
+                snippet="User README content",
+                score=0.70,
+                tags=["test"],
+            )
+        ]
+        mock_searcher = SemanticLinkSearcher(results=similar_results)
+        monkeypatch.setattr(core, "get_searcher", lambda: mock_searcher)
+        monkeypatch.setattr(core, "SEMANTIC_LINK_ENABLED", True)
+        monkeypatch.setattr(core, "SEMANTIC_LINK_MIN_SCORE", 0.6)
+        monkeypatch.setattr(core, "SEMANTIC_LINK_K", 5)
+
+        with caplog.at_level("WARNING", logger="memex.core"):
+            result = await core.add_entry(
+                title="Scoped Entry",
+                content="Project scoped content.",
+                tags=["test"],
+                category="general",
+                scope="project",
+            )
+
+        assert result["path"] == "@project/general/scoped-entry.md"
+        user_readme = (user_kb / "README.md").read_text(encoding="utf-8")
+        assert "@project/general/scoped-entry.md" in user_readme
+        assert "@user/README.md" in mock_searcher._deleted_docs
+        assert "Neighbor entry not found for backlinking" not in caplog.text
+
+    @pytest.mark.asyncio
     async def test_add_entry_skips_links_below_threshold(self, tmp_kb, monkeypatch):
         """add_entry does not create links for results below min_score."""
         # Create an existing entry
@@ -1921,6 +1962,49 @@ class TestAutoSemanticLinks:
         content = target_path.read_text()
         assert "semantic_links:" in content
         assert "general/neighbor.md" in content
+
+    @pytest.mark.asyncio
+    async def test_update_entry_uses_scoped_doc_ids_for_bidirectional_links(
+        self, multi_kb, monkeypatch, caplog
+    ):
+        """update_entry preserves scoped doc ids for both forward and back links."""
+        from conftest import create_entry
+
+        project_kb = multi_kb["project_kb"]
+        user_kb = multi_kb["user_kb"]
+
+        create_entry(project_kb, "general/target.md", "Target Entry", "Original content.", ["test"])
+        create_entry(user_kb, "README.md", "User Readme", "User README content.", ["test"])
+
+        similar_results = [
+            SearchResult(
+                path="@user/README.md",
+                title="User Readme",
+                snippet="User README content",
+                score=0.72,
+                tags=["test"],
+            )
+        ]
+        mock_searcher = SemanticLinkSearcher(results=similar_results)
+        monkeypatch.setattr(core, "get_searcher", lambda: mock_searcher)
+        monkeypatch.setattr(core, "SEMANTIC_LINK_ENABLED", True)
+        monkeypatch.setattr(core, "SEMANTIC_LINK_MIN_SCORE", 0.6)
+        monkeypatch.setattr(core, "SEMANTIC_LINK_K", 5)
+
+        with caplog.at_level("WARNING", logger="memex.core"):
+            await core.update_entry(
+                path="@project/general/target.md",
+                content="Updated content about shared topics.",
+            )
+
+        target_content = (project_kb / "general" / "target.md").read_text(encoding="utf-8")
+        user_readme = (user_kb / "README.md").read_text(encoding="utf-8")
+
+        assert "@user/README.md" in target_content
+        assert "@project/general/target.md" in user_readme
+        assert "@user/README.md" in mock_searcher._deleted_docs
+        assert "@project/general/target.md" in mock_searcher._deleted_docs
+        assert "Neighbor entry not found for backlinking" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_update_entry_skips_links_for_tags_only_update(self, tmp_kb, monkeypatch):

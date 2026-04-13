@@ -84,6 +84,10 @@ def parse_scoped_path(path: str) -> tuple[str | None, str]:
     return _config.parse_scoped_path(path)
 
 
+def resolve_scoped_path(path: str) -> Path:
+    return _config.resolve_scoped_path(path)
+
+
 def _ensure_aware(dt: datetime | None) -> datetime | None:
     """Ensure a datetime is timezone-aware, assuming UTC for naive datetimes.
 
@@ -643,7 +647,8 @@ def create_bidirectional_semantic_links(
     4. Re-indexes affected entries
 
     Args:
-        entry_path: Relative path of the new/updated entry (e.g., "guides/python.md")
+        entry_path: Indexed document id for the new/updated entry. In multi-KB mode
+            this is scope-qualified (for example "@project/guides/python.md").
         title: Title of the entry for search query
         content: Content of the entry for search query
         tags: Tags of the entry for context
@@ -656,7 +661,6 @@ def create_bidirectional_semantic_links(
     if not SEMANTIC_LINK_ENABLED:
         return LinkingResult(forward_links=[])
 
-    kb_root = get_kb_root()
     try:
         searcher = get_searcher()
     except Exception as e:
@@ -695,7 +699,6 @@ def create_bidirectional_semantic_links(
 
         # Create backlink on the neighbor entry
         _add_backlink_to_neighbor(
-            kb_root=kb_root,
             neighbor_path=result.path,
             new_entry_path=entry_path,
             score=result.score,
@@ -709,7 +712,6 @@ def create_bidirectional_semantic_links(
 
 
 def _add_backlink_to_neighbor(
-    kb_root: Path,
     neighbor_path: str,
     new_entry_path: str,
     score: float,
@@ -724,13 +726,12 @@ def _add_backlink_to_neighbor(
     4. Re-indexes the neighbor
 
     Args:
-        kb_root: KB root directory
-        neighbor_path: Relative path to the neighbor entry
-        new_entry_path: Relative path to the new entry (for backlink)
+        neighbor_path: Indexed document id for the neighbor entry.
+        new_entry_path: Indexed document id for the new entry (for backlink)
         score: Similarity score for the backlink
         searcher: HybridSearcher instance for re-indexing
     """
-    neighbor_file = kb_root / neighbor_path
+    neighbor_file = resolve_scoped_path(neighbor_path)
 
     if not neighbor_file.exists():
         log.warning("Neighbor entry not found for backlinking: %s", neighbor_path)
@@ -2149,7 +2150,7 @@ async def update_entry(
     content_changed = content is not None or section_updates
     if semantic_links is None and content_changed and SEMANTIC_LINK_ENABLED:
         linking_result = create_bidirectional_semantic_links(
-            entry_path=relative_path,
+            entry_path=doc_id,
             title=updated_metadata.title,
             content=new_content,
             tags=new_tags,
