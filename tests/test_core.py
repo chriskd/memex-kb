@@ -341,10 +341,9 @@ class TestAddEntryWithScope:
             lambda s: project_kb if s == "project" else user_kb,
         )
         monkeypatch.setattr(core, "get_kb_root", lambda: project_kb)
+        monkeypatch.setattr(core, "get_project_kb_root", lambda: project_kb)
+        monkeypatch.setattr(core, "get_user_kb_root", lambda: user_kb)
         monkeypatch.setattr(core, "get_searcher", lambda: DummySearcher())
-
-        # Set MEMEX_USER_KB_ROOT to avoid discovery issues
-        monkeypatch.setenv("MEMEX_USER_KB_ROOT", str(project_kb))
 
         result = await core.add_entry(
             title="Scoped Entry",
@@ -354,7 +353,7 @@ class TestAddEntryWithScope:
             scope="project",
         )
 
-        assert result["path"] == "general/scoped-entry.md"
+        assert result["path"] == "@project/general/scoped-entry.md"
         assert (project_kb / "general/scoped-entry.md").exists()
         assert not (user_kb / "general/scoped-entry.md").exists()
 
@@ -506,6 +505,59 @@ class TestUpdateEntry:
         assert "updated-tag" in entry.metadata.tags
         assert "old-tag" not in entry.metadata.tags
         assert original_content in entry.content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-KB Lazy Index Init Tests (mem-o9tr)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestLazyIndexInitMultiKB:
+    def test_lazy_init_indexes_with_scoped_roots_when_multi_kb(self, tmp_path, monkeypatch):
+        """When both KBs exist, lazy indexing should use kb_roots (scoped doc ids)."""
+        from memex.models import IndexStatus
+
+        class RecordingSearcher:
+            semantic_available = True
+
+            def __init__(self):
+                self.calls = []
+
+            def status(self):
+                return IndexStatus(whoosh_docs=0, chroma_docs=0, kb_files=0, last_indexed=None)
+
+            def reindex(self, kb_root=None, kb_roots=None):
+                self.calls.append({"kb_root": kb_root, "kb_roots": kb_roots})
+
+        project_kb = tmp_path / "project" / "kb"
+        user_kb = tmp_path / "user" / "kb"
+        project_kb.mkdir(parents=True)
+        user_kb.mkdir(parents=True)
+        # Ensure there is content so lazy init triggers.
+        (project_kb / "a.md").write_text(
+            """---
+title: A
+tags: [test]
+created: 2024-01-15
+---
+
+hi
+""",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            core,
+            "get_kb_roots_for_indexing",
+            lambda scope=None: [("project", project_kb), ("user", user_kb)],
+        )
+
+        searcher = RecordingSearcher()
+        core._maybe_initialize_searcher(searcher)
+
+        assert searcher.calls, "Expected lazy init to call reindex()"
+        assert searcher.calls[0]["kb_roots"] == [("project", project_kb), ("user", user_kb)]
+        assert searcher.calls[0]["kb_root"] is None
 
     @pytest.mark.asyncio
     async def test_update_entry_not_found_raises_error(self, tmp_kb):

@@ -268,10 +268,28 @@ def _maybe_initialize_searcher(searcher: "HybridSearcher") -> None:
     semantic_available = getattr(searcher, "semantic_available", True)
     needs_keyword = status.whoosh_docs == 0
     needs_semantic = semantic_available and status.chroma_docs == 0
-    if status.kb_files > 0 and (needs_keyword or needs_semantic):
-        kb_root = get_kb_root()
-        if kb_root.exists():
-            searcher.reindex(kb_root)
+    if needs_keyword or needs_semantic:
+        # In multi-KB mode we must reindex with scope-prefixed paths, otherwise
+        # search results become ambiguous and follow-up commands (get/delete/etc.)
+        # can't reliably target the right KB.
+        kb_roots = get_kb_roots_for_indexing()
+
+        def _has_entries(root: Path) -> bool:
+            try:
+                for p in root.rglob("*.md"):
+                    if not p.name.startswith("_"):
+                        return True
+            except Exception:
+                return False
+            return False
+
+        if any(root.exists() and _has_entries(root) for _scope, root in kb_roots):
+            if any(scope_label for scope_label, _ in kb_roots):
+                searcher.reindex(kb_roots=kb_roots)
+            else:
+                # Single-KB mode: preserve legacy unscoped doc IDs.
+                kb_root = kb_roots[0][1]
+                searcher.reindex(kb_root)
 
     _searcher_ready = True
 
@@ -345,6 +363,34 @@ def relative_kb_path(kb_root: Path, file_path: Path) -> str:
     return str(file_path.relative_to(kb_root))
 
 
+def _doc_id_for_index(
+    kb_root: Path,
+    relative_path: str,
+    *,
+    explicit_scope: str | None = None,
+) -> tuple[str | None, str]:
+    """Return (scope_label, doc_id) for indexing/output.
+
+    In multi-KB mode, doc IDs must be scope-prefixed to disambiguate paths and to
+    match `HybridSearcher.reindex(kb_roots=...)`.
+    """
+    project_kb = get_project_kb_root()
+    user_kb = get_user_kb_root()
+    is_multi_kb = bool(project_kb and user_kb)
+
+    scope_label: str | None = None
+    if is_multi_kb:
+        if explicit_scope in ("project", "user"):
+            scope_label = explicit_scope
+        elif project_kb and kb_root == project_kb:
+            scope_label = "project"
+        elif user_kb and kb_root == user_kb:
+            scope_label = "user"
+
+    doc_id = f"@{scope_label}/{relative_path}" if scope_label else relative_path
+    return scope_label, doc_id
+
+
 def normalize_chunks(chunks: list[DocumentChunk], relative_path: str) -> list[DocumentChunk]:
     """Ensure all chunk paths share the relative file path."""
     return [chunk.model_copy(update={"path": relative_path}) for chunk in chunks]
@@ -381,11 +427,12 @@ def get_backlink_index() -> dict[str, list[str]]:
     return ensure_backlink_cache(kb_root)
 
 
-def validate_nested_path(path: str) -> tuple[Path, str]:
+def validate_nested_path(path: str, *, kb_root: Path | None = None) -> tuple[Path, str]:
     """Validate a nested path within the KB.
 
     Args:
         path: Relative path like "development/python/file.md" or "development/python/"
+        kb_root: Optional KB root override (defaults to primary KB).
 
     Returns:
         Tuple of (absolute_path, normalized_relative_path)
@@ -393,7 +440,7 @@ def validate_nested_path(path: str) -> tuple[Path, str]:
     Raises:
         ValueError: If path is invalid or outside KB.
     """
-    kb_root = get_kb_root()
+    kb_root = kb_root or get_kb_root()
 
     # Security: prevent path traversal
     normalized = Path(path).as_posix()
@@ -1296,7 +1343,7 @@ async def add_entry(
     # Determine target directory: prefer 'directory' over 'category' over context.primary
     if directory:
         # Validate the directory is within KB, auto-create if needed
-        abs_dir, normalized_dir = validate_nested_path(directory)
+        abs_dir, normalized_dir = validate_nested_path(directory, kb_root=kb_root)
         if abs_dir.exists() and not abs_dir.is_dir():
             raise ValueError(f"Path exists but is not a directory: {directory}")
         # Auto-create directory if it doesn't exist
@@ -1314,7 +1361,7 @@ async def add_entry(
             rel_dir = category
     elif kb_context and kb_context.primary:
         # Use context primary directory
-        abs_dir, normalized_dir = validate_nested_path(kb_context.primary)
+        abs_dir, normalized_dir = validate_nested_path(kb_context.primary, kb_root=kb_root)
         if abs_dir.exists() and not abs_dir.is_dir():
             raise ValueError(
                 f"Context primary path exists but is not a directory: {kb_context.primary}"
@@ -1338,9 +1385,10 @@ async def add_entry(
 
     file_path = target_dir / f"{slug}.md"
     rel_path = f"{rel_dir}/{slug}.md" if rel_dir else f"{slug}.md"
+    scope_label, doc_id = _doc_id_for_index(kb_root, rel_path, explicit_scope=scope)
 
     if file_path.exists():
-        raise ValueError(f"Entry already exists at {rel_path}")
+        raise ValueError(f"Entry already exists at {doc_id}")
 
     # Add links to content if specified
     final_content = content
@@ -1380,7 +1428,10 @@ async def add_entry(
 
     # Rebuild backlink cache (best-effort; file is already created)
     try:
-        rebuild_backlink_cache(kb_root)
+        # Multi-KB note: backlink cache is currently keyed by index_root (primary KB).
+        # Avoid clobbering the primary cache when operating on a non-primary KB.
+        if kb_root == get_kb_root():
+            rebuild_backlink_cache(kb_root)
     except Exception as e:
         msg = f"Created entry but failed to rebuild backlink cache: {e}"
         log.warning("%s (%s)", msg, rel_path)
@@ -1391,7 +1442,9 @@ async def add_entry(
         _, _, chunks = parse_entry(file_path)
         if chunks:
             relative_path = relative_kb_path(kb_root, file_path)
-            normalized_chunks = normalize_chunks(chunks, relative_path)
+            # Index using the same doc id scheme as `reindex()` (scoped in multi-KB).
+            scope_label, doc_id = _doc_id_for_index(kb_root, relative_path, explicit_scope=scope_label)
+            normalized_chunks = normalize_chunks(chunks, doc_id)
             searcher = get_searcher()
             searcher.index_chunks(normalized_chunks)
     except Exception as e:
@@ -1404,7 +1457,7 @@ async def add_entry(
     if semantic_links is None and SEMANTIC_LINK_ENABLED:
         try:
             linking_result = create_bidirectional_semantic_links(
-                entry_path=rel_path,
+                entry_path=doc_id,
                 title=title,
                 content=final_content,
                 tags=tags,
@@ -1428,8 +1481,8 @@ async def add_entry(
                         _, _, updated_chunks = parse_entry(file_path)
                         if updated_chunks:
                             searcher = get_searcher()
-                            searcher.delete_document(rel_path)
-                            normalized_chunks = normalize_chunks(updated_chunks, rel_path)
+                            searcher.delete_document(doc_id)
+                            normalized_chunks = normalize_chunks(updated_chunks, doc_id)
                             searcher.index_chunks(normalized_chunks)
                     except Exception as e:
                         msg = f"Updated entry with semantic links but failed to re-index: {e}"
@@ -1445,7 +1498,7 @@ async def add_entry(
             title=title,
             content=final_content,
             tags=tags,
-            self_path=rel_path,
+            self_path=doc_id,
             existing_links=existing_links,
             limit=3,  # Suggest up to 3 high-confidence links
             min_score=0.5,
@@ -1505,7 +1558,8 @@ async def add_entry(
     suggested_tags = config_suggestions + suggested_tags
 
     result: dict[str, object] = {
-        "path": rel_path,
+        "path": doc_id,
+        "scope": scope_label,
         "suggested_links": suggested_links,
         "suggested_tags": suggested_tags,
     }
@@ -2018,8 +2072,9 @@ async def update_entry(
         Dict with 'path' of updated file, 'suggested_links' to consider adding,
         and 'suggested_tags' based on content similarity and existing taxonomy.
     """
-    kb_root = get_kb_root()
-    file_path = kb_root / path
+    explicit_scope, relative = parse_scoped_path(path)
+    kb_root = get_kb_root_by_scope(explicit_scope) if explicit_scope else get_kb_root()
+    file_path, normalized = validate_nested_path(relative, kb_root=kb_root)
 
     if not file_path.exists():
         raise ValueError(f"Entry not found: {path}")
@@ -2066,19 +2121,23 @@ async def update_entry(
 
     # Write updated file
     file_path.write_text(frontmatter + new_content, encoding="utf-8")
-    rebuild_backlink_cache(kb_root)
+    # Multi-KB note: backlink cache is currently keyed by index_root (primary KB).
+    # Avoid clobbering the primary cache when operating on a non-primary KB.
+    if kb_root == get_kb_root():
+        rebuild_backlink_cache(kb_root)
 
     relative_path = relative_kb_path(kb_root, file_path)
+    scope_label, doc_id = _doc_id_for_index(kb_root, relative_path, explicit_scope=explicit_scope)
 
     # Reindex
     searcher = get_searcher()
     try:
         # Remove old index entries
-        searcher.delete_document(relative_path)
+        searcher.delete_document(doc_id)
         # Parse and index new content
         _, _, chunks = parse_entry(file_path)
         if chunks:
-            normalized_chunks = normalize_chunks(chunks, relative_path)
+            normalized_chunks = normalize_chunks(chunks, doc_id)
             searcher.index_chunks(normalized_chunks)
     except ParseError as e:
         log.warning("Updated entry but failed to re-index %s: %s", relative_path, e)
@@ -2121,7 +2180,7 @@ async def update_entry(
         title=metadata.title,
         content=new_content,
         tags=new_tags,
-        self_path=relative_path,
+        self_path=doc_id,
         existing_links=existing_links,
         limit=3,  # Suggest up to 3 high-confidence links
         min_score=0.5,
@@ -2137,7 +2196,8 @@ async def update_entry(
     )
 
     return {
-        "path": relative_path,
+        "path": doc_id,
+        "scope": scope_label,
         "suggested_links": suggested_links,
         "suggested_tags": suggested_tags,
     }
@@ -3000,6 +3060,7 @@ async def delete_entry(path: str, force: bool = False) -> dict:
 
     Args:
         path: Path to the entry (e.g., "development/old-entry.md").
+            Supports scoped paths like "@project/path.md" and "@user/path.md".
         force: If True, delete even if other entries link to this one.
 
     Returns:
@@ -3008,10 +3069,11 @@ async def delete_entry(path: str, force: bool = False) -> dict:
     Raises:
         ValueError: If entry doesn't exist or has backlinks (without force).
     """
-    kb_root = get_kb_root()
+    explicit_scope, relative = parse_scoped_path(path)
+    kb_root = get_kb_root_by_scope(explicit_scope) if explicit_scope else get_kb_root()
 
     # Validate path
-    abs_path, normalized = validate_nested_path(path)
+    abs_path, normalized = validate_nested_path(relative, kb_root=kb_root)
 
     if not abs_path.exists():
         raise ValueError(f"Entry not found: {path}")
@@ -3024,7 +3086,11 @@ async def delete_entry(path: str, force: bool = False) -> dict:
 
     # Check for backlinks
     path_key = normalized[:-3] if normalized.endswith(".md") else normalized
-    all_backlinks = get_backlink_index()
+    # Avoid relying on the persistent backlink cache here. Multi-KB mode indexes
+    # multiple roots, but the cache is keyed by a single index_root.
+    from .parser import resolve_backlinks
+
+    all_backlinks = resolve_backlinks(kb_root)
     entry_backlinks = all_backlinks.get(path_key, [])
 
     if entry_backlinks and not force:
@@ -3035,10 +3101,12 @@ async def delete_entry(path: str, force: bool = False) -> dict:
 
     warnings: list[str] = []
 
+    scope_label, doc_id = _doc_id_for_index(kb_root, normalized, explicit_scope=explicit_scope)
+
     # Remove from search index (best-effort; file deletion must not be blocked)
     try:
         searcher = get_searcher()
-        searcher.delete_document(normalized)
+        searcher.delete_document(doc_id)
     except Exception as e:
         msg = f"Deleted entry but failed to de-index it (search may be unavailable): {e}"
         log.warning("%s (%s)", msg, normalized)
@@ -3048,7 +3116,11 @@ async def delete_entry(path: str, force: bool = False) -> dict:
     try:
         from .views_tracker import delete_entry_views
 
-        delete_entry_views(normalized)
+        # Views may be recorded under scoped or unscoped identifiers depending
+        # on how the entry was accessed.
+        delete_entry_views(doc_id)
+        if doc_id != normalized:
+            delete_entry_views(normalized)
     except Exception as e:
         log.debug("Failed to delete view tracking for %s: %s", normalized, e)
 
@@ -3057,13 +3129,16 @@ async def delete_entry(path: str, force: bool = False) -> dict:
 
     # Rebuild backlink cache (best-effort; file is already gone)
     try:
-        rebuild_backlink_cache(kb_root)
+        # Multi-KB note: backlink cache is currently keyed by index_root (primary KB).
+        # Avoid clobbering the primary cache when operating on a non-primary KB.
+        if kb_root == get_kb_root():
+            rebuild_backlink_cache(kb_root)
     except Exception as e:
         msg = f"Deleted entry but failed to rebuild backlink cache: {e}"
         log.warning("%s (%s)", msg, normalized)
         warnings.append(msg)
 
-    result: dict[str, object] = {"deleted": normalized, "had_backlinks": entry_backlinks}
+    result: dict[str, object] = {"deleted": doc_id, "scope": scope_label, "had_backlinks": entry_backlinks}
     if warnings:
         result["warnings"] = warnings
     return result
@@ -3226,6 +3301,10 @@ async def health(
     Returns:
         Dict with lists of issues found in each category.
     """
+    # Small/new KBs naturally start with isolated entries. Delay orphan warnings
+    # until there is enough graph surface area for the signal to be meaningful.
+    orphan_warning_min_entries = 5
+
     kb_root = get_kb_root()
 
     if not kb_root.exists():
@@ -3280,11 +3359,13 @@ async def health(
             "links": links,
         }
 
+    total_entries = len(all_entries)
+
     # Get backlink index
     all_backlinks = get_backlink_index()
 
     # Check for orphans (entries with no incoming backlinks)
-    if check_orphans:
+    if check_orphans and total_entries >= orphan_warning_min_entries:
         for path_key, entry in all_entries.items():
             incoming = all_backlinks.get(path_key, [])
             if not incoming:
@@ -3364,7 +3445,6 @@ async def health(
 
     # Add summary with health score
     total_issues = sum(len(v) for v in results.values() if isinstance(v, list))
-    total_entries = len(all_entries)
 
     # Calculate health score (0-100)
     # Deduct points for issues, weighted by severity
@@ -3596,8 +3676,9 @@ async def patch_entry(
         write_file_atomically,
     )
 
-    kb_root = get_kb_root()
-    file_path = kb_root / path
+    explicit_scope, relative = parse_scoped_path(path)
+    kb_root = get_kb_root_by_scope(explicit_scope) if explicit_scope else get_kb_root()
+    file_path, normalized = validate_nested_path(relative, kb_root=kb_root)
 
     if not file_path.exists():
         return {
@@ -3677,18 +3758,22 @@ async def patch_entry(
         return write_error.to_dict()
 
     # Rebuild caches
-    rebuild_backlink_cache(kb_root)
+    # Multi-KB note: backlink cache is currently keyed by index_root (primary KB).
+    # Avoid clobbering the primary cache when operating on a non-primary KB.
+    if kb_root == get_kb_root():
+        rebuild_backlink_cache(kb_root)
 
     # Reindex for semantic search
     relative_path = relative_kb_path(kb_root, file_path)
+    scope_label, doc_id = _doc_id_for_index(kb_root, relative_path, explicit_scope=explicit_scope)
     searcher = get_searcher()
     try:
         # Remove old index entries
-        searcher.delete_document(relative_path)
+        searcher.delete_document(doc_id)
         # Parse and index new content
         _, _, chunks = parse_entry(file_path)
         if chunks:
-            normalized_chunks = normalize_chunks(chunks, relative_path)
+            normalized_chunks = normalize_chunks(chunks, doc_id)
             searcher.index_chunks(normalized_chunks)
     except ParseError as e:
         log.warning("Patched entry but failed to re-index %s: %s", relative_path, e)
@@ -3698,9 +3783,10 @@ async def patch_entry(
     return {
         "success": True,
         "exit_code": 0,
-        "message": f"Patched {path} ({result.replacements_made} replacement(s))",
+        "message": f"Patched {doc_id} ({result.replacements_made} replacement(s))",
         "replacements": result.replacements_made,
-        "path": relative_path,
+        "path": doc_id,
+        "scope": scope_label,
     }
 
 
