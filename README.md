@@ -73,6 +73,9 @@ mx search "setup"                          # Optional: search (keyword; semantic
 
 Note: If `--category` is omitted and no `.kbconfig` `primary` exists, `mx add` defaults to the KB root (`.`) and prints a warning.
 Tip: Set `.kbconfig` `primary: guides` to make `--category` optional. Check scope/config with `mx info` and `mx context show`.
+When both a project KB and a user KB are active, many outputs use explicit scoped paths such as
+`@project/guides/setup.md` and `@user/inbox/note.md`. Unscoped paths still resolve to the primary KB
+(project if present, else user).
 
 ## Entries
 
