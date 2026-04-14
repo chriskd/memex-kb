@@ -365,7 +365,9 @@ def _emit_json(
     """Emit JSON, optionally compact and best-effort bounded by max_bytes.
 
     The bounding logic is intentionally conservative: it only truncates list-valued
-    fields commonly used by agent hooks ("entries", "recent_entries").
+    fields commonly used by agent hooks ("entries", "recent_entries"). Truncate
+    primary entries before auxiliary recents so bounded hook output stays
+    predictable.
     """
     if max_bytes is not None and not compact:
         raise UsageError("--max-bytes requires compact JSON output")
@@ -387,7 +389,7 @@ def _emit_json(
         click.echo(_json_dumps(data, compact=True))
         return
 
-    for field in ("recent_entries", "entries"):
+    for field in ("entries", "recent_entries"):
         value = data.get(field)
         if not isinstance(value, list) or not value:
             continue
