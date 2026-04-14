@@ -1629,6 +1629,92 @@ Content with aware date.
         # Main goal: no TypeError from date comparison
         assert isinstance(result, list)
 
+    @pytest.mark.asyncio
+    async def test_falls_back_to_filesystem_timestamps_when_frontmatter_missing(self, tmp_path, monkeypatch):
+        """whats_new includes entries that are missing frontmatter timestamps."""
+        kb_root = tmp_path / "kb"
+        kb_root.mkdir()
+        entry = kb_root / "fallback.md"
+        entry.write_text(
+            """---
+title: Fallback Entry
+tags: [test]
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "memex.config.get_kb_roots_for_indexing",
+            lambda scope=None: [("", kb_root)],
+        )
+
+        from memex.timestamps import FilesystemTimestamps
+
+        monkeypatch.setattr(
+            "memex.timestamps.get_filesystem_timestamps",
+            lambda path: FilesystemTimestamps(
+                created_source="ctime",
+                created=datetime(2026, 4, 12, 0, 0, 0, tzinfo=UTC),
+                updated_source="mtime",
+                updated=datetime(2026, 4, 13, 0, 0, 0, tzinfo=UTC),
+            ),
+        )
+
+        result = await core.whats_new(days=30, limit=10)
+
+        assert len(result) == 1
+        assert result[0]["title"] == "Fallback Entry"
+        assert result[0]["created"] is None
+        assert result[0]["updated"] is None
+        assert result[0]["activity_type"] == "updated"
+        assert result[0]["activity_date"] == "2026-04-13T00:00:00+00:00"
+
+    @pytest.mark.asyncio
+    async def test_prefers_newer_filesystem_mtime_over_stale_updated_field(self, tmp_path, monkeypatch):
+        """whats_new uses filesystem mtime when it is newer than frontmatter updated."""
+        kb_root = tmp_path / "kb"
+        kb_root.mkdir()
+        entry = kb_root / "stale.md"
+        entry.write_text(
+            """---
+title: Stale Updated
+tags: [test]
+created: 2024-01-01
+updated: 2024-01-02T00:00:00+00:00
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "memex.config.get_kb_roots_for_indexing",
+            lambda scope=None: [("", kb_root)],
+        )
+
+        from memex.timestamps import FilesystemTimestamps
+
+        monkeypatch.setattr(
+            "memex.timestamps.get_filesystem_timestamps",
+            lambda path: FilesystemTimestamps(
+                created_source="ctime",
+                created=datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC),
+                updated_source="mtime",
+                updated=datetime(2026, 4, 14, 0, 0, 0, tzinfo=UTC),
+            ),
+        )
+
+        result = await core.whats_new(days=1000, limit=10)
+
+        assert len(result) == 1
+        assert result[0]["updated"] == "2024-01-02T00:00:00+00:00"
+        assert result[0]["activity_type"] == "updated"
+        assert result[0]["activity_date"] == "2026-04-14T00:00:00+00:00"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto Semantic Links

@@ -51,6 +51,7 @@ from .models import (
 )
 from .parser import ParseError, extract_links, parse_entry, update_links_batch
 from .relation_types import CANONICAL_RELATION_TYPES, normalize_relation_type
+from .timestamps import ensure_aware, read_recency_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -97,11 +98,7 @@ def _ensure_aware(dt: datetime | None) -> datetime | None:
     Returns:
         Timezone-aware datetime (with UTC if originally naive), or None.
     """
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
-    return dt
+    return ensure_aware(dt)
 
 
 class DuplicateSearcher(Protocol):
@@ -2590,21 +2587,23 @@ async def whats_new(
             display_path = f"@{scope_label}/{rel_path}" if scope_label else rel_path
 
             try:
-                metadata, _, _ = parse_entry(md_file)
-            except ParseError:
+                snapshot = read_recency_snapshot(md_file)
+            except (OSError, UnicodeDecodeError, ValueError):
+                continue
+
+            if snapshot is None:
                 continue
 
             # Filter by tag if specified
-            if tag and tag not in metadata.tags:
+            if tag and tag not in snapshot.tags:
                 continue
 
             # Determine activity type and datetime
             activity_type: str | None = None
             activity_date: datetime | None = None
 
-            # Normalize dates to aware (assume UTC for naive dates from legacy entries)
-            created_aware = _ensure_aware(metadata.created)
-            updated_aware = _ensure_aware(metadata.updated)
+            created_aware = _ensure_aware(snapshot.effective_created)
+            updated_aware = _ensure_aware(snapshot.effective_updated)
 
             # Check updated first (takes precedence if both qualify)
             if include_updated and updated_aware and updated_aware >= cutoff_datetime:
@@ -2620,13 +2619,13 @@ async def whats_new(
             candidates.append(
                 {
                     "path": display_path,
-                    "title": metadata.title,
-                    "tags": metadata.tags,
-                    "created": metadata.created.isoformat() if metadata.created else None,
-                    "updated": metadata.updated.isoformat() if metadata.updated else None,
+                    "title": snapshot.title,
+                    "tags": snapshot.tags,
+                    "created": snapshot.created.isoformat() if snapshot.created else None,
+                    "updated": snapshot.updated.isoformat() if snapshot.updated else None,
                     "activity_type": activity_type,
                     "activity_date": activity_date.isoformat(),
-                    "source_project": metadata.source_project,
+                    "source_project": snapshot.source_project,
                 }
             )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -119,3 +120,34 @@ async def test_publish_skips_mismatched_scoped_relations(tmp_kb: Path, tmp_path:
     edges = graph_data["edges"]
 
     assert not any(edge["origin"] == "relations" for edge in edges)
+
+
+@pytest.mark.asyncio
+async def test_publish_recent_list_falls_back_to_filesystem_mtime(tmp_kb: Path, tmp_path: Path) -> None:
+    _write_entry(tmp_kb, "older.md", "Older Entry", ["test"])
+    fresh = tmp_kb / "fresh.md"
+    fresh.write_text(
+        """---
+title: Fresh Entry
+tags: [test]
+created: 2024-01-01
+---
+
+# Fresh Entry
+
+Body for Fresh Entry.
+""",
+        encoding="utf-8",
+    )
+
+    older = tmp_kb / "older.md"
+    os.utime(older, (1704067200, 1704067200))  # 2024-01-01 UTC
+    os.utime(fresh, (1744502400, 1744502400))  # 2025-04-13 UTC
+
+    output_dir = tmp_path / "site"
+    config = PublishConfig(output_dir=output_dir, clean=True)
+    generator = SiteGenerator(config, tmp_kb)
+    await generator.generate()
+
+    index_html = (output_dir / "index.html").read_text()
+    assert index_html.index("Fresh Entry") < index_html.index("Older Entry")

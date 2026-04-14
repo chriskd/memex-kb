@@ -206,7 +206,9 @@ Body
                 "ctime",
                 "2024-02-01T00:00:00+00:00",
                 "mtime",
-                "2024-02-02T00:00:00+00:00",
+                "2024-01-16T00:00:00+00:00"
+                if path.name == "good.md"
+                else "2024-02-02T00:00:00+00:00",
             ),
         )
 
@@ -266,6 +268,45 @@ Body text
         assert "id: ticket-123" in text
         assert text.endswith("\nBody text\n")
         assert "changed:  1" in result.output
+
+    def test_timestamps_report_and_fix_stale_updated_field(self, runner, tmp_kb, monkeypatch):
+        """`mx doctor --timestamps` detects stale updated timestamps from mtime."""
+        entry = tmp_kb / "general" / "stale.md"
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.write_text(
+            """---
+title: Stale Entry
+tags: [test]
+created: 2024-03-01T10:11:12+00:00
+updated: 2024-03-02T00:00:00+00:00
+---
+
+Body
+""",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(
+            "memex.doctor._get_filesystem_timestamps",
+            lambda path: (
+                "ctime",
+                "2024-03-01T10:11:12+00:00",
+                "mtime",
+                "2024-03-04T05:06:07+00:00",
+            ),
+        )
+
+        report = runner.invoke(cli, ["doctor", "--timestamps", "--json"])
+        assert report.exit_code == 0
+        payload = json.loads(report.output)
+        audited = payload["timestamps"]["entries"][0]
+        assert audited["updated"]["status"] == "stale"
+        assert audited["updated"]["after"] == "2024-03-04T05:06:07+00:00"
+
+        fixed = runner.invoke(cli, ["doctor", "--timestamps", "--fix"])
+        assert fixed.exit_code == 0
+        text = entry.read_text(encoding="utf-8")
+        assert "updated: 2024-03-04T05:06:07+00:00" in text
 
     def test_timestamps_force_dry_run_json_does_not_write(self, runner, tmp_kb, monkeypatch):
         """`--force --fix --dry-run` previews filesystem timestamp replacements without writing."""

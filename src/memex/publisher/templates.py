@@ -91,7 +91,7 @@ def _recent_sort_key(entry: EntryData) -> datetime:
     values (comparing them would raise TypeError). Strips timezone info
     to get a consistent naive datetime for comparison.
     """
-    dt = entry.metadata.updated or entry.metadata.created
+    dt = entry.recent_activity or entry.metadata.updated or entry.metadata.created
     if dt is None:
         return datetime.min
     # Strip timezone info to allow comparison between aware and naive datetimes

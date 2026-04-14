@@ -29,8 +29,8 @@ If you want to force a brand-new KB in the current directory (common in sandboxe
 Optional checks:
 - `mx search "Hello KB"` to verify indexing (hybrid/keyword)
 - `mx search "Hello KB" --mode=semantic` to verify semantic search specifically
-If `mx search` fails, run `mx doctor` for an install hint. If you need to repair missing or invalid
-frontmatter timestamps, use `mx doctor --timestamps` or `mx doctor --timestamps --fix`. If you see
+If `mx search` fails, run `mx doctor` for an install hint. If you need to repair missing, invalid,
+or stale frontmatter timestamps, use `mx doctor --timestamps` or `mx doctor --timestamps --fix`. If you see
 `No module named 'whoosh'`, install
 keyword search deps with `pip install whoosh-reloaded` (or reinstall `memex-kb`).
 

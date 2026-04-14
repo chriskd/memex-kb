@@ -22,37 +22,34 @@ Agents often edit kb markdown files directly instead of using mx patch/append/re
 
 Evaluation summary:
 
-- Current behavior in `src/memex/core.py` keeps frontmatter canonical for CLI recency:
-  - `whats_new()` uses `updated` first, then `created`
-  - entries without those fields are omitted from recency output
-- Current behavior in `src/memex/publisher/templates.py` keeps frontmatter canonical for published recent views:
-  - `_recent_sort_key()` sorts by `updated` or `created`
-- Current behavior in `src/memex/doctor.py` already supports filesystem-aware audit/repair:
-  - `mx doctor --timestamps` compares frontmatter against birthtime/ctime and mtime
-  - `--fix` / `--force` can repair stale or missing timestamp fields explicitly
+- `src/memex/core.py`
+  - `whats_new()` now uses filesystem timestamps as a recency fallback when frontmatter timestamps are missing
+  - when frontmatter `updated` exists but is older than filesystem `mtime`, recency uses the newer filesystem timestamp for ordering/display
+- `src/memex/publisher/generator.py` and `src/memex/publisher/templates.py`
+  - published recent views now use the same effective recency rule for already-published entries
+- `src/memex/doctor.py`
+  - `mx doctor --timestamps` now reports stale `updated` values in addition to missing/invalid timestamps
+  - `--fix` repairs stale `updated` values from filesystem `mtime` explicitly, without hidden write side effects in read commands
 
-Recommendation:
+Recommendation / implemented approach:
 
-- Do **not** make filesystem timestamps the default freshness source for `mx whats-new` or published recent views.
-- Filesystem `mtime`/`ctime` are too unstable across git checkout, copy/rsync, archive extraction, and publish/build workflows; using them as the default source would cause false "recent" spikes and make published ordering nondeterministic.
-- Keep frontmatter as the canonical source of truth, and use the explicit repair workflow from `mem-iodx` when agents bypass `mx` edit commands.
+- Keep frontmatter as the canonical stored metadata.
+- Use effective recency (`max(frontmatter updated, filesystem mtime)`, plus filesystem fallback when timestamps are missing) for `mx whats-new` and recent views.
+- Keep actual metadata repair explicit through `mx doctor --timestamps --fix`, rather than mutating files during `mx whats-new` or publish.
 
-If a future hybrid mode is still desired, the main code paths to update are:
+Main modules updated:
 
 - `src/memex/core.py`
-  - `whats_new()`
+- `src/memex/doctor.py`
 - `src/memex/publisher/generator.py`
-  - carry effective freshness metadata into publish-time entry data if recency should consider filesystem state
 - `src/memex/publisher/templates.py`
-  - `_recent_sort_key()`
-- `src/memex/session_context.py`
-  - only if recent-entry summaries need to expose source/repair hints
+- `src/memex/timestamps.py`
 
-Main tests to update/add for a future hybrid mode:
+Main tests updated/added:
 
 - `tests/test_core.py`
   - `TestWhatsNew`
 - `tests/test_cli.py`
-  - `mx whats-new` command coverage
-- publisher recency ordering coverage
-  - add a focused publisher test file or extend existing publisher tests to assert stable recent ordering with mixed frontmatter/filesystem timestamps
+  - timestamp doctor coverage
+- `tests/test_publisher_relations.py`
+  - recent ordering fallback coverage

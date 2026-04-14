@@ -124,7 +124,7 @@ frontmatter timestamps from filesystem metadata.
 ```bash
 mx doctor                                   # Deps + KB detection
 mx doctor --json                            # Same as JSON
-mx doctor --timestamps                      # Report missing/invalid created/updated
+mx doctor --timestamps                      # Report missing/invalid/stale timestamps
 mx doctor --timestamps --fix                # Apply timestamp fixes
 mx doctor --timestamps --fix --dry-run      # Preview fixes without writing
 mx doctor --timestamps --force              # Recompute even valid timestamps
@@ -133,7 +133,7 @@ mx doctor --timestamps --limit=25 --json    # Bound scan and emit per-file JSON
 ```
 
 **Timestamp options:**
-- `--timestamps`: Audit `created` / `updated` frontmatter fields
+- `--timestamps`: Audit `created` / `updated` frontmatter fields against filesystem metadata
 - `--fix`: Write proposed timestamp updates in-place
 - `--dry-run`: Preview `--fix` results without writing
 - `--force`: Overwrite valid timestamps from filesystem metadata
@@ -390,6 +390,11 @@ Alias: `mx config`
 ### mx whats-new
 
 Show recently modified entries.
+
+Recency uses frontmatter when available, but falls back to filesystem timestamps when
+timestamp fields are missing. If `updated` is present but older than the file `mtime`,
+recent views use the newer filesystem time and `mx doctor --timestamps --fix` can sync
+frontmatter explicitly.
 
 ```bash
 mx whats-new                      # Last 30 days

@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-from pydantic import TypeAdapter
-
 from .config import get_kb_roots_for_indexing
-
-_DATETIME_ADAPTER = TypeAdapter(datetime)
+from .timestamps import (
+    coerce_datetime,
+    extract_frontmatter,
+    format_timestamp_for_storage,
+    get_filesystem_timestamps as load_filesystem_timestamps,
+    parse_frontmatter_mapping,
+)
 
 
 @dataclass
@@ -143,24 +145,30 @@ def _audit_timestamp_file(
     force: bool,
 ) -> dict[str, Any] | None:
     raw_content = path.read_text(encoding="utf-8")
-    prefix, frontmatter_block, body = _extract_frontmatter(raw_content)
+    try:
+        prefix, frontmatter_block, body = extract_frontmatter(raw_content)
+    except ValueError as exc:
+        raise TimestampDoctorError(str(exc)) from exc
     if frontmatter_block is None:
         return None
 
-    metadata = _parse_frontmatter_mapping(frontmatter_block)
+    try:
+        metadata = parse_frontmatter_mapping(frontmatter_block)
+    except ValueError as exc:
+        raise TimestampDoctorError(str(exc)) from exc
     created_before = _format_frontmatter_scalar(metadata.get("created"))
     updated_before = _format_frontmatter_scalar(metadata.get("updated"))
 
-    created_parsed = _coerce_datetime(metadata.get("created"))
-    updated_parsed = _coerce_datetime(metadata.get("updated"))
+    created_parsed = coerce_datetime(metadata.get("created"))
+    updated_parsed = coerce_datetime(metadata.get("updated"))
 
     created_source, created_fs, updated_source, updated_fs = _get_filesystem_timestamps(path)
 
     created_status = _timestamp_status(created_parsed, created_before)
-    updated_status = _timestamp_status(updated_parsed, updated_before)
+    updated_status = _updated_timestamp_status(updated_parsed, updated_before, updated_fs)
 
     created_after = created_fs if force or created_status in {"missing", "invalid"} else None
-    updated_after = updated_fs if force or updated_status in {"missing", "invalid"} else None
+    updated_after = updated_fs if force or updated_status in {"missing", "invalid", "stale"} else None
 
     created_changed = created_after is not None and created_after != created_before
     updated_changed = updated_after is not None and updated_after != updated_before
@@ -201,60 +209,6 @@ def _audit_timestamp_file(
     return asdict(file_audit)
 
 
-def _extract_frontmatter(content: str) -> tuple[str, str | None, str]:
-    """Return leading prefix, frontmatter block, and body content."""
-
-    lines = content.splitlines(keepends=True)
-    start = 0
-    while start < len(lines) and lines[start].strip() == "":
-        start += 1
-
-    if start >= len(lines) or lines[start].strip() != "---":
-        return "", None, content
-
-    end = start + 1
-    while end < len(lines):
-        if lines[end].strip() in {"---", "..."}:
-            prefix = "".join(lines[:start])
-            frontmatter_block = "".join(lines[start : end + 1])
-            body = "".join(lines[end + 1 :])
-            return prefix, frontmatter_block, body
-        end += 1
-
-    raise TimestampDoctorError("Unterminated YAML frontmatter")
-
-
-def _parse_frontmatter_mapping(frontmatter_block: str) -> dict[str, Any]:
-    lines = frontmatter_block.splitlines()
-    if len(lines) < 2:
-        raise TimestampDoctorError("Invalid frontmatter block")
-
-    inner = "\n".join(lines[1:-1])
-    try:
-        data = yaml.safe_load(inner) if inner.strip() else {}
-    except yaml.YAMLError as exc:
-        raise TimestampDoctorError(f"Failed to parse frontmatter YAML: {exc}") from exc
-
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise TimestampDoctorError("Frontmatter must be a YAML mapping")
-    return data
-
-
-def _coerce_datetime(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, date):
-        return datetime.combine(value, time.min)
-    try:
-        return _DATETIME_ADAPTER.validate_python(value)
-    except Exception:
-        return None
-
-
 def _format_frontmatter_scalar(value: Any) -> str | None:
     if value is None:
         return None
@@ -265,10 +219,6 @@ def _format_frontmatter_scalar(value: Any) -> str | None:
     return str(value)
 
 
-def _format_fs_timestamp(timestamp: float) -> str:
-    return datetime.fromtimestamp(timestamp, UTC).replace(microsecond=0).isoformat()
-
-
 def _timestamp_status(parsed: datetime | None, original: str | None) -> str:
     if parsed is not None:
         return "valid"
@@ -276,18 +226,22 @@ def _timestamp_status(parsed: datetime | None, original: str | None) -> str:
         return "missing"
     return "invalid"
 
+def _updated_timestamp_status(parsed: datetime | None, original: str | None, filesystem: str | None) -> str:
+    status = _timestamp_status(parsed, original)
+    if status != "valid":
+        return status
+    if format_timestamp_for_storage(parsed) != filesystem:
+        return "stale"
+    return "valid"
+
 
 def _get_filesystem_timestamps(path: Path) -> tuple[str, str, str, str]:
-    stat = path.stat()
-    if hasattr(stat, "st_birthtime"):
-        created_source = "birthtime"
-        created_fs = _format_fs_timestamp(stat.st_birthtime)
-    else:
-        created_source = "ctime"
-        created_fs = _format_fs_timestamp(stat.st_ctime)
-    updated_source = "mtime"
-    updated_fs = _format_fs_timestamp(stat.st_mtime)
-    return created_source, created_fs, updated_source, updated_fs
+    fs_timestamps = load_filesystem_timestamps(path)
+    created = format_timestamp_for_storage(fs_timestamps.created)
+    updated = format_timestamp_for_storage(fs_timestamps.updated)
+    assert created is not None
+    assert updated is not None
+    return fs_timestamps.created_source, created, fs_timestamps.updated_source, updated
 
 
 def _apply_timestamp_updates(

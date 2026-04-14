@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from markdown_it import MarkdownIt
+
+from ..timestamps import ensure_aware, get_filesystem_timestamps
 
 if TYPE_CHECKING:
     from ..models import EntryMetadata, RelationLink
@@ -43,6 +46,7 @@ class EntryData:
     outlinks: list[str] = field(default_factory=list)  # Resolved outgoing links
     relation_outgoing: list[RelationLink] = field(default_factory=list)
     relation_backlinks: list[RelationLink] = field(default_factory=list)
+    recent_activity: datetime | None = None
 
 
 @dataclass
@@ -189,6 +193,7 @@ class SiteGenerator:
                 tags=list(metadata.tags),
                 backlinks=backlinks_index.get(path_key, []),
                 outlinks=list(resolved_links),
+                recent_activity=self._recent_activity(md_file, metadata),
             )
 
             # Build tags index
@@ -196,6 +201,19 @@ class SiteGenerator:
                 if tag not in self.tags_index:
                     self.tags_index[tag] = []
                 self.tags_index[tag].append(path_key)
+
+    def _recent_activity(self, path: Path, metadata: EntryMetadata) -> datetime:
+        """Return effective recency for published recent-entry views."""
+        filesystem_updated = get_filesystem_timestamps(path).updated
+        updated = ensure_aware(metadata.updated)
+        if updated is not None:
+            return max(updated, filesystem_updated)
+
+        created = ensure_aware(metadata.created)
+        if created is not None:
+            return max(created, filesystem_updated)
+
+        return filesystem_updated
 
     def _render_markdown(
         self,
