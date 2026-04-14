@@ -32,6 +32,7 @@ Thumbs.db
 ._*
 
 # Plugin local settings
+.codex
 .claude/*.local.md
 agents.md
 @agents.md

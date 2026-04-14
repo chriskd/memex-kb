@@ -112,7 +112,7 @@ Search organizational knowledge before implementing:
 
 ### Codex Skills (Optional)
 
-This repo includes a Memex skill at `skills/memex-kb-usage/`. Codex loads skills from
+This repo includes a Memex skill at `skills/memex-kb/`. Codex loads skills from
 `$CODEX_HOME/skills` (defaults to `~/.codex/skills`). Copy or symlink the skill
 into that directory and restart Codex.
 
@@ -120,7 +120,7 @@ Example:
 
 ```bash
 mkdir -p ~/.codex/skills
-cp -r skills/memex-kb-usage ~/.codex/skills/
+cp -r skills/memex-kb ~/.codex/skills/
 ```
 
 ## Other AI Agents
