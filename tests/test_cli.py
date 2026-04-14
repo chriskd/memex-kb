@@ -2715,6 +2715,23 @@ class TestScopedPathsMultiKB:
         assert user.exit_code == 0, user.output
         assert "Title:    User Same" in user.output
 
+    def test_get_title_ambiguous_across_scopes(self, runner, multi_kb):
+        from conftest import create_entry
+
+        project_kb = multi_kb["project_kb"]
+        user_kb = multi_kb["user_kb"]
+
+        create_entry(project_kb, "inbox/same.md", "Same", "project body", ["test"])
+        create_entry(user_kb, "inbox/same.md", "Same", "user body", ["test"])
+
+        result = runner.invoke(cli, ["get", "--title", "Same"])
+
+        assert result.exit_code == 1, result.output
+        assert "Error: Multiple entries found with title 'Same':" in result.output
+        assert "@project/inbox/same.md" in result.output
+        assert "@user/inbox/same.md" in result.output
+        assert "Use the full path to specify which entry." in result.output
+
     def test_add_outputs_scoped_path_in_multi_kb(self, runner, multi_kb, monkeypatch):
         import memex.core as core
 

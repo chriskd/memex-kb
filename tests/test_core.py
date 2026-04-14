@@ -1422,6 +1422,22 @@ class TestListEntries:
 
         assert len(results) == 2
 
+    @pytest.mark.asyncio
+    async def test_find_entries_by_title_includes_all_scopes(self, multi_kb):
+        """find_entries_by_title searches project and user KBs in multi-KB mode."""
+        from conftest import create_entry
+
+        project_kb = multi_kb["project_kb"]
+        user_kb = multi_kb["user_kb"]
+
+        create_entry(project_kb, "inbox/same.md", "Same", "project body", ["test"])
+        create_entry(user_kb, "inbox/same.md", "Same", "user body", ["test"])
+
+        results = await core.find_entries_by_title("Same", exact=True)
+        paths = {result["path"] for result in results}
+
+        assert paths == {"@project/inbox/same.md", "@user/inbox/same.md"}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Reindex Tests

@@ -2463,46 +2463,44 @@ async def find_entries_by_title(
     Returns:
         List of {path, title, tags} dictionaries for matching entries.
     """
-    kb_root = get_kb_root()
-
-    if not kb_root.exists():
+    kb_roots = get_kb_roots_for_indexing()
+    if not kb_roots:
         return []
 
     results = []
     title_lower = title.lower()
 
-    for md_file in kb_root.rglob("*.md"):
-        # Skip index files
-        if md_file.name.startswith("_"):
+    for scope_label, kb_root in kb_roots:
+        if not kb_root.exists():
             continue
 
-        try:
-            metadata, _, _ = parse_entry(md_file)
-        except ParseError:
-            continue
+        for md_file in kb_root.rglob("*.md"):
+            # Skip index files
+            if md_file.name.startswith("_"):
+                continue
 
-        entry_title_lower = metadata.title.lower()
+            try:
+                metadata, _, _ = parse_entry(md_file)
+            except ParseError:
+                continue
 
-        if exact:
-            if entry_title_lower == title_lower:
-                rel_path = str(md_file.relative_to(kb_root))
-                results.append(
-                    {
-                        "path": rel_path,
-                        "title": metadata.title,
-                        "tags": metadata.tags,
-                    }
-                )
-        else:
-            if title_lower in entry_title_lower:
-                rel_path = str(md_file.relative_to(kb_root))
-                results.append(
-                    {
-                        "path": rel_path,
-                        "title": metadata.title,
-                        "tags": metadata.tags,
-                    }
-                )
+            entry_title_lower = metadata.title.lower()
+
+            if exact and entry_title_lower != title_lower:
+                continue
+            if not exact and title_lower not in entry_title_lower:
+                continue
+
+            rel_path = str(md_file.relative_to(kb_root))
+            path = f"@{scope_label}/{rel_path}" if scope_label else rel_path
+            results.append(
+                {
+                    "path": path,
+                    "title": metadata.title,
+                    "tags": metadata.tags,
+                    "scope": scope_label,
+                }
+            )
 
     return results
 
@@ -2519,20 +2517,22 @@ async def get_similar_titles(title: str, limit: int = 5) -> list[str]:
     """
     import difflib
 
-    kb_root = get_kb_root()
-
-    if not kb_root.exists():
+    kb_roots = get_kb_roots_for_indexing()
+    if not kb_roots:
         return []
 
     all_titles = []
-    for md_file in kb_root.rglob("*.md"):
-        if md_file.name.startswith("_"):
+    for _scope_label, kb_root in kb_roots:
+        if not kb_root.exists():
             continue
-        try:
-            metadata, _, _ = parse_entry(md_file)
-            all_titles.append(metadata.title)
-        except ParseError:
-            continue
+        for md_file in kb_root.rglob("*.md"):
+            if md_file.name.startswith("_"):
+                continue
+            try:
+                metadata, _, _ = parse_entry(md_file)
+                all_titles.append(metadata.title)
+            except ParseError:
+                continue
 
     return difflib.get_close_matches(title, all_titles, n=limit, cutoff=0.4)
 
