@@ -544,6 +544,7 @@ def compute_link_suggestions(
     existing_links: set[str] | None = None,
     limit: int = 5,
     min_score: float = LINK_SUGGESTION_MIN_SCORE,
+    suppress_errors: bool = True,
 ) -> list[dict]:
     """Compute link suggestions based on semantic similarity.
 
@@ -576,6 +577,8 @@ def compute_link_suggestions(
         query = f"{title} {content[:500]}"
         search_results = searcher.search(query, limit=limit + len(exclude_set) + 10, mode="semantic")
     except Exception as e:
+        if not suppress_errors:
+            raise
         # Semantic search is optional; if it's not installed, skip suggestions.
         log.debug("Link suggestions unavailable (semantic search missing): %s", e)
         return []
@@ -1091,8 +1094,17 @@ async def search(
             scope_prefix = f"@{scope}/"
             results = [r for r in results if r.path.startswith(scope_prefix)]
         else:
-            # Single-KB mode: results are unscoped, but we can annotate for callers
-            results = [r.model_copy(update={"kb_scope": scope}) for r in results]
+            actual_scope: str | None = None
+            if get_project_kb_root() and not get_user_kb_root():
+                actual_scope = "project"
+            elif get_user_kb_root() and not get_project_kb_root():
+                actual_scope = "user"
+
+            if actual_scope is not None and scope != actual_scope:
+                results = []
+            else:
+                # Single-KB mode: results are unscoped, but we can annotate for callers.
+                results = [r.model_copy(update={"kb_scope": actual_scope}) for r in results]
 
     # Filter by tags if specified
     if tags:
@@ -3055,6 +3067,64 @@ async def rmdir(path: str, force: bool = False) -> str:
     return normalized
 
 
+def _find_incoming_typed_relations(target_path: Path) -> list[dict[str, str | None]]:
+    """Find typed relations in any KB entry that point to ``target_path``."""
+    incoming: list[dict[str, str | None]] = []
+    target_resolved = target_path.resolve()
+
+    for scope_label, kb_root in get_kb_roots_for_indexing():
+        if not kb_root.exists():
+            continue
+
+        for md_file in kb_root.rglob("*.md"):
+            if md_file.name.startswith("_") or md_file.resolve() == target_resolved:
+                continue
+
+            try:
+                metadata, _, _ = parse_entry(md_file)
+            except ParseError:
+                continue
+
+            source_rel_path = str(md_file.relative_to(kb_root))
+            _, source_doc_id = _doc_id_for_index(
+                kb_root,
+                source_rel_path,
+                explicit_scope=scope_label,
+            )
+
+            for relation in metadata.relations:
+                relation_scope, relation_relative = parse_scoped_path(relation.path)
+                if not relation_relative:
+                    continue
+
+                relation_relative_with_ext = (
+                    relation_relative
+                    if relation_relative.endswith(".md")
+                    else f"{relation_relative}.md"
+                )
+
+                if relation_scope:
+                    try:
+                        relation_target = resolve_scoped_path(
+                            f"@{relation_scope}/{relation_relative_with_ext}"
+                        )
+                    except Exception:
+                        continue
+                else:
+                    relation_target = kb_root / relation_relative_with_ext
+
+                if relation_target.resolve() == target_resolved:
+                    incoming.append(
+                        {
+                            "path": source_doc_id,
+                            "type": relation.type,
+                            "target": relation.path,
+                        }
+                    )
+
+    return incoming
+
+
 async def delete_entry(path: str, force: bool = False) -> dict:
     """Delete an entry.
 
@@ -3092,11 +3162,26 @@ async def delete_entry(path: str, force: bool = False) -> dict:
 
     all_backlinks = resolve_backlinks(kb_root)
     entry_backlinks = all_backlinks.get(path_key, [])
+    incoming_relations = _find_incoming_typed_relations(abs_path)
 
-    if entry_backlinks and not force:
+    if (entry_backlinks or incoming_relations) and not force:
+        reference_parts: list[str] = []
+        if entry_backlinks:
+            reference_parts.append(
+                f"{len(entry_backlinks)} backlink(s): {', '.join(entry_backlinks)}"
+            )
+        if incoming_relations:
+            relation_refs = ", ".join(
+                f"{ref['path']} ({ref['type']})" for ref in incoming_relations[:10]
+            )
+            if len(incoming_relations) > 10:
+                relation_refs += f", and {len(incoming_relations) - 10} more"
+            reference_parts.append(
+                f"{len(incoming_relations)} typed relation(s): {relation_refs}"
+            )
         raise ValueError(
-            f"Entry has {len(entry_backlinks)} backlink(s): {', '.join(entry_backlinks)}. "
-            "Use force=True to delete anyway, or update linking entries first."
+            f"Entry has incoming references: {'; '.join(reference_parts)}. "
+            "Use force=True to delete anyway, or update referencing entries first."
         )
 
     warnings: list[str] = []
@@ -3138,7 +3223,12 @@ async def delete_entry(path: str, force: bool = False) -> dict:
         log.warning("%s (%s)", msg, normalized)
         warnings.append(msg)
 
-    result: dict[str, object] = {"deleted": doc_id, "scope": scope_label, "had_backlinks": entry_backlinks}
+    result: dict[str, object] = {
+        "deleted": doc_id,
+        "scope": scope_label,
+        "had_backlinks": entry_backlinks,
+        "had_relations": incoming_relations,
+    }
     if warnings:
         result["warnings"] = warnings
     return result
@@ -3634,6 +3724,7 @@ async def suggest_links(
         existing_links=existing_links,
         limit=limit,
         min_score=min_score,
+        suppress_errors=False,
     )
 
 

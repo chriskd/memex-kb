@@ -151,3 +151,30 @@ Body for Fresh Entry.
 
     index_html = (output_dir / "index.html").read_text()
     assert index_html.index("Fresh Entry") < index_html.index("Older Entry")
+
+
+@pytest.mark.asyncio
+async def test_publish_accepts_entries_missing_created_timestamp(
+    tmp_kb: Path, tmp_path: Path
+) -> None:
+    entry = tmp_kb / "untimestamped.md"
+    entry.write_text(
+        """---
+title: Untimestamped Entry
+tags: [test]
+---
+
+# Untimestamped Entry
+
+Body for publish fallback.
+""",
+        encoding="utf-8",
+    )
+
+    output_dir = tmp_path / "site"
+    config = PublishConfig(output_dir=output_dir, clean=True)
+    generator = SiteGenerator(config, tmp_kb)
+    result = await generator.generate()
+
+    assert result.entries_published == 1
+    assert (output_dir / "untimestamped.html").exists()

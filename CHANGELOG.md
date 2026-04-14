@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-14
+
+### Fixed
+
+- **Delete safety**: `mx delete` now blocks removal when other entries point at the target via typed frontmatter relations, and surfaces the actual blocking references in CLI output
+- **Strict relation linting**: `mx relations-lint --strict` now exits non-zero consistently in both text and JSON modes when issues are found
+- **Scoped search filtering**: `mx search` and hidden alias `mx find` now respect `--scope` correctly in single-KB and multi-KB flows
+- **Quick-add machine mode**: `mx quick-add --json --confirm` now creates the entry instead of stopping at analysis/preview output
+- **Structured mutation errors**: `--json-errors` now applies consistently to the reported `append` and `patch` validation/runtime failures
+- **Publisher timestamp fallback**: `mx publish` now includes hand-authored entries that omit `created` by falling back to filesystem timestamps instead of silently skipping them
+- **Onboarding exit codes**: `mx onboard` now returns guidance with exit `0` on fresh no-KB directories instead of looking like a failure to shells and hooks
+- **Suggest-links dependency UX**: `mx suggest-links` now surfaces the semantic-search install hint instead of degrading to an empty result set
+- **Context no-config guidance**: `mx context show --json` and `mx context validate --json` now include explicit next-step commands when `.kbconfig` is missing
+- **Session-start context fallback**: `mx session-context` now returns a no-KB payload in both JSON and text modes instead of exiting successfully with no output
+
 ## [0.3.0] - 2026-04-13
 
 ### Added

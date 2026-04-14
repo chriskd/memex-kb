@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from memex import core
+from memex.errors import MemexError
 from memex.models import SearchResult
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -741,6 +742,35 @@ class TestDeleteEntry:
         assert not (tmp_kb / "general" / "target.md").exists()
 
     @pytest.mark.asyncio
+    async def test_delete_entry_with_incoming_relations_requires_force(self, tmp_kb, monkeypatch):
+        """delete_entry fails if another entry has a typed relation to the target."""
+        monkeypatch.setattr(core, "get_searcher", lambda: DummySearcher())
+
+        _create_entry(
+            tmp_kb / "general" / "target.md",
+            "Target Entry",
+            "This is the target",
+        )
+        (tmp_kb / "general" / "source.md").write_text(
+            """---
+title: Source Entry
+tags:
+  - test
+created: 2024-01-15
+relations:
+  - path: general/target.md
+    type: depends_on
+---
+
+Refers to target.
+""",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="typed relation"):
+            await core.delete_entry("general/target.md", force=False)
+
+    @pytest.mark.asyncio
     async def test_delete_directory_raises_error(self, tmp_kb):
         """delete_entry raises ValueError for directory path."""
         (tmp_kb / "general" / "subdir").mkdir(parents=True)
@@ -799,6 +829,35 @@ class TestSearch:
         paths = [r.path for r in result.results]
         assert "general/scoped-entry.md" in paths
         assert all(r.kb_scope == "user" for r in result.results)
+
+    @pytest.mark.asyncio
+    @pytest.mark.semantic
+    async def test_search_scope_single_kb_mismatch_returns_no_results(self, tmp_kb):
+        """Search scope should filter out results when the requested scope does not exist."""
+        _create_entry(
+            tmp_kb / "general" / "scoped-entry.md",
+            "Scoped Entry",
+            "Content in a single KB",
+        )
+
+        await core.reindex()
+
+        result = await core.search("Scoped Entry", scope="project")
+
+        assert result.results == []
+
+    @pytest.mark.asyncio
+    async def test_suggest_links_raises_when_semantic_search_is_unavailable(self, tmp_kb, monkeypatch):
+        """suggest_links should surface missing semantic search deps to the CLI."""
+        _create_entry(
+            tmp_kb / "general" / "entry.md",
+            "Entry",
+            "Some content for link suggestions.",
+        )
+        monkeypatch.setattr(core, "get_searcher", lambda: FailingSemanticSearcher())
+
+        with pytest.raises(MemexError, match="Semantic search is not available"):
+            await core.suggest_links("general/entry.md")
 
     @pytest.mark.asyncio
     @pytest.mark.semantic
@@ -1745,6 +1804,13 @@ class SemanticLinkSearcher:
         from memex.models import IndexStatus
 
         return IndexStatus(whoosh_docs=0, chroma_docs=0, last_indexed=None, kb_files=0)
+
+
+class FailingSemanticSearcher(DummySearcher):
+    """Searcher stub that fails semantic queries with a structured error."""
+
+    def search(self, *args, **kwargs):
+        raise MemexError.semantic_search_unavailable()
 
 
 class TestAutoSemanticLinks:

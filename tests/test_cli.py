@@ -21,6 +21,7 @@ from click.testing import CliRunner
 
 from memex import __version__ as MEMEX_VERSION
 from memex.cli import cli
+from memex.errors import MemexError
 
 
 class CoroutineClosingMock(MagicMock):
@@ -1722,6 +1723,32 @@ class TestDeleteCommand:
         data = json.loads(result.output)
         assert data["deleted"] == "test.md"
 
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_delete_with_incoming_relations_warning(self, mock_run_async, runner):
+        """Delete shows typed relation warning when forced."""
+        mock_run_async.return_value = {
+            "deleted": "test.md",
+            "had_backlinks": [],
+            "had_relations": [{"path": "source.md", "type": "depends_on"}],
+        }
+
+        result = runner.invoke(cli, ["delete", "test.md", "--force"])
+
+        assert result.exit_code == 0
+        assert "typed relations" in result.output.lower()
+
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_delete_preserves_actionable_error_message(self, mock_run_async, runner):
+        """Delete should show the underlying reason when blocked by references."""
+        mock_run_async.side_effect = ValueError(
+            "Entry has incoming references: 1 typed relation(s): source.md (depends_on)."
+        )
+
+        result = runner.invoke(cli, ["delete", "test.md"])
+
+        assert result.exit_code == 1
+        assert "incoming references" in result.output
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # List Command Tests
@@ -2322,6 +2349,21 @@ class TestOnboardCommand:
         assert data["kb_configured"] is True
         assert (child / ".kbconfig").exists()
         assert (child / "kb").is_dir()
+
+    def test_onboard_without_kb_is_guidance_not_failure(self, runner, tmp_path, monkeypatch):
+        """Plain onboarding guidance should not fail the process on a fresh directory."""
+        from memex.context import clear_context_cache, clear_kbconfig_cache
+
+        clear_context_cache()
+        clear_kbconfig_cache()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("MEMEX_USER_KB_ROOT", str(tmp_path / "missing-user-kb"))
+
+        result = runner.invoke(cli, ["onboard"])
+
+        assert result.exit_code == 0
+        assert "mx onboard --init --yes" in result.output
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2989,6 +3031,17 @@ class TestSuggestLinksCommand:
         assert result.exit_code == 1
         assert "Error" in result.output
 
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_suggest_links_missing_semantic_deps_shows_hint(self, mock_run_async, runner):
+        """Suggest-links should surface dependency guidance instead of silently returning none."""
+        mock_run_async.side_effect = MemexError.semantic_search_unavailable()
+
+        result = runner.invoke(cli, ["suggest-links", "test.md"])
+
+        assert result.exit_code == 1
+        assert "Semantic search is not available" in result.output
+        assert "Hint:" in result.output
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Templates Command Tests
@@ -3128,6 +3181,43 @@ class TestSchemaCommand:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Session Context Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestSessionContextCommand:
+    """Tests for 'mx session-context' command."""
+
+    def test_session_context_no_kb_json_outputs_guidance(self, runner, tmp_path, monkeypatch):
+        """Fresh directories should emit a no-KB payload instead of exiting silently."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+        monkeypatch.setenv("MEMEX_USER_KB_ROOT", str(tmp_path / "missing-user-kb"))
+
+        result = runner.invoke(cli, ["session-context", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["kb_configured"] is False
+        assert data["entries"] == []
+        assert "suggested_commands" in data
+
+    def test_session_context_no_kb_text_outputs_guidance(self, runner, tmp_path, monkeypatch):
+        """Fresh directories should print guidance in text mode too."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+        monkeypatch.setenv("MEMEX_USER_KB_ROOT", str(tmp_path / "missing-user-kb"))
+
+        result = runner.invoke(cli, ["session-context"])
+
+        assert result.exit_code == 0
+        assert "No knowledge base is configured" in result.output
+        assert "mx onboard --init --yes" in result.output
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Context Command Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -3178,6 +3268,60 @@ class TestContextCommand:
 
         assert result.exit_code == 0
         assert "No .kbconfig" in result.output
+
+    @patch("memex.context.get_kb_context")
+    def test_context_show_not_found_json_includes_guidance(self, mock_get_context, runner):
+        """Context show --json includes next-step guidance when no config is found."""
+        mock_get_context.return_value = None
+
+        result = runner.invoke(cli, ["context", "show", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["found"] is False
+        assert "suggested_commands" in data
+
+    @patch("memex.context.get_kb_context")
+    def test_context_validate_not_found_json_includes_guidance(self, mock_get_context, runner):
+        """Context validate --json includes next-step guidance when no config is found."""
+        mock_get_context.return_value = None
+
+        result = runner.invoke(cli, ["context", "validate", "--json"])
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["valid"] is False
+        assert "suggested_commands" in data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Quick-Add Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestQuickAddCommand:
+    """Tests for 'mx quick-add' command."""
+
+    @patch("memex.core.get_searcher", return_value=NoopSearcher())
+    def test_quick_add_json_confirm_creates_entry(self, _mock_get_searcher, runner, tmp_kb):
+        """quick-add --json --confirm should create the entry, not just preview it."""
+        (tmp_kb / "general").mkdir(exist_ok=True)
+
+        result = runner.invoke(
+            cli,
+            [
+                "quick-add",
+                "--content",
+                "# JSON Write Probe\n\nThis should be written.",
+                "--confirm",
+                "--json",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["path"] == "general/json-write-probe.md"
+        assert (tmp_kb / "general" / "json-write-probe.md").exists()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3355,6 +3499,59 @@ class TestJsonErrorMode:
         payload = (result.stderr_bytes or b"").decode() or result.output
         data = json.loads(payload)
         assert "error" in data
+
+    def test_json_errors_append_no_create_outputs_json(self, runner, tmp_kb):
+        """append --no-create should honor --json-errors for entry-not-found cases."""
+        result = runner.invoke(
+            cli,
+            [
+                "--json-errors",
+                "append",
+                "Missing Entry",
+                "--content",
+                "Nope",
+                "--no-create",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert result.stderr_bytes
+        data = json.loads(result.stderr_bytes.decode())
+        assert data["error"] in {"ENTRY_NOT_FOUND", "VALIDATION_ERROR"}
+
+    def test_json_errors_patch_missing_find_outputs_json(self, runner, tmp_kb):
+        """patch missing-find cases should honor --json-errors."""
+        entry = tmp_kb / "general" / "patch-me.md"
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.write_text(
+            """---
+title: Patch Me
+tags: [test]
+created: 2024-01-15
+---
+
+Original body.
+""",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(
+            cli,
+            [
+                "--json-errors",
+                "patch",
+                "general/patch-me.md",
+                "--find",
+                "missing text",
+                "--replace",
+                "replacement",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert result.stderr_bytes
+        data = json.loads(result.stderr_bytes.decode())
+        assert data["error"] in {"VALIDATION_ERROR", "ENTRY_NOT_FOUND"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

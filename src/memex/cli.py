@@ -1569,7 +1569,7 @@ def onboard(
             click.echo("Also useful:")
             for cmd in extra_commands:
                 click.echo(f"  {cmd}")
-        sys.exit(2)
+        sys.exit(2 if do_init else 0)
 
     kb_ctx = get_kb_context()
     categories = get_valid_categories()
@@ -1991,6 +1991,46 @@ def session_context_command(
 
     result = build_session_context(max_entries=max_entries, recent_limit=max_recent)
     if not result:
+        payload = {
+            "project": Path.cwd().name,
+            "entries": [],
+            "recent_entries": [],
+            "content": (
+                "## Memex Knowledge Base\n\n"
+                "No knowledge base is configured for this directory.\n\n"
+                "Recommended:\n"
+                "- `mx onboard --init --yes`\n"
+                "- `mx init --sample`\n"
+                "- `mx init --user --sample`\n"
+                "- `mx doctor`\n"
+            ),
+            "cached": False,
+            "kb_configured": False,
+            "suggested_commands": [
+                "mx onboard --init --yes",
+                "mx init --sample",
+                "mx init --user --sample",
+                "mx doctor",
+            ],
+        }
+        if as_json:
+            if compact:
+                _emit_json(
+                    {
+                        "project": payload["project"],
+                        "entries": payload["entries"],
+                        "recent_entries": payload["recent_entries"],
+                        "cached": payload["cached"],
+                        "kb_configured": payload["kb_configured"],
+                        "suggested_commands": payload["suggested_commands"],
+                    },
+                    compact=True,
+                    max_bytes=max_bytes,
+                )
+            else:
+                output(payload, as_json=True)
+        else:
+            click.echo(payload["content"])
         return
 
     if as_json:
@@ -2839,11 +2879,18 @@ def relations_lint(ctx: click.Context, scope: str | None, strict: bool, as_json:
         _handle_error(ctx, exc)
 
     result = run_async(core_lint_relation_types(scope=scope))
+    summary = result.get("summary", {})
+    total_issues = (
+        summary.get("unknown_count", 0)
+        + summary.get("inconsistent_count", 0)
+        + summary.get("missing_count", 0)
+    )
 
     if as_json:
         output(result, as_json=True)
+        if strict and total_issues:
+            sys.exit(1)
     else:
-        summary = result.get("summary", {})
         canonical_types = result.get("canonical_types", {}) or {}
         issues = result.get("issues", [])
 
@@ -3392,7 +3439,9 @@ def ingest(
 @click.option("--category", help="Category for new entries")
 @click.option("--no-create", is_flag=True, help="Error if entry not found (don't create)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def append(
+    ctx: click.Context,
     title: str,
     content: str | None,
     file_path: str | None,
@@ -3421,15 +3470,22 @@ def append(
       mx add    - Create a new entry (never appends)
     """
     from .core import append_entry
+    from .errors import MemexError
 
     # Validate mutual exclusivity of content sources
     sources = sum([bool(content), bool(file_path), stdin])
     if sources > 1:
-        click.echo("Error: Only one of --content, --file, or --stdin can be used", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.validation_error(
+                "Only one of --content, --file, or --stdin can be used",
+            ),
+        )
     if sources == 0:
-        click.echo("Error: Must provide --content, --file, or --stdin", err=True)
-        sys.exit(1)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("Must provide --content, --file, or --stdin"),
+        )
 
     # Resolve content source
     if stdin:
@@ -3456,8 +3512,7 @@ def append(
             )
         )
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+        _handle_error(ctx, e, fallback_message="Append failed.")
 
     if as_json:
         output(result, as_json=True)
@@ -4076,7 +4131,8 @@ def hubs(ctx: click.Context, limit: int, as_json: bool):
 @click.argument("path")
 @click.option("--limit", "-n", default=5, help="Max suggestions")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def suggest_links(path: str, limit: int, as_json: bool):
+@click.pass_context
+def suggest_links(ctx: click.Context, path: str, limit: int, as_json: bool):
     """Suggest entries to link to based on semantic similarity.
 
     \b
@@ -4088,8 +4144,7 @@ def suggest_links(path: str, limit: int, as_json: bool):
     try:
         result = run_async(core_suggest_links(path=path, limit=limit))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+        _handle_error(ctx, e, fallback_message="Suggest-links failed.")
 
     if as_json:
         output(result, as_json=True)
@@ -4203,7 +4258,18 @@ def context_show(as_json: bool):
 
     if ctx is None:
         if as_json:
-            output({"found": False, "message": "No .kbconfig file found"}, as_json=True)
+            output(
+                {
+                    "found": False,
+                    "message": "No .kbconfig file found",
+                    "suggested_commands": [
+                        "mx init --sample",
+                        "mx onboard --init --yes",
+                        "mx context validate",
+                    ],
+                },
+                as_json=True,
+            )
         else:
             click.echo("No .kbconfig file found.")
             click.echo("Run 'mx init' to create a project KB.")
@@ -4267,7 +4333,18 @@ def context_validate(as_json: bool):
 
     if ctx is None:
         if as_json:
-            output({"valid": False, "error": "No .kbconfig file found"}, as_json=True)
+            output(
+                {
+                    "valid": False,
+                    "error": "No .kbconfig file found",
+                    "suggested_commands": [
+                        "mx init --sample",
+                        "mx onboard --init --yes",
+                        "mx context show",
+                    ],
+                },
+                as_json=True,
+            )
         else:
             click.echo("Error: No .kbconfig file found.", err=True)
         sys.exit(1)
@@ -4320,7 +4397,7 @@ def delete(ctx: click.Context, path: str, force: bool, as_json: bool):
     try:
         result = run_async(delete_entry(path=path, force=force))
     except Exception as e:
-        _handle_error(ctx, e, fallback_message="Delete failed.")
+        _handle_error(ctx, e)
 
     if as_json:
         output(result, as_json=True)
@@ -4331,6 +4408,11 @@ def delete(ctx: click.Context, path: str, force: bool, as_json: bool):
                 click.echo(f"Warning: {w}", err=True)
         if result.get("had_backlinks"):
             click.echo(f"Warning: Entry had {len(result['had_backlinks'])} backlinks", err=True)
+        if result.get("had_relations"):
+            click.echo(
+                f"Warning: Entry had {len(result['had_relations'])} incoming typed relations",
+                err=True,
+            )
         click.echo(f"Deleted: {result['deleted']}")
 
 
@@ -4359,7 +4441,9 @@ def delete(ctx: click.Context, path: str, force: bool, as_json: bool):
 @click.option("--content", "content_flag", hidden=True, help="(Intent detection)")
 @click.option("--append", "append_flag", hidden=True, help="(Intent detection)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
 def patch(
+    ctx: click.Context,
     path: str,
     find_text: str | None,
     replace_text: str | None,
@@ -4402,6 +4486,7 @@ def patch(
     """
     from .cli_intent import detect_patch_intent_mismatch
     from .core import patch_entry
+    from .errors import MemexError
 
     # Check for intent mismatch (wrong command based on flags)
     mismatch = detect_patch_intent_mismatch(
@@ -4412,32 +4497,47 @@ def patch(
         append=append_flag,
     )
     if mismatch:
-        click.echo(mismatch.format_error(), err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.validation_error(mismatch.format_error()),
+            exit_code=3,
+        )
 
     # Resolve --find input source
     if find_file and find_text:
-        click.echo("Error: --find and --find-file are mutually exclusive", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("--find and --find-file are mutually exclusive"),
+            exit_code=3,
+        )
     if find_file:
         find_string = Path(find_file).read_text(encoding="utf-8")
     elif find_text is not None:
         find_string = find_text
     else:
-        click.echo("Error: Must provide --find or --find-file", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("Must provide --find or --find-file"),
+            exit_code=3,
+        )
 
     # Resolve --replace input source
     if replace_file and replace_text:
-        click.echo("Error: --replace and --replace-file are mutually exclusive", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("--replace and --replace-file are mutually exclusive"),
+            exit_code=3,
+        )
     if replace_file:
         replace_string = Path(replace_file).read_text(encoding="utf-8")
     elif replace_text is not None:
         replace_string = replace_text
     else:
-        click.echo("Error: Must provide --replace or --replace-file", err=True)
-        sys.exit(3)
+        _handle_error(
+            ctx,
+            MemexError.validation_error("Must provide --replace or --replace-file"),
+            exit_code=3,
+        )
 
     try:
         result = run_async(
@@ -4451,10 +4551,22 @@ def patch(
             )
         )
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(3)
+        _handle_error(ctx, e, fallback_message="Patch failed.", exit_code=3)
 
     exit_code = result.get("exit_code", 0)
+
+    if not result.get("success") and ctx.obj and ctx.obj.get("json_errors", False):
+        _handle_error(
+            ctx,
+            MemexError.validation_error(
+                result.get("message", "Patch failed"),
+                {
+                    "path": path,
+                    "match_contexts": result.get("match_contexts", []),
+                },
+            ),
+            exit_code=exit_code,
+        )
 
     if as_json:
         output(result, as_json=True)
@@ -4657,8 +4769,8 @@ def quick_add(
     if not auto_tags:
         auto_tags = ["uncategorized"]
 
-    if as_json:
-        # In JSON mode, output suggestions and let caller decide
+    if as_json and not confirm:
+        # In JSON mode without confirmation, output suggestions and let caller decide.
         output(
             {
                 "title": auto_title,
@@ -4671,22 +4783,25 @@ def quick_add(
         )
         return
 
-    # Interactive mode - show suggestions and prompt
-    click.echo("\n=== Quick Add Analysis ===\n")
-    click.echo(f"Title:    {auto_title}")
-    click.echo(f"Tags:     {', '.join(auto_tags)}")
-    click.echo(f"Category: {auto_category or '(none - will need to specify)'}")
-    click.echo(f"Content:  {len(content)} chars")
+    if as_json:
+        auto_category = auto_category or (valid_categories[0] if valid_categories else "")
+    else:
+        # Interactive mode - show suggestions and prompt
+        click.echo("\n=== Quick Add Analysis ===\n")
+        click.echo(f"Title:    {auto_title}")
+        click.echo(f"Tags:     {', '.join(auto_tags)}")
+        click.echo(f"Category: {auto_category or '(none - will need to specify)'}")
+        click.echo(f"Content:  {len(content)} chars")
 
-    if not auto_category:
-        click.echo(f"\nAvailable categories: {', '.join(valid_categories)}")
-        default_cat = valid_categories[0] if valid_categories else "notes"
-        auto_category = click.prompt("Category", default=default_cat)
+        if not auto_category:
+            click.echo(f"\nAvailable categories: {', '.join(valid_categories)}")
+            default_cat = valid_categories[0] if valid_categories else "notes"
+            auto_category = click.prompt("Category", default=default_cat)
 
-    if not confirm:
-        if not click.confirm("\nCreate entry with these settings?"):
-            click.echo("Aborted.")
-            return
+        if not confirm:
+            if not click.confirm("\nCreate entry with these settings?"):
+                click.echo("Aborted.")
+                return
 
     # Create the entry
     try:
@@ -4703,6 +4818,15 @@ def quick_add(
         sys.exit(1)
 
     path = result.get("path") if isinstance(result, dict) else result.path
+    if as_json:
+        payload = dict(result) if isinstance(result, dict) else {"path": path}
+        payload.setdefault("path", path)
+        payload["title"] = auto_title
+        payload["tags"] = auto_tags
+        payload["category"] = auto_category
+        output(payload, as_json=True)
+        return
+
     click.echo(f"\nCreated: {path}")
 
 

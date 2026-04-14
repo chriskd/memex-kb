@@ -12,7 +12,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import frontmatter
 from markdown_it import MarkdownIt
+from pydantic import ValidationError
 
 from ..timestamps import ensure_aware, get_filesystem_timestamps
 
@@ -150,7 +152,8 @@ class SiteGenerator:
         Args:
             backlinks_index: Pre-computed backlinks index
         """
-        from ..parser import ParseError, parse_entry
+        from ..models import EntryMetadata
+        from ..parser import ParseError
 
         for md_file in self.kb_root.rglob("*.md"):
             rel_path = md_file.relative_to(self.kb_root)
@@ -165,7 +168,7 @@ class SiteGenerator:
             path_key = str(rel_path.with_suffix(""))
 
             try:
-                metadata, content, _ = parse_entry(md_file)
+                metadata, content = self._load_entry_for_publish(md_file)
             except ParseError:
                 continue
 
@@ -201,6 +204,35 @@ class SiteGenerator:
                 if tag not in self.tags_index:
                     self.tags_index[tag] = []
                 self.tags_index[tag].append(path_key)
+
+    def _load_entry_for_publish(self, path: Path) -> tuple["EntryMetadata", str]:
+        """Load entry metadata/content with publish-friendly timestamp fallback."""
+        from ..models import EntryMetadata
+        from ..parser import ParseError
+
+        try:
+            post = frontmatter.load(str(path))
+        except Exception as e:  # pragma: no cover - same error class as parser
+            raise ParseError(path, f"Failed to parse frontmatter: {e}") from e
+
+        if not post.metadata:
+            raise ParseError(path, "Missing frontmatter (YAML block required at start of file)")
+
+        metadata_dict = dict(post.metadata)
+        fs_timestamps = get_filesystem_timestamps(path)
+        metadata_dict.setdefault("created", fs_timestamps.created)
+
+        try:
+            metadata = EntryMetadata.model_validate(metadata_dict)
+        except ValidationError as e:
+            errors = []
+            for error in e.errors():
+                loc = ".".join(str(x) for x in error["loc"])
+                msg = error["msg"]
+                errors.append(f"  - {loc}: {msg}")
+            raise ParseError(path, "Invalid frontmatter:\n" + "\n".join(errors)) from e
+
+        return metadata, post.content
 
     def _recent_activity(self, path: Path, metadata: EntryMetadata) -> datetime:
         """Return effective recency for published recent-entry views."""
