@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memex KB"
+  short_description: "Use Memex KB well with search, writes, and maintenance"
+  default_prompt: "Use $memex-kb to search, update, or add the right Memex KB entry."
