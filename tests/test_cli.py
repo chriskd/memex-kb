@@ -704,6 +704,48 @@ class TestGetCommand:
         assert "Traceback" not in result.output
         assert "No knowledge base found" in result.output
 
+    def test_get_parse_broken_entry_shows_raw_content_with_warning(self, runner, tmp_kb):
+        """Get should display existing files even when frontmatter is missing."""
+        (tmp_kb / "bad.md").write_text("# Missing frontmatter\n\nBody text.\n", encoding="utf-8")
+
+        result = runner.invoke(cli, ["get", "bad.md"])
+
+        assert result.exit_code == 0
+        assert "Warning: Entry could not be parsed: Missing frontmatter" in result.output
+        assert "Showing raw file contents." in result.output
+        assert "# Missing frontmatter" in result.output
+        assert "Body text." in result.output
+        assert "Get failed." not in result.output
+
+    def test_get_parse_broken_entry_metadata_mode_is_useful(self, runner, tmp_kb):
+        """Get --metadata should surface the parse error and degrade cleanly."""
+        (tmp_kb / "bad.md").write_text("# Missing frontmatter\n", encoding="utf-8")
+
+        result = runner.invoke(cli, ["get", "bad.md", "--metadata"])
+
+        assert result.exit_code == 0
+        assert "Warning: Entry could not be parsed: Missing frontmatter" in result.output
+        assert "Path:     bad.md" in result.output
+        assert "Title:    Missing frontmatter" in result.output
+        assert "Metadata: unavailable" in result.output
+        assert "Get failed." not in result.output
+
+    def test_get_parse_broken_entry_json_mode_returns_degraded_payload(self, runner, tmp_kb):
+        """Get --json should return structured degraded-entry data."""
+        (tmp_kb / "bad.md").write_text("# Missing frontmatter\n\nBody text.\n", encoding="utf-8")
+
+        result = runner.invoke(cli, ["get", "bad.md", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["path"] == "bad.md"
+        assert data["title"] == "Missing frontmatter"
+        assert data["content"] == "# Missing frontmatter\n\nBody text.\n"
+        assert data["metadata"] is None
+        assert data["degraded"] is True
+        assert "Missing frontmatter" in data["parse_error"]
+        assert data["warnings"]
+
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
     def test_get_by_path(self, mock_run_async, runner):
         """Get reads entry by path."""

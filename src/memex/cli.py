@@ -115,6 +115,54 @@ def _strip_yaml_frontmatter(raw_content: str) -> tuple[bool, str]:
     return True, raw_content
 
 
+def _derive_raw_entry_title(path: str, raw_content: str) -> str:
+    """Best-effort title for a parse-broken entry."""
+    for line in raw_content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped[2:].strip()
+
+    name = Path(path).name
+    stem = name[:-3] if name.endswith(".md") else name
+    return stem.replace("-", " ").replace("_", " ").strip().title() or path
+
+
+def _load_raw_get_fallback(path: str, parse_error: str) -> dict[str, Any] | None:
+    """Return degraded entry data when an existing file cannot be parsed."""
+    from .config import resolve_scoped_path
+
+    try:
+        file_path = resolve_scoped_path(path)
+    except Exception:
+        return None
+
+    if not file_path.exists() or not file_path.is_file():
+        return None
+
+    try:
+        raw_content = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    parse_prefix = f"{file_path}: "
+    if parse_error.startswith(parse_prefix):
+        parse_error = parse_error[len(parse_prefix) :]
+
+    title = _derive_raw_entry_title(path, raw_content)
+    warning = f"Entry could not be parsed: {parse_error}"
+    return {
+        "path": path,
+        "title": title,
+        "content": raw_content,
+        "metadata": None,
+        "links": [],
+        "backlinks": [],
+        "degraded": True,
+        "parse_error": parse_error,
+        "warnings": [warning],
+    }
+
+
 def _extract_input_frontmatter_overrides(
     raw_content: str,
 ) -> tuple[bool, dict[str, Any] | None, str]:
@@ -2503,6 +2551,24 @@ def get(ctx: click.Context, path: str | None, by_title: str | None, as_json: boo
         _handle_error(ctx, exc)
     except Exception as e:
         message = str(e)
+        parse_prefix = "Failed to parse entry: "
+        if message.startswith(parse_prefix):
+            degraded = _load_raw_get_fallback(path, message[len(parse_prefix) :])
+            if degraded is not None:
+                warning = degraded["warnings"][0]
+                if as_json:
+                    output(degraded, as_json=True)
+                elif metadata:
+                    click.echo(f"Warning: {warning}")
+                    click.echo(f"Path:     {degraded['path']}")
+                    click.echo(f"Title:    {degraded['title']}")
+                    click.echo("Metadata: unavailable")
+                else:
+                    click.echo(f"Warning: {warning}")
+                    click.echo("Showing raw file contents.")
+                    click.echo("-" * 60)
+                    click.echo(degraded["content"])
+                return
         if "not found" in message.lower():
             suggestions = _suggest_similar_paths(path)
             if ctx.obj and ctx.obj.get("json_errors"):
