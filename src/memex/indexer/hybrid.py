@@ -63,6 +63,15 @@ class HybridSearcher:
         self._chroma = chroma_index or (ChromaIndex() if self.semantic_available else None)
         self._last_indexed: datetime | None = None
 
+    def _disable_semantic(self, reason: Exception | str) -> None:
+        """Disable semantic search for the current process after runtime failure."""
+        if self._chroma is None and not self.semantic_available:
+            return
+
+        log.warning("Semantic search unavailable at runtime; falling back to keyword-only: %s", reason)
+        self.semantic_available = False
+        self._chroma = None
+
     def search(
         self,
         query: str,
@@ -98,7 +107,15 @@ class HybridSearcher:
         elif mode == "semantic":
             if not self._chroma:
                 raise MemexError.semantic_search_unavailable()
-            results = self._chroma.search(query, limit=fetch_limit, min_similarity=min_similarity)
+            try:
+                results = self._chroma.search(
+                    query,
+                    limit=fetch_limit,
+                    min_similarity=min_similarity,
+                )
+            except Exception as e:
+                self._disable_semantic(e)
+                raise MemexError.semantic_search_unavailable() from e
             results = self._apply_ranking_adjustments(query, results, project_context, kb_context)
         else:
             # If semantic deps aren't available, treat hybrid as keyword-only.
@@ -163,7 +180,7 @@ class HybridSearcher:
             )
         except Exception as e:
             # Semantic search is optional; if it's broken/missing, degrade gracefully.
-            log.debug("Semantic search unavailable, falling back to keyword: %s", e)
+            self._disable_semantic(e)
             chroma_results = []
 
         # If one index is empty, return the other
@@ -361,7 +378,10 @@ class HybridSearcher:
         """
         self._whoosh.index_document(chunk)
         if self._chroma:
-            self._chroma.index_document(chunk)
+            try:
+                self._chroma.index_document(chunk)
+            except Exception as e:
+                self._disable_semantic(e)
         self._last_indexed = datetime.now(UTC)
 
     def index_chunks(self, chunks: list[DocumentChunk]) -> None:
@@ -375,7 +395,10 @@ class HybridSearcher:
 
         self._whoosh.index_documents(chunks)
         if self._chroma:
-            self._chroma.index_documents(chunks)
+            try:
+                self._chroma.index_documents(chunks)
+            except Exception as e:
+                self._disable_semantic(e)
         self._last_indexed = datetime.now(UTC)
 
     def delete_document(self, path: str) -> None:
@@ -386,7 +409,10 @@ class HybridSearcher:
         """
         self._whoosh.delete_document(path)
         if self._chroma:
-            self._chroma.delete_document(path)
+            try:
+                self._chroma.delete_document(path)
+            except Exception as e:
+                self._disable_semantic(e)
 
     def reindex(
         self,
@@ -457,7 +483,10 @@ class HybridSearcher:
         """Clear both indices."""
         self._whoosh.clear()
         if self._chroma:
-            self._chroma.clear()
+            try:
+                self._chroma.clear()
+            except Exception as e:
+                self._disable_semantic(e)
         self._last_indexed = None
 
     def status(self) -> IndexStatus:
@@ -471,7 +500,7 @@ class HybridSearcher:
 
         return IndexStatus(
             whoosh_docs=self._whoosh.doc_count(),
-            chroma_docs=self._chroma.doc_count() if self._chroma else 0,
+            chroma_docs=self._safe_chroma_doc_count(),
             last_indexed=self._last_indexed.isoformat() if self._last_indexed else None,
             kb_files=kb_files,
         )
@@ -482,4 +511,16 @@ class HybridSearcher:
         Call this at startup when MEMEX_PRELOAD=1 is set.
         """
         if self._chroma:
-            self._chroma.preload()
+            try:
+                self._chroma.preload()
+            except Exception as e:
+                self._disable_semantic(e)
+
+    def _safe_chroma_doc_count(self) -> int:
+        if not self._chroma:
+            return 0
+        try:
+            return self._chroma.doc_count()
+        except Exception as e:
+            self._disable_semantic(e)
+            return 0

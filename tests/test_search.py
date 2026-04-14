@@ -17,6 +17,7 @@ from datetime import datetime
 
 import pytest
 
+from memex.errors import MemexError
 from memex.indexer.hybrid import HybridSearcher
 from memex.indexer.whoosh_index import WhooshIndex
 from memex.models import DocumentChunk, EntryMetadata
@@ -116,6 +117,43 @@ def _make_chunk(
             source_project=source_project,
         ),
     )
+
+
+class BrokenChromaIndex:
+    """Test double that simulates semantic runtime failure."""
+
+    def __init__(self, fail_on: str = "index"):
+        self.fail_on = fail_on
+
+    def index_document(self, chunk: DocumentChunk) -> None:
+        if self.fail_on == "index":
+            raise RuntimeError("semantic model unavailable")
+
+    def index_documents(self, chunks: list[DocumentChunk]) -> None:
+        if self.fail_on == "index":
+            raise RuntimeError("semantic model unavailable")
+
+    def search(self, query: str, limit: int = 10, min_similarity: float | None = None):
+        if self.fail_on == "search":
+            raise RuntimeError("semantic model unavailable")
+        return []
+
+    def delete_document(self, path: str) -> None:
+        if self.fail_on == "delete":
+            raise RuntimeError("semantic model unavailable")
+
+    def clear(self) -> None:
+        if self.fail_on == "clear":
+            raise RuntimeError("semantic model unavailable")
+
+    def doc_count(self) -> int:
+        if self.fail_on == "status":
+            raise RuntimeError("semantic model unavailable")
+        return 0
+
+    def preload(self) -> None:
+        if self.fail_on == "preload":
+            raise RuntimeError("semantic model unavailable")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -276,6 +314,46 @@ class TestWhooshLimitParameter:
         whoosh_index.index_documents(sample_chunks)
         results = whoosh_index.search("neural", limit=1000)
         assert len(results) <= len(sample_chunks)
+
+
+class TestHybridKeywordOnlyFallback:
+    """Runtime semantic failures should degrade to keyword-only behavior."""
+
+    def test_index_chunks_disables_semantic_when_chroma_fails(self, tmp_path, sample_chunks):
+        whoosh = WhooshIndex(index_dir=tmp_path / "whoosh")
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=BrokenChromaIndex("index"))
+
+        searcher.index_chunks(sample_chunks)
+
+        assert searcher.semantic_available is False
+        assert searcher._chroma is None
+        assert searcher._whoosh.doc_count() == len(sample_chunks)
+
+    def test_hybrid_search_falls_back_to_keyword_when_semantic_search_fails(
+        self, tmp_path, sample_chunks
+    ):
+        whoosh = WhooshIndex(index_dir=tmp_path / "whoosh")
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=BrokenChromaIndex("search"))
+
+        searcher._whoosh.index_documents(sample_chunks)
+        results = searcher.search("Python", mode="hybrid")
+
+        assert results
+        assert any("python" in r.path.lower() for r in results)
+        assert searcher.semantic_available is False
+        assert searcher._chroma is None
+
+    def test_semantic_mode_fails_fast_after_runtime_disable(self, tmp_path, sample_chunks):
+        whoosh = WhooshIndex(index_dir=tmp_path / "whoosh")
+        searcher = HybridSearcher(whoosh_index=whoosh, chroma_index=BrokenChromaIndex("search"))
+
+        searcher._whoosh.index_documents(sample_chunks)
+
+        with pytest.raises(MemexError, match="Semantic search is not available"):
+            searcher.search("Python", mode="semantic")
+
+        assert searcher.semantic_available is False
+        assert searcher._chroma is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

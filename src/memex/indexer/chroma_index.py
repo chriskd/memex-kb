@@ -1,6 +1,7 @@
 """ChromaDB-based semantic search index with embeddings."""
 
 import logging
+import inspect
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -39,7 +40,19 @@ class ChromaIndex:
         if self._model is None:
             from sentence_transformers import SentenceTransformer
 
-            self._model = SentenceTransformer(EMBEDDING_MODEL)
+            kwargs: dict[str, Any] = {}
+            try:
+                if "local_files_only" in inspect.signature(SentenceTransformer.__init__).parameters:
+                    kwargs["local_files_only"] = True
+            except (TypeError, ValueError):
+                pass
+
+            try:
+                self._model = SentenceTransformer(EMBEDDING_MODEL, **kwargs)
+            except Exception as exc:
+                raise RuntimeError(
+                    "Semantic model unavailable; install/cached model required for semantic search"
+                ) from exc
         return self._model
 
     def _get_collection(self) -> "chromadb.Collection":
