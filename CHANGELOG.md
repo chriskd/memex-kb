@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-04-15
+
+### Changed
+
+- **Release packaging cleanup**: source releases now exclude repo-only content such as `.tickets`, `kb/`, `docs/`, and tests, while wheels include the bundled `memex-kb` skill under `memex/skills/`
+- **Agent integration guidance**: documentation now reflects current native skill installation paths for Claude Code and Codex, with the bundled `SKILL.md` workflow as the primary reusable integration surface
+- **Repo layout cleanup**: removed root-level `commands/`, `docs/README.md`, and checked-in Claude-specific config/plugin artifacts in favor of the shipped skill and KB docs
+
+### Fixed
+
+- **Eval runtime assumptions**: `mx eval` no longer depends on a checked-in `eval/queries.json`; it now requires an explicit `--dataset` and writes saved artifacts under `.memex-eval/results/`
+
 ## [0.3.1] - 2026-04-14
 
 ### Fixed

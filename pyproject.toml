@@ -1,6 +1,6 @@
 [project]
 name = "memex-kb"
-version = "0.3.1"
+version = "0.3.2"
 description = "Personal knowledge base with semantic search"
 requires-python = ">=3.11"
 dependencies = [

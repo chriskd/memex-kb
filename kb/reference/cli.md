@@ -696,7 +696,7 @@ Many commands support `--json` for agent/tool integration.
 
 All documented JSON outputs include:
 - `schema_version`: Stable output schema version (currently `1`)
-- `version`: `mx` tool version (string, e.g. `0.3.1`)
+- `version`: `mx` tool version (string, e.g. `0.3.2`)
 
 ### Scoped paths (@project/@user)
 
@@ -713,7 +713,7 @@ Top-level object (excerpt):
 ```json
 {
   "schema_version": 1,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "kb_configured": true,
   "primary_scope": "project",
   "primary_kb": "/abs/path/to/kb",
@@ -732,7 +732,7 @@ JSON list of result objects:
 [
   {
     "schema_version": 1,
-    "version": "0.3.1",
+    "version": "0.3.2",
     "path": "@project/guides/first-entry.md",
     "scope": "project",
     "title": "First Entry",
@@ -750,7 +750,7 @@ Top-level object:
 ```json
 {
   "schema_version": 1,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "path": "@project/guides/first-entry.md",
   "scope": "project",
   "suggested_links": [],
@@ -768,7 +768,7 @@ Error payload shape:
 ```json
 {
   "schema_version": 1,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "error": "USAGE_ERROR",
   "code": 1304,
   "message": "Query cannot be empty."
