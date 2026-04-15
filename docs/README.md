@@ -1,41 +1,99 @@
 # Start Here
 
-`mx` is the CLI for Memex knowledge bases: Markdown files with YAML frontmatter, stored in a project KB (`./kb/`) and/or a user KB (`~/.memex/kb/`).
+`mx` is the Memex CLI for Markdown knowledge bases with YAML frontmatter, in project scope (`./kb/`) and/or user scope (`~/.memex/kb/`).
+
+## Install
+
+```bash
+uv tool install memex-kb
+# optional semantic search:
+uv tool install 'memex-kb[search]'
+```
+
+Keyword search works by default. Semantic search is optional.
+Run `mx doctor` to verify dependencies.
 
 ## 60-Second First Run
 
 ```bash
-# 1) Guided setup (safe to run repeatedly). If no KB is configured, this can create one.
-mx onboard --init --yes        # includes a sample entry under inbox/
-
-# 2) Alternatively, initialize directly:
-mx init --sample               # project KB: ./kb + ./.kbconfig
-# or:
-mx init --user --sample        # user KB: ~/.memex/kb
-
-# 3) Confirm it works
-mx list --limit=5
-mx get @project/inbox/first-task.md   # or @user/... depending on what you initialized
-mx search "First Task"
-```
-
-For non-interactive environments (agents/CI):
-
-```bash
+# Guided setup + initialize if missing (safe in agents/CI)
 mx onboard --init --yes
+
+# Restrict context discovery to current directory only
+mx onboard --init --yes --cwd-only
+
+# Direct init options
+mx init --sample
+mx init --path docs/kb --sample
+mx init --user --sample
 ```
 
-## Discoverability Cheatsheet
+Sample behavior:
+- `mx onboard` supports `--sample/--no-sample`.
+- `mx init` supports `--sample` for first-run content.
+
+## Common Commands
 
 ```bash
-mx --help
-mx help search
-mx schema --compact            # CLI schema for LLM tools
-mx doctor                      # deps + install hints
+# Search defaults to keyword (BM25)
+mx search "first task"
+mx search "first task" --mode=semantic
+mx search "first task" --scope=project
+
+# Read + write
+mx list --limit=5
+mx get @project/inbox/first-task.md
+mx add --title="Setup" --tags="docs" --category=guides --content="..."
+mx quick-add --content="capture this"
+
+# Maintenance
+mx doctor --timestamps
+mx doctor --timestamps --fix
+mx info
+mx context show
 ```
 
-## Repo Notes (memex-kb)
+When project and user KBs are both active, outputs may include scoped paths like `@project/...` and `@user/...`.
 
-- Docs are also stored as KB entries under `kb/` (start with `kb/guides/quick-start.md`).
-- Tickets for this repo live in `.tickets/` and are managed with `tk`:
-  - `tk list`, `tk show <id>`, `tk add-note <id>`, `tk start <id>`, `tk close <id>`.
+## Publish
+
+```bash
+mx publish -o _site
+mx publish --kb-root ./kb -o _site
+mx publish --scope=project -o _site
+mx publish --index guides/index --base-url /my-kb
+mx publish --include-drafts --include-archived
+mx publish --no-clean
+mx publish --setup-github-actions
+mx publish --setup-github-actions --dry-run
+```
+
+## Agents
+
+```bash
+mx session-context
+mx session-context --install
+mx prime
+mx schema --compact
+mx batch < commands.txt
+mx --json-errors search "query"
+```
+
+## Config + Env
+
+`.kbconfig` (project root):
+
+```yaml
+kb_path: ./kb         # project_kb alias is still supported
+primary: inbox
+publish_base_url: /my-kb
+publish_index_entry: guides/index
+```
+
+Environment variables:
+- `MEMEX_USER_KB_ROOT`
+- `MEMEX_CONTEXT_NO_PARENT`
+- `MEMEX_INDEX_ROOT`
+- `MEMEX_QUIET`
+
+More detail: `kb/guides/quick-start.md` and `kb/reference/cli.md`.

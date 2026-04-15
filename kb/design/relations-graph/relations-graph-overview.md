@@ -11,19 +11,12 @@ contributors:
 source_project: memex
 git_branch: relations-field
 last_edited_by: chris
-relations:
-  - path: design/relations-graph/wikilink-edge-behavior.md
-    type: implements
-  - path: design/relations-graph/frontmatter-edge-types.md
-    type: depends_on
 ---
 
 
 # Relations Graph Overview
 
 This page connects wikilinks, typed relations, and semantic links into a single graph.
-
-See [[design/relations-graph/wikilink-edge-behavior]] and [[design/relations-graph/frontmatter-edge-types]] for details.
 
 ## Published UI
 
@@ -39,13 +32,21 @@ Use `--neighbor-depth` to control hop count (default 1).
 
 ## Query the relations graph
 
-There isn't a dedicated CLI command yet. For now:
-- Use `mx search --include-neighbors` to expand results through semantic links + typed relations + wikilinks
-- Inspect `relations` in entry frontmatter (open the file or use `mx get path/to/entry.md --json`)
+Use the dedicated relations command when you want the graph directly:
+
+- `mx relations path/to/entry.md`
+- `mx relations path/to/entry.md --depth=2`
+- `mx relations path/to/entry.md --origin=relations --type=documents`
+- `mx relations path/to/entry.md --graph --json`
+
+`mx search --include-neighbors` remains the quickest way to expand search results through semantic links, typed relations, and wikilinks.
 
 ## Editing typed relations
 
-Edit the `relations` frontmatter directly (or via `mx patch` / `mx replace`).
+Use the dedicated helpers when possible, or edit frontmatter directly:
+
+- `mx relations-add path/to/entry.md --relation "reference/cli.md=documents"`
+- `mx relations-remove path/to/entry.md --relation "reference/cli.md=documents"`
 
 ```yaml
 relations:

@@ -6,7 +6,7 @@ tags:
   - reference
   - commands
 created: 2026-01-06T00:00:00
-updated: 2026-04-06T00:00:00+00:00
+updated: 2026-04-15T00:00:00+00:00
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
 edit_sources:
@@ -20,6 +20,16 @@ last_edited_by: chris
 The `mx` CLI provides token-efficient access to your knowledge base.
 
 ## Search Commands
+
+### mx help
+
+Show top-level help or help for a specific command.
+
+```bash
+mx help
+mx help search
+mx help publish
+```
 
 ### mx search
 
@@ -143,6 +153,18 @@ mx doctor --timestamps --limit=25 --json    # Bound scan and emit per-file JSON
 
 ## Read Commands
 
+### mx relations
+
+Query the unified relations graph across wikilinks, semantic links, and typed relations.
+
+```bash
+mx relations path/entry.md
+mx relations path/entry.md --depth=2
+mx relations path/entry.md --direction=outgoing
+mx relations path/entry.md --origin=relations --type=documents
+mx relations path/entry.md --graph --json
+```
+
 ### mx get
 
 Read a knowledge base entry.
@@ -202,6 +224,24 @@ mx tree --scope=project    # Project KB only
 ```
 
 ## Write Commands
+
+### mx relations-add
+
+Add typed relations without replacing the full frontmatter block.
+
+```bash
+mx relations-add path/entry.md --relation "reference/cli.md=documents"
+mx relations-add path/entry.md --relations '[{"path":"guides/quick-start.md","type":"depends_on"}]'
+```
+
+### mx relations-remove
+
+Remove typed relations without replacing the full frontmatter block.
+
+```bash
+mx relations-remove path/entry.md --relation "reference/cli.md=documents"
+mx relations-remove path/entry.md --relations '[{"path":"guides/quick-start.md","type":"depends_on"}]'
+```
 
 ### mx add
 
@@ -405,6 +445,26 @@ mx whats-new --limit=20           # More results
 
 ## Project Setup Commands
 
+### mx onboard
+
+Guided setup check for first-time users and agents.
+
+```bash
+mx onboard
+mx onboard --init --yes
+mx onboard --init --yes --cwd-only
+mx onboard --init --user --yes
+mx onboard --init --yes --json
+```
+
+**Options:**
+- `--init`: Initialize a KB if none is configured
+- `--user`: Create a user KB when initializing
+- `--sample / --no-sample`: Control whether a starter entry is created
+- `--cwd-only`: Ignore parent-directory `.kbconfig` discovery
+- `--yes, -y`: Assume yes for initialization prompts
+- `--json`: JSON output
+
 ### mx init
 
 Initialize a knowledge base (project or user scope).
@@ -486,9 +546,37 @@ Generate static HTML site.
 ```bash
 mx publish                           # Build to _site/
 mx publish -o docs                   # Build to docs/
+mx publish --kb-root ./kb -o docs    # Publish an explicit KB path
+mx publish --scope=project -o docs   # Publish one scope
 mx publish --base-url /my-kb         # For subdirectory hosting
+mx publish --index guides/index      # Choose landing page
 mx publish --include-drafts          # Include draft entries
+mx publish --include-archived        # Include archived entries
+mx publish --no-clean                # Keep existing output dir contents
+mx publish --setup-github-actions
+mx publish --setup-github-actions --dry-run
 ```
+
+**Resolution order:**
+
+- KB source: `--kb-root`, then `--scope`, then project KB from `.kbconfig`
+- Base URL: `--base-url`, then `publish_base_url` in `.kbconfig`
+- Landing page: `--index`, then `publish_index_entry` in `.kbconfig`
+
+**Options:**
+- `--kb-root, -k`: Publish an explicit KB path
+- `--scope, -s`: Publish project or user scope
+- `--yes, -y`: Skip confirmation when publishing user KB content
+- `--output, -o`: Output directory
+- `--base-url, -b`: Site base path
+- `--title`: Site title
+- `--index, -i`: Landing page entry path
+- `--include-drafts`: Include draft entries
+- `--include-archived`: Include archived entries
+- `--no-clean`: Keep the existing output directory contents
+- `--json`: JSON output
+- `--setup-github-actions`: Create a GitHub Pages workflow
+- `--dry-run`: Preview the GitHub Actions workflow
 
 ## Maintenance
 
@@ -608,7 +696,7 @@ Many commands support `--json` for agent/tool integration.
 
 All documented JSON outputs include:
 - `schema_version`: Stable output schema version (currently `1`)
-- `version`: `mx` tool version (string, e.g. `0.3.0`)
+- `version`: `mx` tool version (string, e.g. `0.3.1`)
 
 ### Scoped paths (@project/@user)
 
@@ -625,7 +713,7 @@ Top-level object (excerpt):
 ```json
 {
   "schema_version": 1,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "kb_configured": true,
   "primary_scope": "project",
   "primary_kb": "/abs/path/to/kb",
@@ -644,7 +732,7 @@ JSON list of result objects:
 [
   {
     "schema_version": 1,
-    "version": "0.3.0",
+    "version": "0.3.1",
     "path": "@project/guides/first-entry.md",
     "scope": "project",
     "title": "First Entry",
@@ -662,7 +750,7 @@ Top-level object:
 ```json
 {
   "schema_version": 1,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "path": "@project/guides/first-entry.md",
   "scope": "project",
   "suggested_links": [],
@@ -680,7 +768,7 @@ Error payload shape:
 ```json
 {
   "schema_version": 1,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "error": "USAGE_ERROR",
   "code": 1304,
   "message": "Query cannot be empty."

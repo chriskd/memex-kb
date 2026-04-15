@@ -2,153 +2,83 @@
 title: Quick Start Guide
 tags: [getting-started, tutorial, basics]
 created: 2026-01-06
+updated: 2026-04-15
 description: Get productive with memex in 5 minutes
 ---
 
 # Quick Start Guide
 
-Get productive with memex in 5 minutes.
+If you're starting from scratch, read [[guides/installation]] first. If you already have `mx`,
+`mx onboard --init --yes` is the fastest way to create a project KB in the current repo.
 
-## 5-minute flow (agents)
-
-Run these in order; each step confirms the previous one worked.
-
-```bash
-mx onboard --init --yes                 # Creates KB + .kbconfig (+ sample entry; use --no-sample for blank KB)
-mx add --title="First Entry" --tags=docs --category=guides --content="Hello KB"  # Confirms write path
-mx list --limit=5                       # Confirms entry exists (path printed)
-mx get guides/first-entry.md            # Confirms read path
-mx health                               # Confirms basic KB health (warnings are OK early)
-```
-
-Note: `mx` will walk up to parent directories to find an existing project `.kbconfig`.
-If you want to force a brand-new KB in the current directory (common in sandboxes), use:
-- `mx onboard --init --yes --cwd-only`
-- Or set `MEMEX_CONTEXT_NO_PARENT=1` for the session (prevents parent discovery).
-
-Optional checks:
-- `mx search "Hello KB"` to verify indexing (hybrid/keyword)
-- `mx search "Hello KB" --mode=semantic` to verify semantic search specifically
-If `mx search` fails, run `mx doctor` for an install hint. If you need to repair missing, invalid,
-or stale frontmatter timestamps, use `mx doctor --timestamps` or `mx doctor --timestamps --fix`. If you see
-`No module named 'whoosh'`, install
-keyword search deps with `pip install whoosh-reloaded` (or reinstall `memex-kb`).
-
-Optional: choose your default write category (so you can omit `--category` in `mx add`):
-
-- `mx init` / `mx onboard --init` sets `primary: inbox` by default.
-- Set `primary: guides` if you prefer writing docs by default.
-
-```yaml
-# .kbconfig (project root)
-primary: guides  # or inbox
-```
-
-## 1. Set Up Your Knowledge Base
-
-Choose a KB scope:
+## First Run
 
 ```bash
-# Project KB (shared with your repo)
-mx init --sample
-
-# User KB (personal, available everywhere)
-mx init --user --sample
+mx onboard --init --yes                 # Create a project KB and .kbconfig
+mx onboard --cwd-only --init --yes      # Skip parent discovery when you want a clean repo-local KB
+mx init --user --sample                 # Create a personal KB with starter content
+mx init --path docs/kb --no-sample      # Create a KB at a custom path without sample content
+mx init --force --sample                # Rebuild an existing KB
 ```
 
-Optional overrides:
+Notes:
+- `mx onboard` and `mx init` both create the KB, config, and starter directories.
+- `--sample` creates a starter entry; `--no-sample` leaves the KB empty.
+- `MEMEX_CONTEXT_NO_PARENT=1` disables parent `.kbconfig` discovery for the current session.
+- `MEMEX_USER_KB_ROOT` and `MEMEX_INDEX_ROOT` override the user KB and index locations.
+
+## Create Content
 
 ```bash
-# Point to an existing user KB in a custom location
-export MEMEX_USER_KB_ROOT=~/kb
-
-# Store indices outside the KB directory
-export MEMEX_INDEX_ROOT=~/.memex-indices
+mx add --title="Git Stash Workflow" --tags="git,workflow,cli" --category=guides --content="..."
+mx quick-add --stdin
+cat notes.md | mx quick-add --stdin
+mx ingest notes.md --scope=project
 ```
 
-## 2. Create Your First Entry
+Use `mx add` when you know the title, tags, and destination category. Use `mx quick-add` when you
+already have raw Markdown and want Memex to infer the metadata.
+
+## Search and Read
 
 ```bash
-mx add \
-  --title="Git Stash Workflow" \
-  --tags="git,workflow,cli" \
-  --category=tooling \
-  --content="# Git Stash Workflow
-
-Quick save work in progress:
-\`\`\`bash
-git stash push -m 'WIP: feature X'
-git stash list
-git stash pop
-\`\`\`
-
-Use \`git stash apply\` to keep the stash after applying."
-```
-
-This creates `tooling/git-stash-workflow.md` in your KB.
-
-**Note:** If `--category` is omitted and no `.kbconfig` `primary` exists, `mx add` defaults to the KB root (`.`) and prints a warning.
-
-## 3. Search for It
-
-```bash
-# Keyword search
 mx search "stash"
-
-# With semantic search (if installed)
-mx search "save work in progress"
-
-# Filter by tag
-mx search "git" --tags=workflow
-
-# Limit to a specific KB
 mx search "stash" --scope=project
-mx search "stash" --scope=user
+mx search "save work in progress" --strict
+mx search "stash" --include-neighbors --neighbor-depth=2
+mx get guides/git-stash-workflow.md
+mx get guides/git-stash-workflow.md --metadata
 ```
 
 When both KBs exist, results are prefixed with `@project/...` and `@user/...`.
 
-## 4. Read It Back
-
-```bash
-# Full entry with content
-mx get tooling/git-stash-workflow.md
-
-# Metadata only
-mx get tooling/git-stash-workflow.md --metadata
-```
-
-## 5. Check KB Health
+## Keep It Healthy
 
 ```bash
 mx health
+mx doctor --timestamps
+mx doctor --timestamps --fix
+mx relations-lint --strict
+mx whats-new --scope=project
 ```
 
-Audits your KB for:
-- Missing frontmatter
-- Broken links
-- Orphaned entries
-- Index sync issues
+`mx doctor` also reports and repairs missing, invalid, or stale `created` / `updated` timestamps.
+If search fails with a missing keyword dependency, install `whoosh-reloaded` or run `mx doctor` to
+check the environment first.
 
-Orphans are entries with no incoming links yet. In very small KBs (<5 entries), orphan findings are suppressed to avoid false alarms; after that, add links or use `mx suggest-links`.
-Quick fixes:
-- Create a simple index entry (e.g., `guides/index.md`) and link to key entries with `[[wikilinks]]`.
-- Add at least one link from an existing entry to each orphan (typed relations count too).
+## Publish
 
-## Essential Commands
+```bash
+mx publish
+mx publish --index guides/index
+mx publish --include-drafts
+```
 
-| Command | Description |
-|---------|-------------|
-| `mx search "query"` | Search the KB |
-| `mx get path/entry.md` | Read an entry |
-| `mx add --title="..." --tags="..." --category=...` | Create entry |
-| `mx tree` | Browse structure |
-| `mx tags` | List all tags |
-| `mx whats-new` | Recent changes |
-| `mx health` | Audit KB |
+The published site starts at [[guides/index]].
 
 ## Next Steps
 
-- [[reference/cli|CLI Reference]] - Full command documentation
-- [[reference/entry-format|Entry Format]] - Frontmatter and linking
-- [[guides/ai-integration|AI Agent Integration]] - Use with Claude Code
+- [[guides/index|Guides Index]]
+- [[reference/cli|CLI Reference]]
+- [[reference/entry-format|Entry Format Reference]]
+- [[guides/ai-integration|AI Integration]]

@@ -8,19 +8,20 @@ tags:
   - agents
   - integration
 created: 2026-01-06T00:00:00
-updated: 2026-01-27T00:00:00+00:00
+updated: 2026-04-15T00:00:00+00:00
 semantic_links: []
 ---
 
 # AI Agent Integration
 
-Memex is designed for AI coding assistants. The CLI is the recommended interface.
+Memex is designed to work through the `mx` CLI. Treat the CLI as the stable interface and keep
+assistant-specific config thin.
 
 ## Claude Code
 
-### Permission Setup
+### Permissions
 
-Add to `.claude/settings.local.json`:
+Add this to `.claude/settings.local.json`:
 
 ```json
 {
@@ -30,173 +31,127 @@ Add to `.claude/settings.local.json`:
 }
 ```
 
-This grants Claude Code permission to run any `mx` command without prompting.
+Use `.claude/settings.local.json` for machine-local permissions. Keep shared team settings in
+`.claude/settings.json` if you need them tracked in the repo.
 
 ### Session Hooks
 
-For automatic context injection, use hooks:
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx session-context" }] }]
-  }
-}
-```
-
-Write the hook into `.claude/settings.json`:
+Install the session hook into local settings:
 
 ```bash
-mx session-context --install
+mx session-context --install --install-path .claude/settings.local.json
 ```
 
-The `mx session-context` command:
-- Injects project-relevant KB context at session start
-- Provides a concise workflow reminder plus related entries
+`mx session-context` injects project-relevant KB context at session start. It is the recommended
+way to give an agent a compact snapshot of the active KB, relevant entries, and recent workflow
+context.
 
-### Claude Code Plugin (Optional)
-
-This repo ships a Claude Code plugin manifest in `.claude-plugin/`. From the repo
-root, add the local marketplace and install the plugin:
-
-```text
-/plugin marketplace add ./.claude-plugin/marketplace.json
-/plugin install memex@memex
-```
-
-Restart Claude Code after installing or updating the plugin.
-
-### Workflow Pattern
+Useful companion commands:
 
 ```bash
-# Before implementing: search KB for existing patterns
+mx prime
+mx session-context
+mx schema --compact
+mx --json-errors search "query"
+mx batch
+```
+
+### Claude Code Workflow
+
+```bash
+# Before implementing: search for existing patterns
 mx search "authentication patterns"
 
-# During work: add discoveries for future sessions
-mx add --title="OAuth2 Setup" --tags="auth,patterns" --category=patterns \
-  --content="..."
+# During work: capture discoveries for future sessions
+mx add --title="OAuth2 Setup" --tags="auth,patterns" --category=guides --content="..."
 ```
 
-### JSON Output vs JSON Errors (Important for Agents)
+`mx prime` is the shortest onboarding/context payload. `mx schema --compact` is the best option
+when an agent needs structured command metadata. `mx --json-errors` makes failures stable for
+automation. `mx batch` is useful when you want to combine several KB operations in one run.
 
-Many `mx` subcommands support `--json`, which controls **success** output formatting.
-Errors are still human-readable text by default.
+## Codex
 
-For machine-parseable errors with stable error codes, use the global flag:
+Codex can use Memex directly from shell commands.
 
 ```bash
-# JSON error on stderr (with {"error": "...", "code": 1234, "message": "..."}):
-mx --json-errors get nonexistent.md
+# Search before implementing
+mx search "deployment strategy"
 
-# Success JSON on stdout, JSON errors on stderr:
-mx --json-errors add --title="Entry" --tags="a,b" --content="..." --json
+# Read the source note
+mx get reference/cli.md
+
+# Capture a new discovery
+mx quick-add --stdin
 ```
 
-Notes:
-- `--json-errors` is global, so it is best placed before the subcommand (the CLI also accepts it
-  later and normalizes it).
-- `--json-errors` implies a quieter "machine mode" (warnings are suppressed) to keep stderr parseable.
+Helpful commands for Codex-style workflows:
 
-## Codex CLI
+- `mx info` - show KB roots, counts, and active config
+- `mx context show` - show the resolved project context
+- `mx context validate` - validate `kb_path` / `project_kb` and related paths
+- `mx prime` - emit a concise agent startup payload
+- `mx session-context` - emit live project context for the current session
+- `mx schema --compact` - emit command metadata for introspection
+- `mx --json-errors` - keep errors machine-parseable
 
-Codex can use memex via shell commands in AGENTS.md:
+## Other Agents
 
-```markdown
-## Knowledge Base
-
-Search organizational knowledge before implementing:
-- `mx search "query"` - Find existing patterns
-- `mx get path/entry.md` - Read specific entry
-- `mx add --title="..." --tags="..." --category=... --content="..."` - Add discoveries
-```
-
-### Codex Skills (Optional)
-
-This repo includes a Memex skill at `skills/memex-kb/`. Codex loads skills from
-`$CODEX_HOME/skills` (defaults to `~/.codex/skills`). Copy or symlink the skill
-into that directory and restart Codex.
-
-Example:
+Any agent with shell access can use the same patterns:
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -r skills/memex-kb ~/.codex/skills/
-```
-
-## Other AI Agents
-
-Any agent with shell access can use the `mx` CLI.
-
-### Common Patterns
-
-```bash
-# Check for relevant knowledge before implementing
 mx search "deployment strategies"
-
-# Add discoveries for future sessions
-mx add --title="API Rate Limiting" \
-  --tags="api,patterns" \
-  --category=patterns \
-  --content="..."
-
-# View recent project KB updates
 mx whats-new --scope=project --days=7
-
-# Quick status check
 mx info
+mx context show
 ```
 
-### Search Strategy
-
-1. **Before implementing**: Search for existing patterns
-2. **When stuck**: Search for troubleshooting guides
-3. **After solving**: Add solution to KB
-
-### When to Search KB
-
-- Looking for organizational patterns or guides
-- Before implementing something that might exist
-- Understanding infrastructure or deployment
-- Troubleshooting known issues
-
-### When to Contribute
-
-- Discovered reusable pattern or solution
-- Troubleshooting steps worth preserving
-- Infrastructure or deployment knowledge
-- Project-specific conventions
+Search before implementing, add discoveries after solving, and use `mx quick-add --stdin` when you
+already have Markdown that should become an entry.
 
 ## Project Configuration
 
 Configure project-specific KB settings in `.kbconfig`:
 
-```bash
-# In your project directory
-cat <<'EOF' > .kbconfig
+```yaml
 kb_path: ./kb
-primary: design
+primary: guides
 boost_paths:
-  - design/*
+  - guides/*
+  - reference/*
 default_tags:
   - memex
-EOF
+publish_base_url: /my-kb
+publish_index_entry: guides/index
 ```
 
+Use `kb_path` as the canonical project KB setting. You will also see `project_kb` in resolved
+context and generated output, which is the same setting after it has been loaded.
+
 This `.kbconfig` file:
-- Points `mx` at the project KB (`kb_path`)
-- Routes new entries to `projects/<name>` by default (`primary`)
-- Boosts project entries in search results (`boost_paths`)
-- Suggests project-specific tags (`default_tags`)
+- Points `mx` at the project KB
+- Routes new entries to `guides/` by default
+- Boosts project entries in search results
+- Suggests project-specific tags
+- Sets the published site base URL and landing page
+
+Related commands:
+
+- `mx context show`
+- `mx context validate`
+- `mx publish`
+- `mx info`
 
 ## Best Practices
 
-1. **Search before creating** - Avoid duplicate entries
-2. **Tag consistently** - Use `mx tags` to see existing tags
-3. **Link related entries** - Use `[[path/to/entry]]` syntax
-4. **Keep entries focused** - One topic per entry
-5. **Update, don't duplicate** - Append to existing entries
+1. Search before creating to avoid duplicate entries.
+2. Keep assistant-specific permissions in `.claude/settings.local.json` unless they need to be shared.
+3. Link related entries with `[[wikilinks]]`.
+4. Keep entries focused on one topic.
+5. Update existing entries instead of duplicating them.
 
 ## See Also
 
+- [[guides/index|Guides Index]]
 - [[reference/cli|CLI Reference]]
-- [[reference/entry-format|Entry Format]]
+- [[reference/entry-format|Entry Format Reference]]

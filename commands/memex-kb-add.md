@@ -1,135 +1,64 @@
 ---
 name: memex-kb-add
-description: Add a new entry to the knowledge base
+description: Add or update a knowledge base entry
 allowed-tools:
   - Bash
-  - AskUserQuestion
 argument-hint: "[title]"
 ---
 
-Interactive workflow to add a new knowledge base entry.
+Add KB content with the current Memex CLI. Prefer deterministic commands over interactive
+questionnaires.
 
 ## Workflow
 
-### 1. Check for Duplicates
-If a title is provided, search for similar entries first:
-```bash
-mx search "<title>"
-```
-If duplicates found, ask user if they want to continue or update existing.
+1. Resolve the active KB context:
+   - `mx info` to confirm project/user KB roots and active scope
+   - `mx context show` when you need the resolved project context
+   - `mx context validate` if path resolution looks wrong
 
-### 2. Determine Scope
+2. Check for duplicates before creating new content:
+   - Search by title or obvious keywords: `mx search "<title>" --scope=project`
+   - If both KBs are active, search the relevant scope explicitly and use `@project/...` or
+     `@user/...` when reading or editing an existing entry
 
-Ask user which KB to use (if both project and user KBs exist):
+3. Choose the right command:
+   - `mx add` when you already have the title and want to set metadata explicitly
+   - `mx quick-add` when you have Markdown content and want Memex to infer the rest
+   - `mx replace` when you meant to update an existing entry instead of creating a duplicate
 
-| Scope | Use For |
-|-------|---------|
-| `project` | Team knowledge, infra docs, shared patterns, API docs |
-| `user` | Personal notes, experiments, drafts, individual workflow tips |
+4. Write to the correct scope:
+   - Use `--scope=project` or `--scope=user` when scope matters
+   - Use scoped paths like `@project/guides/setup.md` and `@user/notes/draft.md` when the target
+     entry is already known
+   - If the user did not specify a scope, follow the active scope from `mx info`
 
-If only one KB exists, use it automatically.
+## Practical Rules
 
-### 3. Gather Entry Details
+- Do not invent a category taxonomy. Use the repo's existing directory structure and configured
+  write location instead of prompting for arbitrary buckets.
+- Treat `--category` or path placement as a filesystem choice, not a content-classification form.
+- Prefer updating an existing entry over creating a near-duplicate.
+- Use `mx quick-add --stdin` when the source material is already Markdown or the assistant is
+  capturing notes from another tool.
 
-Use `AskUserQuestion` to collect:
-
-**Title** (if not provided as argument):
-- Should be descriptive and searchable
-- Example: "Kubernetes Pod Networking Troubleshooting"
-
-**Category** (required):
-- `infrastructure` - servers, networking, storage, cloud resources
-- `devops` - CI/CD, monitoring, deployment tools
-- `development` - coding practices, languages, frameworks
-- `troubleshooting` - problem solutions, debugging guides
-- `architecture` - system design, patterns, decisions
-- `patterns` - reusable solutions, templates, conventions
-
-**Content** (required):
-- Markdown formatted
-- Include code examples where relevant
-- Document the "why" not just the "how"
-
-**Tags** (optional):
-- Comma-separated list
-- Helps with search and discovery
-
-### 4. Create the Entry
+## Examples
 
 ```bash
-mx add \
-  --title="<title>" \
-  --tags="<tags>" \
-  --category="<category>" \
-  --scope=<project|user> \
-  --content="<content>"
+mx info
+mx context show
+mx context validate
+
+mx search "reverse proxy" --scope=project
+
+mx add --scope=project --category=guides --title="Nginx reverse proxy" --tags="nginx,proxy" --content="..."
+cat notes.md | mx quick-add --stdin --scope=user
+
+mx replace @project/guides/setup.md --content="Updated content"
+mx replace @user/notes/draft.md --tags="draft,ideas"
 ```
 
-Or with file input:
-```bash
-mx add \
-  --title="<title>" \
-  --tags="<tags>" \
-  --category="<category>" \
-  --scope=<project|user> \
-  --file=<path>
-```
+## Output Expectations
 
-### 5. Suggest Related Links
-After creation, search for related entries and suggest linking them:
-```bash
-mx suggest-links <created-path>
-```
-
-## Example Session
-
-```
-User: /kb-add Nginx reverse proxy setup
-
-Claude: Let me check for similar entries...
-$ mx search "Nginx reverse proxy"
-No duplicates found.
-
-Which scope should I use?
-- project (shared with team)
-- user (personal notes)
-
-User: project
-
-Which category?
-- infrastructure, devops, development, troubleshooting, architecture, patterns
-
-User: infrastructure
-
-Claude: Please provide the content (markdown):
-
-User: [provides content]
-
-Claude: Any tags? (comma-separated, or skip)
-
-User: nginx, proxy, web
-
-Claude:
-$ mx add --title="Nginx reverse proxy setup" --tags="nginx,proxy,web" \
-    --category="infrastructure" --scope=project --content="..."
-
-Created: @project/infrastructure/nginx-reverse-proxy-setup.md
-```
-
-## Scope Selection Heuristics
-
-When the user doesn't specify, suggest based on content type:
-
-**Suggest `project` scope for:**
-- Infrastructure documentation
-- API references
-- Team workflows
-- Debugging guides for shared systems
-- Architecture decisions
-
-**Suggest `user` scope for:**
-- Personal notes or drafts
-- Experimental findings
-- Individual productivity tips
-- Work-in-progress content
-- Content mentioning "my", "personal", "draft"
+- Return the created or updated path, ideally in scoped form.
+- If the KB is ambiguous, state which scope was used and why.
+- If duplicate content was found, recommend updating the existing entry instead of adding a new one.

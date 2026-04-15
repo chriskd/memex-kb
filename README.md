@@ -2,242 +2,159 @@
 
 # Memex
 
-CLI-first knowledge base with hybrid search, typed relations, and static site publishing. Stores Markdown with YAML frontmatter across project and user scopes. Built for humans and AI coding agents.
+CLI-first knowledge base for Markdown + YAML frontmatter across project and user scopes, with static publishing and agent-focused workflows.
 
 ## Start Here
 
-- `docs/README.md` (fast onboarding for new users/agents)
-- `kb/guides/quick-start.md` (KB-based quick start)
-- `kb/reference/cli.md` (full CLI reference)
+- `docs/README.md` (fast onboarding for users and agents)
+- `kb/guides/index.md` (published docs landing page)
+- `kb/guides/quick-start.md` (KB quick start)
+- `kb/reference/cli.md` (full command reference)
 
-## Features
-
-- **Hybrid search** — BM25 keyword + semantic embeddings, merged with Reciprocal Rank Fusion
-- **Typed relations** — explicit directed links in frontmatter with CLI helpers and linting
-- **Graph view** — wikilinks, relations, and semantic links queryable via CLI and published sites
-- **Dual scopes** — project KB (`./kb/`) and user KB (`~/.memex/kb/`) with shared search
-- **Publishing** — static HTML with embedded search, tag pages, and graph visualization
-- **Agent-friendly** — `mx prime`, `mx schema`, `mx batch` for low-token AI workflows
-
-## Installation
+## Install
 
 ```bash
-# With uv (recommended)
+# Recommended
 uv tool install memex-kb
 
-# Enable semantic search (optional heavier deps)
+# Optional semantic search deps
 uv tool install 'memex-kb[search]'
 
-# With pip
+# Or pip
 pip install memex-kb
-
-# Enable semantic search (optional heavier deps)
 pip install 'memex-kb[search]'
 
 # Verify
 mx --version
 ```
 
-### From Source (Repo Checkout)
+Keyword search is available by default. Semantic search is optional (`[search]` extra).
+If dependencies are missing, run `mx doctor`.
+
+From a repo checkout, prefix with `uv run`:
 
 ```bash
 uv sync --dev
 uv run mx --version
-uv run mx prime
 ```
 
-Keyword search ships by default. Semantic search is optional (to avoid heavyweight ML installs by default).
-If semantic search is missing, run `mx doctor` for an install hint.
-For timestamp audits/repair on existing entries, use `mx doctor --timestamps`
-or `mx doctor --timestamps --fix`. Recent views fall back to filesystem timestamps
-when frontmatter timestamps are missing, and `mx doctor --timestamps --fix` can
-sync stale `updated` values from file `mtime`.
-If `mx search` fails with `ModuleNotFoundError: No module named 'whoosh'`, install keyword search deps with
-`pip install whoosh-reloaded` (or reinstall `memex-kb`), or install the full extra with `memex-kb[search]`.
-Requires Python 3.11+.
-
-## Quick Start
-
-If you're running from a repo checkout (without installing `mx` globally), prefix commands with `uv run`
-(e.g., `uv run mx init`, `uv run mx add ...`).
+## First Run
 
 ```bash
-mx onboard --init --yes                    # Guided setup + init if missing (includes sample entry)
-# or:
-mx init --sample                           # Create kb/ + .kbconfig + inbox/first-task.md
-mx add --title="Setup" --tags="docs" \
-       --category=guides --content="..."   # Add an entry
-mx list --limit=5                          # Confirm entry path
-mx get guides/setup.md                     # Read an entry
-mx health                                  # Audit KB (orphan warnings start at 5+ entries)
-mx search "setup"                          # Optional: search (keyword; semantic if installed)
+# Guided check; initialize if missing (non-interactive)
+mx onboard --init --yes
+
+# Same check, but only current directory context
+mx onboard --init --yes --cwd-only
+
+# Direct project KB initialization
+mx init --sample
+mx init --path docs/kb --sample
+
+# User KB initialization
+mx init --user --sample
 ```
 
-Note: If `--category` is omitted and no `.kbconfig` `primary` exists, `mx add` defaults to the KB root (`.`) and prints a warning.
-Tip: Set `.kbconfig` `primary: guides` to make `--category` optional. Check scope/config with `mx info` and `mx context show`.
-When both a project KB and a user KB are active, many outputs use explicit scoped paths such as
-`@project/guides/setup.md` and `@user/inbox/note.md`. Unscoped paths still resolve to the primary KB
-(project if present, else user).
+Notes:
+- `mx onboard --init --yes` can create a KB when none is configured.
+- In onboarding, sample behavior is configurable with `--sample/--no-sample`.
+- When both project and user KBs are active, paths may be scoped (`@project/...`, `@user/...`).
 
-## Entries
-
-Markdown files with YAML frontmatter:
-
-```markdown
----
-title: API Guide
-tags: [api, docs]
-description: Endpoints and auth
----
-
-# API Guide
-
-See [[reference/auth]] for auth details.
-```
-
-Typed relations go in frontmatter:
-
-```yaml
-relations:
-  - path: reference/cli.md
-    type: documents
-  - path: guides/installation.md
-    type: depends_on
-```
-
-Types: `depends_on`, `implements`, `extends`, `documents`, `references`, `blocks`, `related`.
-
-## CLI Overview
+## Common Commands
 
 ```bash
-# Search and browse
-mx search "query"                          # Hybrid search (default)
-mx search "query" --mode=semantic          # Semantic only
-mx search "query" --include-neighbors      # Include linked entries
-mx get path/entry.md                       # Read entry
-mx categories                              # List categories
-mx list --tags=docs                        # List by tag
-mx tree                                    # Directory structure
-mx whats-new --days=7                      # Recent changes
+# Search (keyword default; semantic optional)
+mx search "deployment"
+mx search "deployment" --mode=keyword
+mx search "deployment" --mode=semantic
+mx search "deployment" --scope=project
+mx search "deployment" --include-neighbors --neighbor-depth=2
 
-# Create and edit
-mx add --title="..." --tags="..." --content="..."
-mx append "Title" --content="..."          # Append or create
-mx patch path.md --find="old" --replace="new"
-mx ingest notes.md --directory=guides      # Import file
+# Create/read/update
+mx add --title="Setup" --tags="docs" --category=guides --content="..."
+mx quick-add --content="Capture this note"
+mx get @project/guides/setup.md
+mx replace @project/guides/setup.md --tags="docs,setup"
+mx delete @project/guides/setup.md --force
 
-# Relations
-mx relations path/entry.md --depth=2       # Query graph
-mx relations-add path.md --relation "other.md=documents"
-mx relations-lint --strict                 # Check consistency
+# Multi-KB visibility and context
+mx info
+mx context show
+mx context validate
 
 # Maintenance
-mx health                                  # Audit KB
-mx hubs                                    # Find high-connectivity entries
-mx suggest-links path.md                   # Semantic link suggestions
-mx reindex                                 # Rebuild indices
-mx eval                                    # Search quality metrics
-mx eval --json --save                      # Save self-describing eval artifact
-
-# Agent tools
-mx prime                                   # Session context for agents
-mx schema --compact                        # CLI schema (for LLMs)
-mx batch < commands.txt                    # Batch operations
+mx health
+mx doctor
+mx doctor --timestamps
+mx doctor --timestamps --fix
+mx relations-lint --strict
 ```
 
-Full reference at `kb/reference/cli.md`.
-
-## Publishing
+## Publish
 
 ```bash
-mx publish -o _site                        # Generate static site
-mx publish --base-url /my-kb               # Custom base path
-mx publish --setup-github-actions          # Add GH Pages workflow
+# Basic build
+mx publish -o _site
+
+# Source selection
+mx publish --kb-root ./kb -o _site
+mx publish --scope=project -o _site
+
+# Landing page and base URL
+mx publish --index guides/index --base-url /my-kb
+
+# Content controls
+mx publish --include-drafts --include-archived
+mx publish --no-clean
+
+# GitHub Pages workflow
+mx publish --setup-github-actions
+mx publish --setup-github-actions --dry-run
 ```
 
-## AI Integration
-
-### Claude Code
-
-Add to `.claude/settings.json`:
-
-```json
-{
-  "permissions": { "allow": ["Bash(mx:*)"] },
-  "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "mx session-context" }] }]
-  }
-}
-```
-
-Or install automatically:
+## Agents
 
 ```bash
+# Session hook context
+mx session-context
 mx session-context --install
+
+# Token-efficient helpers
+mx prime
+mx schema --compact
+mx batch < commands.txt
+
+# Programmatic errors
+mx --json-errors search "query"
 ```
 
-### Plugin
+## Config
 
-```text
-/plugin marketplace add ./.claude-plugin/marketplace.json
-/plugin install memex@memex
-```
-
-### Agent Commands
-
-```bash
-mx prime              # Context for session start
-mx schema --compact   # CLI schema (minimal tokens)
-mx batch              # Multiple commands, one invocation
-```
-
-## Configuration
-
-`.kbconfig` at project root:
+Project config file: `.kbconfig` at repo root.
 
 ```yaml
+# kb_path is canonical; project_kb still appears in some help/output
 kb_path: ./kb
-primary: guides              # Default category for mx add
-warn_on_implicit_category: true  # Warn when mx add omits --category and no primary is set
+primary: inbox
+warn_on_implicit_category: true
 boost_paths:
-  - guides/*                 # Search ranking boost
+  - inbox/*
+  - guides/*
 default_tags:
   - myproject
 publish_base_url: /my-kb
+publish_index_entry: guides/index
 ```
 
 Environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `MEMEX_USER_KB_ROOT` | Override user KB location |
-| `MEMEX_INDEX_ROOT` | Override index directory |
+| `MEMEX_USER_KB_ROOT` | Override user KB root (default `~/.memex/kb`) |
+| `MEMEX_CONTEXT_NO_PARENT` | Only consider `.kbconfig` in current directory |
+| `MEMEX_INDEX_ROOT` | Override index root |
 | `MEMEX_QUIET` | Suppress warnings |
 
-CLI flags:
-
-- `--json-errors` — errors as JSON with error codes
-- `-q, --quiet` — suppress warnings
-
-## Index Storage
-
-Indices live at `{kb}/.indices/`:
-
-- `whoosh/` — BM25 keyword index
-- `chroma/` — semantic vectors
-- `embedding_cache.sqlite` — cached embeddings
-
-## Development
-
-```bash
-git clone https://github.com/chriskd/memex-kb.git
-cd memex
-uv sync --dev
-uv run pytest
-```
-
-See `CONTRIBUTING.md` for guidelines.
-
-## License
-
-MIT
+Useful global flags:
+- `--json-errors` outputs structured errors with error codes.
+- `-q, --quiet` suppresses warnings (same effect as `MEMEX_QUIET=1`).

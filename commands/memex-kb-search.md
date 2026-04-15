@@ -6,45 +6,32 @@ allowed-tools:
 argument-hint: "<query>"
 ---
 
-Search the knowledge base using the provided query.
+Search the knowledge base with the user’s query.
 
 ## Workflow
 
-1. Run `mx search "<query>"` with the user's query
-2. Display results in a readable format:
-   - Title
-   - Path
-   - Relevance snippet (if available)
+1. Run `mx search "<query>"`.
+2. If the user wants narrower matching, retry with `--mode=keyword`, `--mode=semantic`, or `--scope=project`.
+3. Present the top matches with title, path, score, and a short snippet when available.
 
-## Search Modes
+## Useful Flags
 
-- **hybrid** (default): Combines keyword and semantic search
-- **keyword**: Traditional text matching (`--mode=keyword`)
-- **semantic**: Vector similarity search (`--mode=semantic`)
+- `--content` - include full entry content in results
+- `--strict` - keep weak semantic matches out
+- `--include-neighbors` - pull in linked entries around the matches
+- `--neighbor-depth=N` - control neighbor hops, default `1`
+- `--terse` - paths only
+- `--full-titles` - avoid title truncation
+- `--json` - machine-readable output
 
-## Example
+## Examples
 
 ```bash
-mx search "kubernetes deployment"
-mx search "cloudflare" --mode=semantic
-mx search "docker" --tags=infrastructure
+mx search "deployment"
+mx search "deployment" --mode=keyword
+mx search "deployment" --mode=semantic --limit=5
+mx search "config" --scope=project --include-neighbors --neighbor-depth=2
+mx search "docker" --tags=infrastructure --content
 ```
 
-## Example Output
-
-```
-Found 3 results for "kubernetes deployment":
-
-1. **Kubernetes Deployment Strategies**
-   Path: infrastructure/kubernetes/deployments.md
-   "...rolling updates and blue-green deployment patterns..."
-
-2. **ArgoCD Setup Guide**
-   Path: devops/argocd/setup.md
-   "...GitOps deployment workflow for Kubernetes..."
-```
-
-If no results found, suggest:
-- Try different keywords
-- Use a broader search term
-- Check available categories with `mx tree`
+If nothing useful comes back, try a broader query or switch modes before assuming the KB is missing the topic.

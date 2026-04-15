@@ -21,4 +21,4 @@ kb_path: kb
 #   - "*.draft.md"
 
 # Landing page for published site
-publish_index_entry: guides/quick-start
+publish_index_entry: guides/index

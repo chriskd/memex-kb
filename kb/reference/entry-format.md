@@ -7,7 +7,7 @@ tags:
   - markdown
   - links
 created: 2026-01-06T00:00:00
-updated: 2026-01-25T23:30:00+00:00
+updated: 2026-04-15T00:00:00+00:00
 contributors:
   - chriskd <2326567+chriskd@users.noreply.github.com>
 edit_sources:
@@ -43,20 +43,33 @@ Your content here with [[bidirectional links]] to other entries.
 |-------|------|-------------|
 | `title` | string | Entry title (used for display and title matching) |
 | `tags` | list | Tags for filtering and discovery |
+| `created` | date or datetime | Creation timestamp used by the parser and recent-entry views |
 
 ### Optional
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `created` | date | Creation date (YYYY-MM-DD) |
-| `updated` | date | Last update date |
+| `updated` | date or datetime | Last update timestamp |
 | `description` | string | One-line summary for search results |
 | `aliases` | list | Alternative titles for title matching |
-| `draft` | boolean | Exclude from `mx publish` unless `--include-drafts` |
-| `archived` | boolean | Exclude from search and publish |
+| `status` | string | `published` (default), `draft`, or `archived` |
 | `source_project` | string | Project that created this entry |
 | `semantic_links` | list | Semantic links (auto-managed unless set via CLI) |
 | `relations` | list | Typed relations to other entries |
+
+`created` is required for normal entry parsing. The publisher can fall back to
+filesystem timestamps when rendering older hand-authored entries that omitted it,
+but `mx doctor --timestamps --fix` is the recommended way to normalize those files.
+
+### Status
+
+Use `status` instead of legacy `draft` / `archived` booleans:
+
+```yaml
+status: published   # default
+status: draft       # excluded from publish unless --include-drafts
+status: archived    # excluded unless --include-archived
+```
 
 ### Semantic Links (optional)
 

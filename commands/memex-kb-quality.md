@@ -6,38 +6,30 @@ allowed-tools:
 argument-hint: ""
 ---
 
-Audit the knowledge base for health issues and problems.
+Audit the live knowledge base for health problems.
 
 ## Workflow
 
-1. Run `mx health` to audit the KB
-2. Present findings:
-   - Orphaned entries (no links to them)
-   - Broken links (links to non-existent entries)
-   - Stale content (old entries needing review)
-   - Empty directories
-3. Suggest fixes for any issues found
+1. Run `mx health`.
+2. Summarize the live issues:
+   - orphaned entries
+   - broken links
+   - stale content
+   - empty directories
+3. If relation types look suspicious, run `mx relations-lint --strict`.
+4. Point to the smallest fix that clears the issue.
 
-## Example
+## Automation
 
 ```bash
-mx health           # Human-readable output
-mx health --json    # JSON format for programmatic use
+mx health
+mx health --json
+mx relations-lint --strict
 ```
 
-## What It Checks
+## Triage
 
-- **Orphans**: Entries with no inbound links
-- **Broken links**: `[[links]]` pointing to non-existent entries
-- **Stale content**: Entries not updated in a long time
-- **Empty directories**: Folders with no entries
-
-## Orphan Warnings (What To Do)
-
-Orphans are entries with no incoming links yet (no `[[wikilinks]]` or typed relations pointing at them).
-This is expected in a brand-new KB.
-
-Quick fixes:
-- Create an index/hub entry (e.g., `guides/index.md`) and link to key entries.
-- Add at least one link from an existing entry to each orphan.
-- Use `mx suggest-links path/to/entry.md` to find candidates to connect.
+- Treat orphans as a navigation problem unless the entry is intentionally standalone.
+- Treat broken links as immediate cleanup.
+- Treat stale content as a review queue, not a failure by itself.
+- Treat empty directories as either cleanup or a signal that an index file is missing.
