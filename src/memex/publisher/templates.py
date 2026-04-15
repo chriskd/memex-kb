@@ -415,7 +415,7 @@ def _base_layout(
     <script src="https://cdn.jsdelivr.net/npm/lunr@2.3.9/lunr.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-    <script>window.BASE_URL = "{base_url}";</script>
+    <script>window.BASE_URL = "{asset_base}";</script>
 </head>
 <body>
     <div class="app">
@@ -860,9 +860,13 @@ def render_graph_page(
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script>
 (function() {
-    const baseUrl = window.BASE_URL || '';
+    const baseUrl = (window.BASE_URL || '').replace(/\\/+$/, '');
+    const buildUrl = (path) => {
+        const normalizedPath = path.replace(/^\\/+/, '');
+        return baseUrl ? baseUrl + '/' + normalizedPath : '/' + normalizedPath;
+    };
 
-    fetch(baseUrl + '/graph.json')
+    fetch(buildUrl('graph.json'))
         .then(r => r.json())
         .then(data => {
             const container = document.getElementById('graph');
@@ -1096,7 +1100,7 @@ def render_graph_page(
                     tooltip.style.display = 'none';
                 })
                 .on('click', (event, d) => {
-                    window.location.href = baseUrl + '/' + d.url;
+                    window.location.href = buildUrl(d.url);
                 });
 
             link.on('mouseover', (event, d) => {

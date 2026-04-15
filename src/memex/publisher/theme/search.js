@@ -12,7 +12,11 @@
 
     const searchInput = document.getElementById('search-input');
     const searchResults = document.getElementById('search-results');
-    const baseUrl = window.BASE_URL || '';
+    const baseUrl = (window.BASE_URL || '').replace(/\/+$/, '');
+    const buildUrl = function(path) {
+        var normalizedPath = path.replace(/^\/+/, '');
+        return baseUrl ? baseUrl + '/' + normalizedPath : '/' + normalizedPath;
+    };
 
     if (!searchInput || !searchResults) {
         console.warn('Search elements not found');
@@ -20,7 +24,7 @@
     }
 
     // Load search index
-    fetch(baseUrl + '/search-index.json')
+    fetch(buildUrl('search-index.json'))
         .then(function(res) {
             if (!res.ok) throw new Error('Failed to load search index');
             return res.json();
@@ -81,7 +85,7 @@
                     : '';
 
                 return '<div class="search-result">' +
-                    '<a href="' + baseUrl + '/' + meta.path + '">' + escapeHtml(meta.title) + '</a>' +
+                    '<a href="' + buildUrl(meta.path) + '">' + escapeHtml(meta.title) + '</a>' +
                     tagsHtml +
                     '</div>';
             }).join('');

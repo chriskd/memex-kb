@@ -121,7 +121,11 @@
         const searchClose = document.querySelector('.search-overlay-close');
         const searchInput = document.querySelector('.search-overlay-input');
         const searchResults = document.querySelector('.search-overlay-results');
-        const baseUrl = window.BASE_URL || '';
+        const baseUrl = (window.BASE_URL || '').replace(/\/+$/, '');
+        const buildUrl = (path) => {
+            const normalizedPath = path.replace(/^\/+/, '');
+            return baseUrl ? baseUrl + '/' + normalizedPath : '/' + normalizedPath;
+        };
 
         if (!searchBtn || !searchOverlay) return;
 
@@ -162,7 +166,7 @@
 
         // Load search index (reuse from main search if available)
         if (searchInput && searchResults) {
-            fetch(baseUrl + '/search-index.json')
+            fetch(buildUrl('search-index.json'))
                 .then(res => res.ok ? res.json() : Promise.reject('Failed to load'))
                 .then(data => {
                     searchMetadata = data.metadata;
@@ -215,7 +219,7 @@
                         : '';
 
                     return '<div class="search-result">' +
-                        '<a href="' + baseUrl + '/' + meta.path + '">' + escapeHtml(meta.title) + '</a>' +
+                        '<a href="' + buildUrl(meta.path) + '">' + escapeHtml(meta.title) + '</a>' +
                         tagsHtml +
                         '</div>';
                 }).join('');
