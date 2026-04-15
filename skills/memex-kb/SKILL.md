@@ -15,6 +15,7 @@ Run these first when you need to write, interpret scoped paths, or understand th
 mx prime
 mx info
 mx context show
+mx context validate
 ```
 
 Use them to answer:
@@ -22,8 +23,15 @@ Use them to answer:
 - Which categories/directories exist
 - Whether `.kbconfig` sets a `primary` write directory
 - Whether scoped paths like `@project/...` or `@user/...` are necessary
+- Whether the configured paths and default write directory are valid before mutating anything
 
 Run `mx categories` before creating entries. Categories are KB-specific and may differ across repos.
+When both KBs are active, compare them explicitly:
+
+```bash
+mx categories --scope=project
+mx categories --scope=user
+```
 
 ## Search Before Writing
 
@@ -73,6 +81,8 @@ Decide category from the live KB, not from a hard-coded taxonomy:
 
 ```bash
 mx categories
+mx categories --scope=project
+mx categories --scope=user
 mx tree --depth=2
 ```
 
@@ -83,9 +93,10 @@ If `.kbconfig` has no `primary`, `mx add` without `--category` writes to the KB 
 Use the command that matches how much structure you already have:
 
 ```bash
-mx add --title="..." --tags="..." --category=... --content="..."
+mx add --title="..." --tags="..." --category=guides --scope=project --content="..."
+mx add --title="..." --tags="..." --category=inbox --scope=user --content="..."
 mx quick-add --content="..."
-mx ingest notes.md --directory=guides
+mx ingest notes.md --directory=guides --scope=project
 ```
 
 Prefer:
@@ -93,12 +104,16 @@ Prefer:
 - `mx quick-add` when you have raw notes and want Memex to suggest metadata
 - `mx ingest` when importing an existing Markdown file into the KB
 
+Important:
+- `mx add` and `mx ingest` support explicit `--scope=project|user`
+- `mx quick-add` does not take `--scope`; use it only when the auto-detected active KB is the one you want
+
 After creating an entry:
 
 ```bash
 mx list --limit=5
-mx get path/to/new-entry.md
-mx suggest-links path/to/new-entry.md
+mx get @project/path/to/new-entry.md
+mx suggest-links @project/path/to/new-entry.md
 ```
 
 Use `mx tags` before inventing new tags. Reuse existing tags unless a new one is clearly warranted.
@@ -110,9 +125,9 @@ For frontmatter, relations, and templates, read `references/entry-format.md`.
 Prefer the least destructive edit command:
 
 ```bash
-mx patch path.md --find="old" --replace="new"
+mx patch @project/path.md --find="old" --replace="new"
 mx append "Entry Title" --content="new section"
-mx replace path.md --content="full replacement"
+mx replace @user/path.md --content="full replacement"
 ```
 
 Choose commands by intent:
@@ -121,6 +136,7 @@ Choose commands by intent:
 - `mx replace`: full rewrites or metadata/content replacement
 
 Use `--dry-run` with `mx patch` when the replacement is risky or repetitive.
+When both KBs are active, prefer explicit scoped paths for all mutating commands.
 
 For relation maintenance, prefer dedicated relation commands when possible:
 
@@ -139,8 +155,10 @@ Run these after meaningful writes or when the user asks about KB health:
 mx health
 mx relations-lint
 mx whats-new --days=7
+mx whats-new --scope=project --days=7
 mx hubs
 mx doctor --timestamps
+mx doctor --timestamps --fix
 ```
 
 Use them to catch:
@@ -151,6 +169,8 @@ Use them to catch:
 - timestamp problems
 
 `mx health` suppresses orphan warnings in very small KBs, so interpret orphan output in context.
+Use `mx doctor --timestamps --fix` when timestamps are missing, invalid, or stale because files were
+edited directly outside `mx`.
 
 ## Keep Canonical Docs Canonical
 
@@ -169,7 +189,8 @@ The reference files bundled with this skill are navigation notes, not an indepen
 Avoid:
 - adding a new entry before searching for an existing one
 - hard-coding category names from an old repo into a new KB
-- using unscoped paths when both project and user KBs are active and collisions are possible
+- assuming unscoped reads or writes target the KB you intended when both project and user KBs are active
+- using `mx quick-add` when you need an explicit project/user write target
 - using `mx replace` when `mx patch` or `mx append` would preserve context
 - creating personal scratch notes in the project KB
 - inventing new tags without checking `mx tags`

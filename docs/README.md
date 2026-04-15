@@ -79,6 +79,21 @@ mx batch < commands.txt
 mx --json-errors search "query"
 ```
 
+Memex works with assistants in two ways:
+- direct `mx` commands in any shell-capable harness
+- the bundled skill in `skills/memex-kb/` for harnesses that support `SKILL.md`
+
+Common setups:
+
+```bash
+# Claude Code: machine-local hook install
+mx session-context --install --install-path .claude/settings.local.json
+
+# Codex: install the bundled skill, then restart Codex
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+ln -s "$PWD/skills/memex-kb" "${CODEX_HOME:-$HOME/.codex}/skills/memex-kb"
+```
+
 ## Config + Env
 
 `.kbconfig` (project root):
@@ -97,3 +112,4 @@ Environment variables:
 - `MEMEX_QUIET`
 
 More detail: `kb/guides/quick-start.md` and `kb/reference/cli.md`.
+Harness-specific detail: `kb/guides/ai-integration.md`.

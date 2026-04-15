@@ -6,7 +6,10 @@ The canonical way to discover them is:
 
 ```bash
 mx categories
+mx categories --scope=project
+mx categories --scope=user
 mx info
+mx context show
 mx tree --depth=2
 ```
 
@@ -21,7 +24,7 @@ mx tree --depth=2
 
 - A `project` KB often reflects repo-specific categories and conventions.
 - A `user` KB may use a different structure entirely.
-- When both are active, decide scope first, then category.
+- When both are active, decide scope first, then inspect categories for that scope.
 
 ## Current Repo Example
 
@@ -38,3 +41,4 @@ Stop and re-check the live KB if you are about to:
 - create a brand-new top-level directory without evidence that it is warranted
 - force a topic into an old six-category taxonomy copied from historical docs
 - choose a category before checking `.kbconfig`, `mx categories`, or `mx tree`
+- assume the project and user KBs share the same category layout

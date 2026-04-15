@@ -1,6 +1,6 @@
 ---
 title: Guides Index
-description: Start here for setup, first-run onboarding, and agent workflows
+description: Start here for setup, first-run onboarding, and AI workflow integration
 tags:
   - guides
   - getting-started
@@ -11,13 +11,14 @@ updated: 2026-04-15
 
 # Guides
 
-Start here if you want to install Memex, create your first KB, or wire it into an agent workflow.
+Start here if you want to install Memex, create your first KB, or wire it into Claude Code, Codex,
+or another skill-aware harness.
 
 ## Start Here
 
 - [[guides/installation|Installation Guide]] - install `mx` and choose a KB scope
 - [[guides/quick-start|Quick Start Guide]] - first note, search, health, and publish
-- [[guides/ai-integration|AI Agent Integration]] - Claude Code, Codex, and other agents
+- [[guides/ai-integration|AI Agent Integration]] - skills, Claude Code, Codex, and other harnesses
 
 ## Reference
 

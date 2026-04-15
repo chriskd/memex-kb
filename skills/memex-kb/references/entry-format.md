@@ -28,6 +28,8 @@ Current high-signal facts from the canonical doc:
 - `--json` output shapes
 - scope-aware path behavior such as `@project/...` and `@user/...`
 - `mx templates`, `mx suggest-links`, and `mx relations-*`
+- `mx context show` / `mx context validate` when choosing the right write target
+- `mx doctor --timestamps --fix` when direct file edits left timestamps stale
 
 ## Practical Defaults
 
@@ -35,3 +37,4 @@ Current high-signal facts from the canonical doc:
 - Prefer adding a short `description` for durable entries.
 - Prefer `mx patch` over `mx replace` unless rewriting the whole entry.
 - Use explicit scoped paths in edits when both project and user KBs are active.
+- Prefer `mx add` or `mx ingest` over `mx quick-add` when you need an explicit `project` or `user` target.

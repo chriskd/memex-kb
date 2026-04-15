@@ -1,6 +1,6 @@
 ---
 title: AI Agent Integration
-description: How to use memex with AI coding assistants
+description: How to use Memex with Claude Code, Codex, and other skill-aware agent harnesses
 tags:
   - ai
   - claude-code
@@ -14,10 +14,54 @@ semantic_links: []
 
 # AI Agent Integration
 
-Memex is designed to work through the `mx` CLI. Treat the CLI as the stable interface and keep
-assistant-specific config thin.
+Memex supports agent workflows in two layers:
+
+1. `mx` is the portable interface for any harness with shell access.
+2. `skills/memex-kb/` is the bundled reusable skill for harnesses that support `SKILL.md`-style
+   installs.
+
+Treat `mx` as the source of truth for KB state. Treat the skill as a reusable workflow layer on top
+of the CLI.
+
+## Choose an Integration Style
+
+Use direct `mx` commands when:
+
+- the harness can run shell commands but does not have a skill/plugin system
+- you want the thinnest possible integration
+- you need a portable fallback across multiple harnesses
+
+Use the bundled skill when:
+
+- the harness supports installable `SKILL.md`-style skills
+- you want a reusable workflow instead of repeating the same prompt instructions
+- you want the bundled references and metadata to travel with the skill
+
+## Bundled Skill Layout
+
+This repo ships a first-class skill in `skills/memex-kb/`:
+
+- `skills/memex-kb/SKILL.md` - core workflow and when to use it
+- `skills/memex-kb/references/` - lightweight supporting notes
+- `skills/memex-kb/agents/openai.yaml` - UI metadata for Codex/OpenAI-style skill pickers
+
+If a harness supports skills, copy or symlink the entire directory and keep the structure intact:
+
+```bash
+mkdir -p /path/to/harness/skills
+ln -s "$PWD/skills/memex-kb" /path/to/harness/skills/memex-kb
+
+# Or copy it instead of symlinking
+cp -R skills/memex-kb /path/to/harness/skills/memex-kb
+```
+
+Preserve `SKILL.md` at the skill root. Keep `references/` next to it. If the harness ignores
+`agents/openai.yaml`, that is fine.
 
 ## Claude Code
+
+Claude Code integration is CLI-first today: grant `mx` access, keep shared prompt/config thin, and
+use the session hook for startup context.
 
 ### Permissions
 
@@ -32,9 +76,9 @@ Add this to `.claude/settings.local.json`:
 ```
 
 Use `.claude/settings.local.json` for machine-local permissions. Keep shared team settings in
-`.claude/settings.json` if you need them tracked in the repo.
+`.claude/settings.json` only when they should be committed for everyone.
 
-### Session Hooks
+### Session Hook
 
 Install the session hook into local settings:
 
@@ -42,9 +86,10 @@ Install the session hook into local settings:
 mx session-context --install --install-path .claude/settings.local.json
 ```
 
-`mx session-context` injects project-relevant KB context at session start. It is the recommended
-way to give an agent a compact snapshot of the active KB, relevant entries, and recent workflow
-context.
+`mx session-context` injects project-relevant KB context at session start. This install flow is
+Claude-specific; it is not a generic skill installer.
+
+### Claude Code Workflow
 
 Useful companion commands:
 
@@ -56,11 +101,15 @@ mx --json-errors search "query"
 mx batch
 ```
 
-### Claude Code Workflow
+Typical flow:
 
 ```bash
 # Before implementing: search for existing patterns
 mx search "authentication patterns"
+
+# Inspect current KB state
+mx info
+mx context show
 
 # During work: capture discoveries for future sessions
 mx add --title="OAuth2 Setup" --tags="auth,patterns" --category=guides --content="..."
@@ -72,7 +121,29 @@ automation. `mx batch` is useful when you want to combine several KB operations 
 
 ## Codex
 
-Codex can use Memex directly from shell commands.
+Codex can use Memex in both supported ways: direct CLI commands or the bundled skill.
+
+### Install the Bundled Skill
+
+Codex installs user skills into `$CODEX_HOME/skills` (default `~/.codex/skills`). From the repo
+root:
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+ln -s "$PWD/skills/memex-kb" "${CODEX_HOME:-$HOME/.codex}/skills/memex-kb"
+
+# Or copy the directory instead of symlinking
+cp -R skills/memex-kb "${CODEX_HOME:-$HOME/.codex}/skills/memex-kb"
+```
+
+Restart Codex after installing the skill so it is picked up on the next session.
+
+The `agents/openai.yaml` file is optional UI metadata for Codex/OpenAI-style skill pickers. Keep it
+next to `SKILL.md` when you install the skill.
+
+### Use the CLI Directly
+
+Codex can also use Memex directly from shell commands:
 
 ```bash
 # Search before implementing
@@ -95,19 +166,30 @@ Helpful commands for Codex-style workflows:
 - `mx schema --compact` - emit command metadata for introspection
 - `mx --json-errors` - keep errors machine-parseable
 
-## Other Agents
+Use the skill when you want reusable Memex-specific workflow guidance. Use direct `mx` commands when
+you want a thin shell-only integration.
 
-Any agent with shell access can use the same patterns:
+## Other Harnesses
+
+For other harnesses, use one of these patterns:
+
+1. Direct CLI integration: run `mx` from shell commands and keep the harness prompt thin.
+2. Skill installation: copy or symlink `skills/memex-kb/` into the harness's skill directory if it
+   supports `SKILL.md`-style bundles.
+
+Portable command set:
 
 ```bash
-mx search "deployment strategies"
-mx whats-new --scope=project --days=7
+mx prime
 mx info
 mx context show
+mx search "deployment strategies"
+mx whats-new --scope=project --days=7
+mx quick-add --stdin
 ```
 
-Search before implementing, add discoveries after solving, and use `mx quick-add --stdin` when you
-already have Markdown that should become an entry.
+If the harness has no native skill system, point it at the CLI and optionally keep
+`skills/memex-kb/SKILL.md` nearby as reusable operator guidance.
 
 ## Project Configuration
 
@@ -145,13 +227,15 @@ Related commands:
 ## Best Practices
 
 1. Search before creating to avoid duplicate entries.
-2. Keep assistant-specific permissions in `.claude/settings.local.json` unless they need to be shared.
-3. Link related entries with `[[wikilinks]]`.
-4. Keep entries focused on one topic.
-5. Update existing entries instead of duplicating them.
+2. Treat `mx` as the canonical interface, even when a harness-specific skill is installed.
+3. Keep assistant-specific permissions in `.claude/settings.local.json` unless they need to be shared.
+4. Link related entries with `[[wikilinks]]`.
+5. Keep entries focused on one topic.
+6. Update existing entries instead of duplicating them.
 
 ## See Also
 
 - [[guides/index|Guides Index]]
+- [[guides/quick-start|Quick Start Guide]]
 - [[reference/cli|CLI Reference]]
 - [[reference/entry-format|Entry Format Reference]]
