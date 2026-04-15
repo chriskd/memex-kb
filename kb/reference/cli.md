@@ -605,12 +605,12 @@ mx reindex --json
 Evaluate search accuracy against a query dataset.
 
 ```bash
-mx eval                              # Run eval/queries.json against current KB
-mx eval --mode=keyword               # Keyword-only evaluation
-mx eval --scope=project              # Project KB only
-mx eval --json                       # JSON to stdout (includes meta)
-mx eval --save                       # Also write eval/results/<timestamp>.json
-mx eval --out /tmp/mx-eval.json      # Also write JSON artifact to a specific file
+mx eval --dataset /path/to/queries.json         # Run against an explicit dataset
+mx eval --dataset /path/to/queries.json --mode=keyword
+mx eval --dataset /path/to/queries.json --scope=project
+mx eval --dataset /path/to/queries.json --json  # JSON to stdout (includes meta)
+mx eval --dataset /path/to/queries.json --save  # Also write .memex-eval/results/<timestamp>.json
+mx eval --dataset /path/to/queries.json --out /tmp/mx-eval.json
 ```
 
 ### mx prime
@@ -629,7 +629,7 @@ Output dynamic project-relevant context (for hooks).
 ```bash
 mx session-context                   # Print session context
 mx session-context --max-entries 4   # Limit relevant entries
-mx session-context --install         # Update .claude/settings.json hook
+mx session-context --install         # Update the Claude settings file hook
 mx session-context --install --install-path .claude/settings.local.json
 mx session-context --json            # JSON output
 ```

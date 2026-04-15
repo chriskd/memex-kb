@@ -17,8 +17,7 @@ semantic_links: []
 Memex supports agent workflows in two layers:
 
 1. `mx` is the portable interface for any harness with shell access.
-2. `skills/memex-kb/` is the bundled reusable skill for harnesses that support `SKILL.md`-style
-   installs.
+2. `skills/memex-kb/` is the bundled reusable skill for harnesses that support `SKILL.md`.
 
 Treat `mx` as the source of truth for KB state. Treat the skill as a reusable workflow layer on top
 of the CLI.
@@ -33,7 +32,7 @@ Use direct `mx` commands when:
 
 Use the bundled skill when:
 
-- the harness supports installable `SKILL.md`-style skills
+- the harness supports installable `SKILL.md` skills
 - you want a reusable workflow instead of repeating the same prompt instructions
 - you want the bundled references and metadata to travel with the skill
 
@@ -60,8 +59,36 @@ Preserve `SKILL.md` at the skill root. Keep `references/` next to it. If the har
 
 ## Claude Code
 
-Claude Code integration is CLI-first today: grant `mx` access, keep shared prompt/config thin, and
-use the session hook for startup context.
+Claude Code now supports native `SKILL.md` skills. The current best setup is:
+
+1. install the bundled skill via Claude's native skill path or plugin marketplace
+2. grant `mx` access in the Claude settings file
+3. optionally install the `mx session-context` hook for startup context
+
+### Install the Bundled Skill
+
+Claude Code can use skills installed via the Anthropic skills marketplace, or manually from a local
+directory.
+
+For project-local use from a repo checkout:
+
+```bash
+mkdir -p .claude/skills
+ln -s "$PWD/skills/memex-kb" .claude/skills/memex-kb
+
+# Or copy it instead of symlinking
+cp -R skills/memex-kb .claude/skills/memex-kb
+```
+
+For personal use across projects, install under `~/.claude/skills/memex-kb/`.
+
+Keep the full directory intact:
+
+- `.claude/skills/memex-kb/SKILL.md`
+- bundled references and any supporting files next to it
+
+If you create a new top-level `.claude/skills` directory while Claude Code is already running,
+restart Claude Code so it starts watching that directory.
 
 ### Permissions
 
@@ -75,8 +102,8 @@ Add this to `.claude/settings.local.json`:
 }
 ```
 
-Use `.claude/settings.local.json` for machine-local permissions. Keep shared team settings in
-`.claude/settings.json` only when they should be committed for everyone.
+Use `.claude/settings.local.json` for machine-local permissions. Keep shared team settings in the
+Claude settings file only when they should be committed for everyone.
 
 ### Session Hook
 
@@ -86,8 +113,8 @@ Install the session hook into local settings:
 mx session-context --install --install-path .claude/settings.local.json
 ```
 
-`mx session-context` injects project-relevant KB context at session start. This install flow is
-Claude-specific; it is not a generic skill installer.
+`mx session-context` injects project-relevant KB context at session start. This install flow updates
+the Claude settings file; it is separate from Claude's native skill installation.
 
 ### Claude Code Workflow
 
@@ -125,8 +152,13 @@ Codex can use Memex in both supported ways: direct CLI commands or the bundled s
 
 ### Install the Bundled Skill
 
-Codex installs user skills into `$CODEX_HOME/skills` (default `~/.codex/skills`). From the repo
-root:
+OpenAI's current Codex app has a dedicated interface to create and manage skills, and skills
+created there are available across the app, CLI, and IDE extension. For manual local installs, the
+directory-based skill layout still works.
+
+Codex installs user skills into `$CODEX_HOME/skills` (default `~/.codex/skills`).
+
+From a repo checkout:
 
 ```bash
 mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
@@ -134,6 +166,12 @@ ln -s "$PWD/skills/memex-kb" "${CODEX_HOME:-$HOME/.codex}/skills/memex-kb"
 
 # Or copy the directory instead of symlinking
 cp -R skills/memex-kb "${CODEX_HOME:-$HOME/.codex}/skills/memex-kb"
+```
+
+From an installed package, first locate the bundled skill path:
+
+```bash
+python3 -c 'from importlib.resources import files; print(files("memex").joinpath("skills", "memex-kb"))'
 ```
 
 Restart Codex after installing the skill so it is picked up on the next session.
@@ -175,7 +213,7 @@ For other harnesses, use one of these patterns:
 
 1. Direct CLI integration: run `mx` from shell commands and keep the harness prompt thin.
 2. Skill installation: copy or symlink `skills/memex-kb/` into the harness's skill directory if it
-   supports `SKILL.md`-style bundles.
+   supports `SKILL.md`.
 
 Portable command set:
 

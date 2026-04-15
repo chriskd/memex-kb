@@ -19,6 +19,7 @@ build/
 _site/
 _site_repo/
 _first_run/
+.memex-eval/
 
 # IDE
 .idea/

@@ -1869,6 +1869,12 @@ class TestCategoriesCommand:
 class TestEvalCommand:
     """Tests for 'mx eval' command."""
 
+    def test_eval_requires_dataset(self, runner):
+        result = runner.invoke(cli, ["eval"])
+
+        assert result.exit_code != 0
+        assert "--dataset is required" in result.output
+
     @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
     def test_eval_out_writes_artifact_and_keeps_stdout_json(self, mock_run_async, runner, tmp_path):
         dataset = tmp_path / "queries.json"

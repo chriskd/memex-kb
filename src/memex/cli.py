@@ -1926,12 +1926,12 @@ def prime(as_json: bool, compact: bool, max_entries: int, max_recent: int, max_b
 @click.option(
     "--install",
     is_flag=True,
-    help="Update .claude/settings.json with mx session-context SessionStart hook",
+    help="Update the Claude settings file with the mx session-context SessionStart hook",
 )
 @click.option(
     "--install-path",
     type=click.Path(path_type=Path),
-    help="Custom path for Claude settings.json (implies --install).",
+    help="Custom path for the Claude settings file (implies --install).",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option(
@@ -1985,7 +1985,7 @@ def session_context_command(
             else:
                 output(payload, as_json=True)
         else:
-            click.echo(f"✓ Updated Claude settings at {installed_path}")
+            click.echo(f"✓ Updated Claude settings file at {installed_path}")
             click.echo('SessionStart hook set to: "mx session-context"')
         return
 
@@ -5572,8 +5572,7 @@ def summarize(dry_run: bool, limit: int | None, as_json: bool):
 @click.option(
     "--dataset",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path("eval/queries.json"),
-    show_default=True,
+    default=None,
     help="Path to JSON dataset of queries and expected paths",
 )
 @click.option("--limit", "-k", default=5, type=click.IntRange(min=1), help="Top-k cutoff")
@@ -5583,7 +5582,7 @@ def summarize(dry_run: bool, limit: int | None, as_json: bool):
 @click.option(
     "--save",
     is_flag=True,
-    help="Write JSON results to eval/results/<timestamp>.json (in addition to stdout)",
+    help="Write JSON results to .memex-eval/results/<timestamp>.json (in addition to stdout)",
 )
 @click.option(
     "--out",
@@ -5610,6 +5609,12 @@ def eval(
         from .evaluation import aggregate_metrics, compute_metrics, load_eval_cases
     except Exception as exc:
         _handle_error(ctx, exc, fallback_message="Eval is unavailable (missing dependencies).")
+
+    if dataset is None:
+        raise UsageError(
+            "--dataset is required. Memex no longer ships a repo-local eval dataset; "
+            "pass a JSON file with queries and expected paths."
+        )
 
     if not dataset.exists():
         raise UsageError(f"Dataset not found: {dataset}")
@@ -5687,7 +5692,7 @@ def eval(
     if out is not None:
         out_path = out
     elif save:
-        out_dir = Path("eval/results")
+        out_dir = Path(".memex-eval/results")
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = meta["timestamp"].replace(":", "").replace("+", "").replace("-", "")
         out_path = out_dir / f"mx-eval-{stamp}.json"
@@ -6535,7 +6540,6 @@ def _build_schema() -> dict:
                     {
                         "name": "--dataset",
                         "type": "path",
-                        "default": "eval/queries.json",
                         "description": "Path to JSON dataset of queries and expected paths",
                     },
                     {
@@ -6566,7 +6570,7 @@ def _build_schema() -> dict:
                     {
                         "name": "--save",
                         "type": "flag",
-                        "description": "Write JSON results to eval/results/<timestamp>.json",
+                        "description": "Write JSON results to .memex-eval/results/<timestamp>.json",
                     },
                     {
                         "name": "--out",
@@ -6580,11 +6584,11 @@ def _build_schema() -> dict:
                     "missing deps": "If search deps are missing, run 'mx doctor' and install extras.",
                 },
                 "examples": [
-                    "mx eval",
-                    "mx eval --mode=keyword",
-                    "mx eval --scope=project",
-                    "mx eval --json --save",
-                    "mx eval --out /tmp/mx-eval.json",
+                    "mx eval --dataset /path/to/queries.json",
+                    "mx eval --dataset /path/to/queries.json --mode=keyword",
+                    "mx eval --dataset /path/to/queries.json --scope=project",
+                    "mx eval --dataset /path/to/queries.json --json --save",
+                    "mx eval --dataset /path/to/queries.json --out /tmp/mx-eval.json",
                 ],
             },
             "context": {

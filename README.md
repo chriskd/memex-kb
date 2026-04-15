@@ -6,7 +6,6 @@ CLI-first knowledge base for Markdown + YAML frontmatter across project and user
 
 ## Start Here
 
-- `docs/README.md` (fast onboarding for users and agents)
 - `kb/guides/index.md` (published docs landing page)
 - `kb/guides/quick-start.md` (KB quick start)
 - `kb/guides/ai-integration.md` (Claude Code, Codex, and skill-aware harnesses)
@@ -118,16 +117,22 @@ mx publish --setup-github-actions --dry-run
 Memex integrates with assistants in two layers:
 
 - `mx` is the stable interface for any harness with shell access.
-- `skills/memex-kb/` is the bundled reusable skill for harnesses that support `SKILL.md`-style
-  installs.
+- `skills/memex-kb/` is the bundled reusable skill for harnesses that support `SKILL.md`.
 
 ```bash
 # Claude Code: install the session hook into machine-local settings
 mx session-context --install --install-path .claude/settings.local.json
 
-# Codex: install the bundled skill (restart Codex after)
+# Claude Code native skill install from a repo checkout
+mkdir -p .claude/skills
+ln -s "$PWD/skills/memex-kb" .claude/skills/memex-kb
+
+# Codex local skill install from a repo checkout (restart Codex after)
 mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
 ln -s "$PWD/skills/memex-kb" "${CODEX_HOME:-$HOME/.codex}/skills/memex-kb"
+
+# Installed package: locate the bundled skill first
+python3 -c 'from importlib.resources import files; print(files("memex").joinpath("skills", "memex-kb"))'
 
 # Portable helpers for any harness
 mx prime
