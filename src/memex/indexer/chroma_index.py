@@ -101,7 +101,13 @@ class ChromaIndex:
 
         return chromadb.PersistentClient(
             path=str(self._index_dir),
-            settings=Settings(anonymized_telemetry=False),
+            settings=Settings(
+                anonymized_telemetry=False,
+                chroma_product_telemetry_impl=(
+                    "memex.indexer.chroma_telemetry.NoopProductTelemetry"
+                ),
+                chroma_telemetry_impl="memex.indexer.chroma_telemetry.NoopProductTelemetry",
+            ),
         )
 
     def _get_embedding_cache(self) -> EmbeddingCache:

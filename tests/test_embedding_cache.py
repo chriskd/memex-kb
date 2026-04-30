@@ -105,3 +105,24 @@ def test_chroma_client_disables_telemetry_after_schema_reset(tmp_path, monkeypat
 
     assert len(captured_settings) == 2
     assert all(settings.anonymized_telemetry is False for settings in captured_settings)
+    assert all(
+        settings.chroma_product_telemetry_impl
+        == "memex.indexer.chroma_telemetry.NoopProductTelemetry"
+        for settings in captured_settings
+    )
+
+
+@pytest.mark.semantic
+def test_chroma_client_uses_noop_telemetry_without_importing_posthog(tmp_path) -> None:
+    import sys
+
+    from chromadb.telemetry.product import ProductTelemetryClient
+
+    sys.modules.pop("posthog", None)
+
+    chroma = ChromaIndex(index_dir=tmp_path / "chroma")
+    client = chroma._new_client()
+    telemetry = client._system.instance(ProductTelemetryClient)
+
+    assert telemetry.__class__.__name__ == "NoopProductTelemetry"
+    assert "posthog" not in sys.modules
