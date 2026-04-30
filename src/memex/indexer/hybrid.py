@@ -50,17 +50,24 @@ class HybridSearcher:
         self,
         whoosh_index: WhooshIndex | None = None,
         chroma_index: ChromaIndex | None = None,
+        allow_model_download: bool = False,
     ):
         """Initialize the hybrid searcher.
 
         Args:
             whoosh_index: Whoosh index instance. Created if not provided.
             chroma_index: Chroma index instance. Created if not provided.
+            allow_model_download: Allow sentence-transformers to download the
+                semantic model when it is not cached.
         """
         self._whoosh = whoosh_index or WhooshIndex()
         # Semantic search is optional; allow keyword-only installs to work.
         self.semantic_available = chroma_index is not None or _semantic_deps_available()
-        self._chroma = chroma_index or (ChromaIndex() if self.semantic_available else None)
+        self._chroma = chroma_index or (
+            ChromaIndex(allow_model_download=allow_model_download)
+            if self.semantic_available
+            else None
+        )
         self._last_indexed: datetime | None = None
 
     def _disable_semantic(self, reason: Exception | str) -> None:

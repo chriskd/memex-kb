@@ -1284,6 +1284,20 @@ def doctor(
         "chromadb": importlib.util.find_spec("chromadb") is not None,
         "sentence_transformers": importlib.util.find_spec("sentence_transformers") is not None,
     }
+    semantic_deps_available = deps["chromadb"] and deps["sentence_transformers"]
+    semantic_model = {
+        "name": None,
+        "cached": None,
+        "suggestion": None,
+    }
+    if semantic_deps_available:
+        from .config import EMBEDDING_MODEL
+        from .indexer.chroma_index import semantic_model_cached
+
+        semantic_model["name"] = EMBEDDING_MODEL
+        semantic_model["cached"] = semantic_model_cached()
+        if not semantic_model["cached"]:
+            semantic_model["suggestion"] = "Run `mx reindex --download-model` once to cache it"
 
     kb_root = None
     kb_configured = True
@@ -1302,12 +1316,15 @@ def doctor(
         "kb_configured": kb_configured,
         "kb_root": kb_root,
         "deps": deps,
+        "semantic_model": semantic_model,
         "suggestion": None,
     }
     timestamp_report: dict[str, Any] | None = None
 
     if not deps["whoosh"] or not deps["chromadb"] or not deps["sentence_transformers"]:
         data["suggestion"] = f"Install search deps for full functionality: {install_hint}"
+    elif semantic_model["cached"] is False:
+        data["suggestion"] = semantic_model["suggestion"]
 
     if timestamps:
         timestamp_mode = "fix" if fix and not dry_run else "dry-run" if dry_run else "report"
@@ -1348,6 +1365,9 @@ def doctor(
     click.echo(f"whoosh:               {'OK' if deps['whoosh'] else 'MISSING'}")
     click.echo(f"chromadb:             {'OK' if deps['chromadb'] else 'MISSING'}")
     click.echo(f"sentence-transformers: {'OK' if deps['sentence_transformers'] else 'MISSING'}")
+    if semantic_model["name"]:
+        model_status = "OK (cached)" if semantic_model["cached"] else "MISSING CACHE"
+        click.echo(f"semantic model:       {model_status} ({semantic_model['name']})")
     if data["suggestion"]:
         click.echo("")
         click.echo(f"Next step: {data['suggestion']}")
@@ -4166,9 +4186,14 @@ def suggest_links(ctx: click.Context, path: str, limit: int, as_json: bool):
 
 @cli.command()
 @click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
+@click.option(
+    "--download-model",
+    is_flag=True,
+    help="Allow downloading the semantic embedding model before indexing",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def reindex(ctx: click.Context, scope: str | None, as_json: bool):
+def reindex(ctx: click.Context, scope: str | None, download_model: bool, as_json: bool):
     """Rebuild search indices from all markdown files.
 
     By default, indexes entries from both project and user KBs.
@@ -4177,6 +4202,7 @@ def reindex(ctx: click.Context, scope: str | None, as_json: bool):
     Examples:
       mx reindex                # Index all KBs
       mx reindex --scope=project # Index project KB only
+      mx reindex --download-model # Download/cache semantic model first
       mx reindex --json
     """
     from .config import ConfigurationError, get_kb_root
@@ -4190,9 +4216,11 @@ def reindex(ctx: click.Context, scope: str | None, as_json: bool):
     if not as_json:
         scope_msg = f"{scope} KB" if scope else "all KBs"
         click.echo(f"Reindexing {scope_msg}...")
+        if download_model:
+            click.echo("Semantic model download is allowed for this run.")
 
     try:
-        result = run_async(core_reindex(scope=scope))
+        result = run_async(core_reindex(scope=scope, allow_model_download=download_model))
     except Exception as exc:
         # Match mx search behavior: no traceback, but preserve the underlying message.
         _handle_error(ctx, exc)

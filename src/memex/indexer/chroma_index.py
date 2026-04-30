@@ -1,7 +1,8 @@
 """ChromaDB-based semantic search index with embeddings."""
 
-import logging
 import inspect
+import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -23,13 +24,18 @@ class ChromaIndex:
 
     COLLECTION_NAME = "kb_chunks"
 
-    def __init__(self, index_dir: Path | None = None):
+    def __init__(self, index_dir: Path | None = None, allow_model_download: bool | None = None):
         """Initialize the Chroma index.
 
         Args:
             index_dir: Directory for index storage. Defaults to INDEX_ROOT/chroma/.
+            allow_model_download: If True, allow sentence-transformers to download
+                the embedding model when it is not already cached.
         """
         self._index_dir = index_dir or get_index_root() / "chroma"
+        if allow_model_download is None:
+            allow_model_download = _env_truthy("MEMEX_ALLOW_MODEL_DOWNLOAD")
+        self._allow_model_download = allow_model_download
         self._client: ClientAPI | None = None
         self._collection: chromadb.Collection | None = None
         self._model: SentenceTransformer | None = None
@@ -41,17 +47,24 @@ class ChromaIndex:
             from sentence_transformers import SentenceTransformer
 
             kwargs: dict[str, Any] = {}
-            try:
-                if "local_files_only" in inspect.signature(SentenceTransformer.__init__).parameters:
-                    kwargs["local_files_only"] = True
-            except (TypeError, ValueError):
-                pass
+            if not self._allow_model_download:
+                try:
+                    model_params = inspect.signature(SentenceTransformer.__init__).parameters
+                    if "local_files_only" in model_params:
+                        kwargs["local_files_only"] = True
+                except (TypeError, ValueError):
+                    pass
 
             try:
                 self._model = SentenceTransformer(EMBEDDING_MODEL, **kwargs)
             except Exception as exc:
+                if self._allow_model_download:
+                    raise RuntimeError(
+                        f"Semantic model unavailable; failed to load or download {EMBEDDING_MODEL}"
+                    ) from exc
                 raise RuntimeError(
-                    "Semantic model unavailable; install/cached model required for semantic search"
+                    "Semantic model unavailable; cached model required for semantic search. "
+                    "Run `mx reindex --download-model` once to cache it."
                 ) from exc
         return self._model
 
@@ -62,10 +75,8 @@ class ChromaIndex:
 
         import shutil
 
-        import chromadb
-
         self._index_dir.mkdir(parents=True, exist_ok=True)
-        self._client = chromadb.PersistentClient(path=str(self._index_dir))
+        self._client = self._new_client()
         try:
             self._collection = self._client.get_or_create_collection(
                 name=self.COLLECTION_NAME,
@@ -76,12 +87,22 @@ class ChromaIndex:
             del self._client
             shutil.rmtree(self._index_dir, ignore_errors=True)
             self._index_dir.mkdir(parents=True, exist_ok=True)
-            self._client = chromadb.PersistentClient(path=str(self._index_dir))
+            self._client = self._new_client()
             self._collection = self._client.get_or_create_collection(
                 name=self.COLLECTION_NAME,
                 metadata={"hnsw:space": "cosine"},
             )
         return self._collection
+
+    def _new_client(self) -> "ClientAPI":
+        """Create a Chroma client without anonymous product telemetry."""
+        import chromadb
+        from chromadb.config import Settings
+
+        return chromadb.PersistentClient(
+            path=str(self._index_dir),
+            settings=Settings(anonymized_telemetry=False),
+        )
 
     def _get_embedding_cache(self) -> EmbeddingCache:
         if self._embedding_cache is None:
@@ -445,3 +466,25 @@ class ChromaIndex:
         self._get_model()
         # Initialize the collection
         self._get_collection()
+
+
+def _env_truthy(name: str) -> bool:
+    value = os.environ.get(name, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def semantic_model_cached() -> bool:
+    """Return whether the configured semantic model is available from local cache."""
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        kwargs: dict[str, Any] = {}
+        try:
+            if "local_files_only" in inspect.signature(SentenceTransformer.__init__).parameters:
+                kwargs["local_files_only"] = True
+        except (TypeError, ValueError):
+            pass
+        SentenceTransformer(EMBEDDING_MODEL, **kwargs)
+    except Exception:
+        return False
+    return True

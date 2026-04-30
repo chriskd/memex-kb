@@ -172,6 +172,24 @@ def test_version_option(runner):
 class TestDoctorCommand:
     """Tests for `mx doctor`."""
 
+    def test_doctor_reports_uncached_semantic_model(self, runner, tmp_kb, monkeypatch):
+        """`mx doctor` distinguishes installed semantic deps from cached model availability."""
+
+        def fake_find_spec(name: str):
+            if name in {"whoosh", "chromadb", "sentence_transformers"}:
+                return object()
+            return None
+
+        monkeypatch.setattr("importlib.util.find_spec", fake_find_spec)
+        monkeypatch.setattr("memex.indexer.chroma_index.semantic_model_cached", lambda: False)
+
+        result = runner.invoke(cli, ["doctor"])
+
+        assert result.exit_code == 0
+        assert "semantic model:" in result.output
+        assert "MISSING CACHE" in result.output
+        assert "mx reindex --download-model" in result.output
+
     def test_timestamps_report_json(self, runner, tmp_kb, monkeypatch):
         """`mx doctor --timestamps --json` reports missing/invalid timestamps."""
         bad_entry = tmp_kb / "general" / "bad.md"
@@ -2464,6 +2482,26 @@ class TestReindexCommand:
 
         assert result.exit_code == 0
         assert "Indexed 50 entries" in result.output
+
+    @patch("memex.config.get_kb_root")
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_reindex_download_model_option(
+        self, mock_run_async, mock_get_kb_root, runner, tmp_path
+    ):
+        """--download-model allows the core reindex path to warm the semantic model cache."""
+        mock_get_kb_root.return_value = tmp_path
+        mock_result = MagicMock()
+        mock_result.kb_files = 1
+        mock_result.whoosh_docs = 1
+        mock_result.chroma_docs = 1
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["reindex", "--download-model"])
+
+        assert result.exit_code == 0
+        assert "Semantic model download is allowed" in result.output
+        assert mock_run_async.last_coro_locals is not None
+        assert mock_run_async.last_coro_locals["allow_model_download"] is True
 
     def test_reindex_no_kb_configured(self, runner):
         """Reindex shows friendly error when no KB configured."""

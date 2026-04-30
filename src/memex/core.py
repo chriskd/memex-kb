@@ -295,14 +295,14 @@ def _maybe_initialize_searcher(searcher: "HybridSearcher") -> None:
     _searcher_ready = True
 
 
-def get_searcher() -> "HybridSearcher":
+def get_searcher(allow_model_download: bool = False) -> "HybridSearcher":
     """Get the HybridSearcher, initializing lazily.
 
     Raises:
         MemexError: If optional search dependencies are not installed.
     """
-    global _searcher
-    if _searcher is None:
+    global _searcher, _searcher_ready
+    if _searcher is None or allow_model_download:
         from .errors import MemexError
 
         def _install_hint(missing: str | None) -> str:
@@ -330,7 +330,9 @@ def get_searcher() -> "HybridSearcher":
             ) from exc
 
         try:
-            _searcher = HybridSearcher()
+            _searcher = HybridSearcher(allow_model_download=allow_model_download)
+            if allow_model_download:
+                _searcher_ready = False
         except ModuleNotFoundError as exc:
             missing = getattr(exc, "name", None) or str(exc)
             raise MemexError.dependency_missing("search", missing, suggestion=_install_hint(missing)) from exc
@@ -2730,18 +2732,19 @@ async def backlinks(path: str) -> list[str]:
     return all_backlinks.get(path_key, [])
 
 
-async def reindex(scope: str | None = None) -> IndexStatus:
+async def reindex(scope: str | None = None, allow_model_download: bool = False) -> IndexStatus:
     """Rebuild search indices.
 
     Args:
         scope: Filter to specific scope - "project", "user", or None for all.
+        allow_model_download: Allow semantic model download before indexing.
 
     Returns:
         IndexStatus with document counts.
     """
     from .config import get_kb_roots_for_indexing
 
-    searcher = get_searcher()
+    searcher = get_searcher(allow_model_download=allow_model_download)
     kb_roots = get_kb_roots_for_indexing(scope=scope)
 
     # Index all KBs

@@ -597,6 +597,7 @@ Rebuild search indices.
 
 ```bash
 mx reindex
+mx reindex --download-model    # Download/cache semantic model before indexing
 mx reindex --json
 ```
 

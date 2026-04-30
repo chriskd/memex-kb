@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import pytest
+
 from memex.indexer.chroma_index import ChromaIndex
 from memex.indexer.embedding_cache import EmbeddingCache, hash_embedding_text
 from memex.models import DocumentChunk, EntryMetadata
@@ -77,3 +79,29 @@ def test_chroma_index_reuses_embedding_cache(tmp_path, monkeypatch) -> None:
     metadata0 = metadatas[0]
     assert isinstance(metadata0, dict)
     assert "embedding_hash" in metadata0
+
+
+@pytest.mark.semantic
+def test_chroma_client_disables_telemetry_after_schema_reset(tmp_path, monkeypatch) -> None:
+    import chromadb
+
+    captured_settings = []
+    calls = {"count": 0}
+
+    class FakeClient:
+        def __init__(self, path: str, settings) -> None:
+            captured_settings.append(settings)
+
+        def get_or_create_collection(self, name: str, metadata: dict[str, str]) -> DummyCollection:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise KeyError("old schema")
+            return DummyCollection()
+
+    monkeypatch.setattr(chromadb, "PersistentClient", FakeClient)
+
+    chroma = ChromaIndex(index_dir=tmp_path / "chroma")
+    chroma._get_collection()
+
+    assert len(captured_settings) == 2
+    assert all(settings.anonymized_telemetry is False for settings in captured_settings)
