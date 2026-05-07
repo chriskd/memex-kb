@@ -55,6 +55,56 @@ class NoopSearcher:
         return None
 
 
+def setup_nested_parent_child_kbs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """Create nested project KBs where the child can opt into nearest parent search."""
+    parent_root = tmp_path / "agents"
+    parent_root.mkdir()
+    parent_kb = parent_root / "kb"
+    parent_kb.mkdir()
+    (parent_root / ".kbconfig").write_text(
+        "kb_path: ./kb\nscope_name: agents\n",
+        encoding="utf-8",
+    )
+
+    child_root = parent_root / "project"
+    child_root.mkdir()
+    child_kb = child_root / "kb"
+    child_kb.mkdir()
+    (child_root / ".kbconfig").write_text("kb_path: ./kb\n", encoding="utf-8")
+
+    user_kb = tmp_path / "user" / "kb"
+    user_kb.mkdir(parents=True)
+
+    monkeypatch.setenv("MEMEX_USER_KB_ROOT", str(user_kb))
+    monkeypatch.delenv("MEMEX_SKIP_PROJECT_KB", raising=False)
+    monkeypatch.chdir(child_root)
+
+    try:
+        from memex.context import _context_cache, _kbconfig_cache
+
+        _context_cache.clear()
+        _kbconfig_cache.clear()
+    except (ImportError, AttributeError):
+        pass
+
+    try:
+        from memex import core
+
+        core._searcher = None
+        core._searcher_ready = False
+        core._searcher_root_signature = None
+    except (ImportError, AttributeError):
+        pass
+
+    return {
+        "parent_root": parent_root,
+        "parent_kb": parent_kb,
+        "child_root": child_root,
+        "child_kb": child_kb,
+        "user_kb": user_kb,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Command Lists
 # ─────────────────────────────────────────────────────────────────────────────
@@ -521,6 +571,63 @@ class TestSearchCommand:
             assert data["error"] == "DEPENDENCY_MISSING"
             assert data["details"]["feature"] == "semantic search"
             assert "chromadb" in data["details"]["missing"]
+
+    @patch("memex.config.get_kb_root")
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_search_parents_nearest_passes_parent_mode(
+        self, mock_run_async, mock_get_kb_root, runner, tmp_path
+    ):
+        mock_get_kb_root.return_value = tmp_path
+        mock_result = MagicMock()
+        mock_result.results = []
+        mock_result.warnings = []
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["search", "shared", "--parents=nearest"])
+
+        assert result.exit_code == 0, result.output
+        assert mock_run_async.last_coro_locals is not None
+        assert mock_run_async.last_coro_locals["parent_kbs"] == "nearest"
+
+    @patch("memex.config.get_kb_root")
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_search_parent_config_is_opt_in(
+        self, mock_run_async, mock_get_kb_root, runner, tmp_path, monkeypatch
+    ):
+        paths = setup_nested_parent_child_kbs(tmp_path, monkeypatch)
+        mock_get_kb_root.return_value = paths["child_kb"]
+        mock_result = MagicMock()
+        mock_result.results = []
+        mock_result.warnings = []
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["search", "shared"])
+
+        assert result.exit_code == 0, result.output
+        assert mock_run_async.last_coro_locals is not None
+        assert mock_run_async.last_coro_locals["parent_kbs"] == "none"
+
+    @patch("memex.config.get_kb_root")
+    @patch("memex.cli.run_async", new_callable=CoroutineClosingMock)
+    def test_search_parent_config_enables_nearest(
+        self, mock_run_async, mock_get_kb_root, runner, tmp_path, monkeypatch
+    ):
+        paths = setup_nested_parent_child_kbs(tmp_path, monkeypatch)
+        (paths["child_root"] / ".kbconfig").write_text(
+            "kb_path: ./kb\nparent_kbs: nearest\n",
+            encoding="utf-8",
+        )
+        mock_get_kb_root.return_value = paths["child_kb"]
+        mock_result = MagicMock()
+        mock_result.results = []
+        mock_result.warnings = []
+        mock_run_async.return_value = mock_result
+
+        result = runner.invoke(cli, ["search", "shared"])
+
+        assert result.exit_code == 0, result.output
+        assert mock_run_async.last_coro_locals is not None
+        assert mock_run_async.last_coro_locals["parent_kbs"] == "nearest"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2826,6 +2933,26 @@ ok
 
 
 class TestScopedPathsMultiKB:
+    def test_get_reads_named_parent_scope_and_parent_alias(self, runner, tmp_path, monkeypatch):
+        from conftest import create_entry
+
+        paths = setup_nested_parent_child_kbs(tmp_path, monkeypatch)
+        create_entry(
+            paths["parent_kb"],
+            "guides/shared.md",
+            "Shared Parent",
+            "parent body",
+            ["test"],
+        )
+
+        named = runner.invoke(cli, ["get", "@agents/guides/shared.md", "--metadata"])
+        assert named.exit_code == 0, named.output
+        assert "Title:    Shared Parent" in named.output
+
+        alias = runner.invoke(cli, ["get", "@parent/guides/shared.md", "--metadata"])
+        assert alias.exit_code == 0, alias.output
+        assert "Title:    Shared Parent" in alias.output
+
     def test_get_disambiguates_scopes_with_prefixes(self, runner, multi_kb):
         from conftest import create_entry
 

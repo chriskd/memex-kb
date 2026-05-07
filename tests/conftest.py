@@ -115,6 +115,7 @@ tags:
 
         core._searcher = None
         core._searcher_ready = False
+        core._searcher_root_signature = None
     except (ImportError, AttributeError):
         pass
 
@@ -145,6 +146,7 @@ tags:
 
         core._searcher = None
         core._searcher_ready = False
+        core._searcher_root_signature = None
     except (ImportError, AttributeError):
         pass
 
@@ -233,6 +235,7 @@ def multi_kb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]
 
         core._searcher = None
         core._searcher_ready = False
+        core._searcher_root_signature = None
     except (ImportError, AttributeError):
         pass
 

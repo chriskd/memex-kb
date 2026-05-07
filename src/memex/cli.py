@@ -2632,7 +2632,13 @@ def _score_confidence_short(score: float) -> str:
 @click.option("--strict", is_flag=True, help="Disable semantic fallback for keyword mode")
 @click.option("--terse", is_flag=True, help="Output paths only (one per line)")
 @click.option("--full-titles", is_flag=True, help="Show full titles without truncation")
-@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
+@click.option("--scope", help="Limit to specific KB scope")
+@click.option(
+    "--parents",
+    type=click.Choice(["none", "nearest"]),
+    default=None,
+    help="Parent KB inclusion for this search (overrides .kbconfig parent_kbs)",
+)
 @click.option(
     "--include-neighbors",
     is_flag=True,
@@ -2658,6 +2664,7 @@ def search(
     terse: bool,
     full_titles: bool,
     scope: str | None,
+    parents: str | None,
     include_neighbors: bool,
     neighbor_depth: int,
     as_json: bool,
@@ -2695,6 +2702,7 @@ def search(
       mx search "config" --min-score=0.5          # Only confident results
       mx search "query" --strict                  # No semantic fallback
       mx search "query" --scope=project           # Project KB only
+      mx search "query" --parents=nearest         # Include nearest parent KB
       mx search "query" --include-neighbors       # Include linked entries
       mx search "query" --include-neighbors --neighbor-depth=2
 
@@ -2703,7 +2711,7 @@ def search(
       mx get  - Read a specific entry by path
       mx list - List entries with optional filters
     """
-    from .config import ConfigurationError, get_kb_root
+    from .config import ConfigurationError, get_kb_root, resolve_parent_kbs_mode
     from .core import expand_search_with_neighbors
     from .core import search as core_search
 
@@ -2720,6 +2728,7 @@ def search(
 
     # Cast mode to literal type (validated by click.Choice above)
     mode_literal = cast(Literal["hybrid", "keyword", "semantic"], mode)
+    resolved_parents = resolve_parent_kbs_mode(parents)
 
     try:
         result = run_async(
@@ -2731,6 +2740,7 @@ def search(
                 include_content=content,
                 strict=strict,
                 scope=scope,
+                parent_kbs=resolved_parents,
             )
         )
     except Exception as exc:
@@ -2764,6 +2774,12 @@ def search(
     if min_score is not None:
         filtered_results = [r for r in result.results if r.score >= min_score]
 
+    quiet = bool(ctx.obj and ctx.obj.get("quiet"))
+    search_warnings = getattr(result, "warnings", []) or []
+    if search_warnings and not quiet and not as_json:
+        for warning in search_warnings:
+            click.echo(f"Warning: {warning}", err=True)
+
     # Expand with neighbors if requested
     if include_neighbors:
         expanded_results = run_async(
@@ -2771,6 +2787,7 @@ def search(
                 results=filtered_results,
                 depth=neighbor_depth,
                 include_content=content,
+                parent_kbs=resolved_parents,
             )
         )
 
@@ -6377,9 +6394,14 @@ def _build_schema() -> dict:
                     },
                     {
                         "name": "--scope",
-                        "type": "choice",
-                        "choices": ["project", "user"],
+                        "type": "string",
                         "description": "Limit to specific KB scope",
+                    },
+                    {
+                        "name": "--parents",
+                        "type": "choice",
+                        "choices": ["none", "nearest"],
+                        "description": "Parent KB inclusion for this search",
                     },
                     {"name": "--json", "type": "flag", "description": "Output as JSON"},
                 ],
@@ -6394,6 +6416,7 @@ def _build_schema() -> dict:
                     'mx search "deployment"',
                     'mx search "docker" --tags=infrastructure',
                     'mx search "api" --scope=project',
+                    'mx search "workflow" --parents=nearest',
                 ],
             },
             "get": {
@@ -7630,7 +7653,13 @@ def show_alias(ctx, path: str | None, by_title: str | None, as_json: bool, metad
 @click.option("--strict", is_flag=True, help="Disable semantic fallback for keyword mode")
 @click.option("--terse", is_flag=True, help="Output paths only (one per line)")
 @click.option("--full-titles", is_flag=True, help="Show full titles without truncation")
-@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to specific KB scope")
+@click.option("--scope", help="Limit to specific KB scope")
+@click.option(
+    "--parents",
+    type=click.Choice(["none", "nearest"]),
+    default=None,
+    help="Parent KB inclusion for this search",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def find_alias(
@@ -7645,6 +7674,7 @@ def find_alias(
     terse: bool,
     full_titles: bool,
     scope: str | None,
+    parents: str | None,
     as_json: bool,
 ):
     """Alias for mx search."""
@@ -7660,6 +7690,9 @@ def find_alias(
         terse=terse,
         full_titles=full_titles,
         scope=scope,
+        parents=parents,
+        include_neighbors=False,
+        neighbor_depth=1,
         as_json=as_json,
     )
 

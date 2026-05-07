@@ -5,6 +5,7 @@ Magic numbers are documented here rather than scattered throughout the codebase.
 """
 
 import os
+import re
 from pathlib import Path
 
 
@@ -12,6 +13,13 @@ class ConfigurationError(Exception):
     """Raised when required configuration is missing."""
 
     pass
+
+
+PARENT_KB_NONE = "none"
+PARENT_KB_NEAREST = "nearest"
+PARENT_KB_MODES = {PARENT_KB_NONE, PARENT_KB_NEAREST}
+RESERVED_SCOPE_NAMES = {"project", "user", "parent"}
+_SCOPE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
 
 
 def get_project_kb_root() -> Path | None:
@@ -89,11 +97,48 @@ def get_kb_roots(scope: str | None = None) -> list[Path]:
         return roots
 
 
+def normalize_parent_kbs(value: str | None) -> str:
+    """Normalize a parent_kbs mode value."""
+    if value is None:
+        return PARENT_KB_NONE
+    mode = str(value).strip().lower()
+    if mode not in PARENT_KB_MODES:
+        return PARENT_KB_NONE
+    return mode
+
+
+def get_configured_parent_kbs_mode() -> str:
+    """Read parent_kbs from the active project .kbconfig."""
+    project_config = _discover_project_config()
+    if not project_config:
+        return PARENT_KB_NONE
+    config_file, _ = project_config
+    data = _load_project_config_data(config_file)
+    return normalize_parent_kbs(data.get("parent_kbs") if data else None)
+
+
+def resolve_parent_kbs_mode(parent_kbs: str | None = None) -> str:
+    """Resolve CLI/config/default parent KB mode.
+
+    None means use active project .kbconfig. Explicit invalid values are treated
+    as none; CLI choices should normally prevent invalid explicit values.
+    """
+    if parent_kbs is not None:
+        return normalize_parent_kbs(parent_kbs)
+    return get_configured_parent_kbs_mode()
+
+
+def get_parent_kb_warnings(parent_kbs: str = PARENT_KB_NONE) -> list[str]:
+    """Return warnings for parent KB discovery/labeling."""
+    info = _get_parent_kb_info(parent_kbs)
+    return list(info[2]) if info else []
+
+
 def get_kb_root_by_scope(scope: str) -> Path:
     """Get a specific KB root by scope name.
 
     Args:
-        scope: Either "project" or "user".
+        scope: "project", "user", or a discovered parent KB scope.
 
     Returns:
         Path to the requested KB.
@@ -116,7 +161,15 @@ def get_kb_root_by_scope(scope: str) -> Path:
                 "No user KB found. Run 'mx init --user' to create one at ~/.memex/kb/"
             )
         return kb_root
+    elif scope == "parent":
+        parent_info = _get_parent_kb_info(PARENT_KB_NEAREST)
+        if not parent_info:
+            raise ConfigurationError("No parent KB found for @parent/ path")
+        return parent_info[1]
     else:
+        parent_info = _get_parent_kb_info(PARENT_KB_NEAREST)
+        if parent_info and scope == parent_info[0]:
+            return parent_info[1]
         raise ValueError(f"Invalid scope '{scope}'. Must be 'project' or 'user'.")
 
 
@@ -194,14 +247,8 @@ def resolve_scoped_path(path: str) -> Path:
     """
     scope, relative = parse_scoped_path(path)
 
-    if scope == "project":
-        kb_root = get_project_kb_root()
-        if not kb_root:
-            raise ConfigurationError("No project KB found for @project/ path")
-    elif scope == "user":
-        kb_root = get_user_kb_root()
-        if not kb_root:
-            raise ConfigurationError("No user KB found for @user/ path")
+    if scope is not None:
+        kb_root = get_kb_root_by_scope(scope)
     else:
         # No scope prefix - use primary KB
         kb_root = get_kb_root()
@@ -209,37 +256,103 @@ def resolve_scoped_path(path: str) -> Path:
     return kb_root / relative
 
 
-def get_kb_roots_for_indexing(scope: str | None = None) -> list[tuple[str | None, Path]]:
+def get_kb_roots_for_indexing(
+    scope: str | None = None,
+    parent_kbs: str = PARENT_KB_NONE,
+) -> list[tuple[str | None, Path]]:
     """Get KB roots formatted for indexing (with scope labels).
 
     Args:
-        scope: Filter to specific scope - "project", "user", or None for all.
+        scope: Filter to a specific active scope, or None for all.
+        parent_kbs: Parent KB inclusion mode for read/search root sets.
 
     Returns:
         List of (scope, path) tuples for use with HybridSearcher.reindex().
     """
-    project_kb = get_project_kb_root()
-    user_kb = get_user_kb_root()
+    roots: list[tuple[str, Path]] = []
+    seen_paths: set[Path] = set()
 
-    # If only one KB exists, use single-KB mode (no scope prefix)
-    if project_kb and not user_kb:
-        return [(None, project_kb)]
-    if user_kb and not project_kb:
-        return [(None, user_kb)]
+    def add_root(label: str, path: Path | None) -> None:
+        if path is None:
+            return
+        resolved = path.resolve()
+        if resolved in seen_paths:
+            return
+        seen_paths.add(resolved)
+        roots.append((label, path))
 
-    # Multi-KB mode: filter by scope or return both
-    if scope == "project":
-        return [("project", project_kb)] if project_kb else []
-    elif scope == "user":
-        return [("user", user_kb)] if user_kb else []
-    else:
-        # Return both KBs
-        result = []
-        if project_kb:
-            result.append(("project", project_kb))
-        if user_kb:
-            result.append(("user", user_kb))
-        return result
+    add_root("project", get_project_kb_root())
+
+    parent_info = _get_parent_kb_info(parent_kbs)
+    if parent_info:
+        add_root(parent_info[0], parent_info[1])
+
+    add_root("user", get_user_kb_root())
+
+    if scope is not None:
+        if scope == "parent" and parent_info:
+            parent_path = parent_info[1].resolve()
+            return [(label, path) for label, path in roots if path.resolve() == parent_path]
+        return [(label, path) for label, path in roots if label == scope]
+
+    if len(roots) == 1:
+        return [(None, roots[0][1])]
+    return [(label, path) for label, path in roots]
+
+
+def _load_project_config_data(config_file: Path) -> dict:
+    """Read a project .kbconfig as a mapping."""
+    import yaml
+
+    try:
+        content = config_file.read_text(encoding="utf-8")
+        data = yaml.safe_load(content) or {}
+        return data if isinstance(data, dict) else {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def _is_valid_scope_name(value: object) -> bool:
+    return isinstance(value, str) and bool(_SCOPE_NAME_RE.fullmatch(value))
+
+
+def _parent_scope_label(config_file: Path) -> tuple[str, list[str]]:
+    data = _load_project_config_data(config_file)
+    scope_name = data.get("scope_name")
+    if not scope_name:
+        return "parent", []
+    if _is_valid_scope_name(scope_name) and scope_name not in RESERVED_SCOPE_NAMES:
+        return str(scope_name), []
+    return (
+        "parent",
+        [
+            f"Ignoring invalid parent scope_name '{scope_name}'; "
+            "using @parent for parent KB results."
+        ],
+    )
+
+
+def _get_parent_kb_info(parent_kbs: str) -> tuple[str, Path, list[str]] | None:
+    """Return (scope_label, kb_path, warnings) for the nearest parent KB."""
+    if normalize_parent_kbs(parent_kbs) != PARENT_KB_NEAREST:
+        return None
+
+    project_config = _discover_project_config()
+    if not project_config:
+        return None
+
+    active_config, _ = project_config
+    start_dir = active_config.parent.parent
+    parent_config = _discover_project_config(
+        start_dir=start_dir,
+        max_depth=MAX_CONTEXT_SEARCH_DEPTH,
+    )
+    if not parent_config:
+        return None
+
+    parent_config_file, parent_kb = parent_config
+    label, warnings = _parent_scope_label(parent_config_file)
+    return label, parent_kb, warnings
 
 
 def _discover_project_config(

@@ -44,13 +44,17 @@ already have raw Markdown and want Memex to infer the metadata.
 ```bash
 mx search "stash"
 mx search "stash" --scope=project
+mx search "stash" --parents=nearest
 mx search "save work in progress" --strict
 mx search "stash" --include-neighbors --neighbor-depth=2
 mx get guides/git-stash-workflow.md
 mx get guides/git-stash-workflow.md --metadata
 ```
 
-When both KBs exist, results are prefixed with `@project/...` and `@user/...`.
+When both project and user KBs exist, results are prefixed with `@project/...` and `@user/...`.
+Nested project KBs can opt into nearest parent KB search with `parent_kbs: nearest` in the child
+`.kbconfig`, or per command with `mx search --parents=nearest`. Parent results use `@parent/...`
+unless the parent `.kbconfig` sets a valid `scope_name`.
 
 ## Keep It Healthy
 

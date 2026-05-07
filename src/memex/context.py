@@ -141,6 +141,12 @@ class KBContext:
     project_kb: str | None = None
     """Relative path to KB directory for this project (e.g., './kb')."""
 
+    parent_kbs: str | None = None
+    """Parent KB inclusion mode for search (e.g., 'nearest')."""
+
+    scope_name: str | None = None
+    """Optional scope label when this KB is included as a parent KB."""
+
     publish_base_url: str | None = None
     """Base URL for published site (e.g., '/repo-name' for GitHub Pages subdirectory)."""
 
@@ -160,6 +166,8 @@ class KBContext:
             default_tags=data.get("default_tags", []),
             project=data.get("project"),
             project_kb=data.get("project_kb"),
+            parent_kbs=data.get("parent_kbs"),
+            scope_name=data.get("scope_name"),
             publish_base_url=data.get("publish_base_url"),
             publish_index_entry=data.get("publish_index_entry"),
             source_file=source_file,
@@ -306,6 +314,8 @@ def _load_kbconfig_as_context(config_path: Path) -> KBContext | None:
             "default_tags": data.get("default_tags", []),
             "project": data.get("project"),
             "project_kb": project_kb,
+            "parent_kbs": data.get("parent_kbs"),
+            "scope_name": data.get("scope_name"),
             "publish_base_url": data.get("publish_base_url"),
             "publish_index_entry": data.get("publish_index_entry"),
         }

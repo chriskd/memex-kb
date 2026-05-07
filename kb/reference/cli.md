@@ -45,6 +45,7 @@ mx search "query" --min-score=0.5    # Only confident results
 mx search "query" --content          # Include full content
 mx search "query" --strict           # No semantic fallback
 mx search "query" --scope=project    # Project KB only
+mx search "query" --parents=nearest  # Include nearest parent project KB
 mx search "query" --include-neighbors
 mx search "query" --include-neighbors --neighbor-depth=2
 mx search "query" --terse            # Paths only
@@ -61,7 +62,8 @@ mx search "query" --json             # JSON output
 - `--strict`: Disable semantic fallback
 - `--terse`: Output paths only
 - `--full-titles`: Show full titles without truncation
-- `--scope`: Limit to KB scope (project or user)
+- `--scope`: Limit to KB scope (project, user, or active parent scope)
+- `--parents`: Include parent KBs for this search (`none` or `nearest`)
 - `--include-neighbors`: Include semantic links + typed relations + wikilinks
 - `--neighbor-depth`: Neighbor traversal depth (default: 1)
 - `--json`: JSON output
@@ -73,6 +75,10 @@ When `--content` is used:
 - **Table output**: Shows the standard results table followed by a content section displaying full text for each result
 
 Without `--content`, only a brief snippet is shown (default behavior).
+
+Parent KB search is opt-in. Add `parent_kbs: nearest` to a child `.kbconfig`, or pass
+`--parents=nearest` per command. Parent results are scoped as `@parent/...` unless the parent
+`.kbconfig` sets a valid `scope_name`.
 
 **Notes:**
 - Query cannot be empty. An error is returned for empty or whitespace-only queries.
@@ -510,6 +516,16 @@ Common next step: set a default write directory so you can omit `--category` in 
 ```yaml
 # .kbconfig (project root)
 primary: guides
+```
+
+For nested project KBs:
+
+```yaml
+# child .kbconfig
+parent_kbs: nearest
+
+# parent .kbconfig
+scope_name: memex
 ```
 
 ## Automation Commands

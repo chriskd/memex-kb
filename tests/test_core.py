@@ -550,7 +550,7 @@ hi
         monkeypatch.setattr(
             core,
             "get_kb_roots_for_indexing",
-            lambda scope=None: [("project", project_kb), ("user", user_kb)],
+            lambda scope=None, parent_kbs="none": [("project", project_kb), ("user", user_kb)],
         )
 
         searcher = RecordingSearcher()
@@ -558,6 +558,58 @@ hi
 
         assert searcher.calls, "Expected lazy init to call reindex()"
         assert searcher.calls[0]["kb_roots"] == [("project", project_kb), ("user", user_kb)]
+        assert searcher.calls[0]["kb_root"] is None
+
+    def test_lazy_init_reindexes_when_parent_root_set_changes(self, tmp_path, monkeypatch):
+        """Changing parent inclusion should rebuild an already-populated index."""
+        from memex.models import IndexStatus
+
+        class RecordingSearcher:
+            semantic_available = False
+
+            def __init__(self):
+                self.calls = []
+
+            def status(self):
+                return IndexStatus(whoosh_docs=1, chroma_docs=0, kb_files=1, last_indexed=None)
+
+            def reindex(self, kb_root=None, kb_roots=None):
+                self.calls.append({"kb_root": kb_root, "kb_roots": kb_roots})
+
+        project_kb = tmp_path / "project" / "kb"
+        parent_kb = tmp_path / "kb"
+        project_kb.mkdir(parents=True)
+        parent_kb.mkdir(parents=True)
+        (project_kb / "a.md").write_text(
+            """---
+title: A
+tags: [test]
+created: 2024-01-15
+---
+
+hi
+""",
+            encoding="utf-8",
+        )
+
+        def roots(scope=None, parent_kbs="none"):
+            if parent_kbs == "nearest":
+                return [("project", project_kb), ("parent", parent_kb)]
+            return [(None, project_kb)]
+
+        monkeypatch.setattr(core, "get_kb_roots_for_indexing", roots)
+        monkeypatch.setattr(core, "_searcher_ready", True)
+        monkeypatch.setattr(
+            core,
+            "_searcher_root_signature",
+            ((None, str(project_kb.resolve())),),
+        )
+
+        searcher = RecordingSearcher()
+        core._maybe_initialize_searcher(searcher, parent_kbs="nearest")
+
+        assert searcher.calls
+        assert searcher.calls[0]["kb_roots"] == [("project", project_kb), ("parent", parent_kb)]
         assert searcher.calls[0]["kb_root"] is None
 
     @pytest.mark.asyncio

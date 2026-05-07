@@ -20,8 +20,8 @@ from typing import TYPE_CHECKING, Literal, Protocol
 if TYPE_CHECKING:
     from .indexer import HybridSearcher
 
-from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
 from . import config as _config
+from .backlinks_cache import ensure_backlink_cache, rebuild_backlink_cache
 from .config import (
     DUPLICATE_DETECTION_LIMIT,
     DUPLICATE_DETECTION_MIN_SCORE,
@@ -69,8 +69,11 @@ def get_kb_root_by_scope(scope: str) -> Path:
     return _config.get_kb_root_by_scope(scope)
 
 
-def get_kb_roots_for_indexing(scope: str | None = None) -> list[tuple[str | None, Path]]:
-    return _config.get_kb_roots_for_indexing(scope=scope)
+def get_kb_roots_for_indexing(
+    scope: str | None = None,
+    parent_kbs: str = "none",
+) -> list[tuple[str | None, Path]]:
+    return _config.get_kb_roots_for_indexing(scope=scope, parent_kbs=parent_kbs)
 
 
 def get_project_kb_root() -> Path | None:
@@ -119,6 +122,7 @@ class DuplicateSearcher(Protocol):
 
 _searcher: "HybridSearcher | None" = None
 _searcher_ready = False
+_searcher_root_signature: tuple[tuple[str | None, str], ...] | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -259,22 +263,30 @@ def get_actor_identity() -> str | None:
     return None
 
 
-def _maybe_initialize_searcher(searcher: "HybridSearcher") -> None:
+def _roots_signature(kb_roots: list[tuple[str | None, Path]]) -> tuple[tuple[str | None, str], ...]:
+    return tuple((scope, str(root.resolve())) for scope, root in kb_roots)
+
+
+def _maybe_initialize_searcher(
+    searcher: "HybridSearcher",
+    parent_kbs: str = "none",
+) -> None:
     """Ensure search indices are populated before first query."""
-    global _searcher_ready
-    if _searcher_ready:
+    global _searcher_ready, _searcher_root_signature
+    kb_roots = get_kb_roots_for_indexing(parent_kbs=parent_kbs)
+    root_signature = _roots_signature(kb_roots)
+    if _searcher_ready and _searcher_root_signature == root_signature:
         return
 
     status = searcher.status()
     semantic_available = getattr(searcher, "semantic_available", True)
     needs_keyword = status.whoosh_docs == 0
     needs_semantic = semantic_available and status.chroma_docs == 0
-    if needs_keyword or needs_semantic:
+    needs_root_refresh = _searcher_root_signature != root_signature
+    if needs_keyword or needs_semantic or needs_root_refresh:
         # In multi-KB mode we must reindex with scope-prefixed paths, otherwise
         # search results become ambiguous and follow-up commands (get/delete/etc.)
         # can't reliably target the right KB.
-        kb_roots = get_kb_roots_for_indexing()
-
         def _has_entries(root: Path) -> bool:
             try:
                 for p in root.rglob("*.md"):
@@ -284,7 +296,8 @@ def _maybe_initialize_searcher(searcher: "HybridSearcher") -> None:
                 return False
             return False
 
-        if any(root.exists() and _has_entries(root) for _scope, root in kb_roots):
+        has_entries = any(root.exists() and _has_entries(root) for _scope, root in kb_roots)
+        if kb_roots and (has_entries or needs_root_refresh):
             if any(scope_label for scope_label, _ in kb_roots):
                 searcher.reindex(kb_roots=kb_roots)
             else:
@@ -293,9 +306,13 @@ def _maybe_initialize_searcher(searcher: "HybridSearcher") -> None:
                 searcher.reindex(kb_root)
 
     _searcher_ready = True
+    _searcher_root_signature = root_signature
 
 
-def get_searcher(allow_model_download: bool = False) -> "HybridSearcher":
+def get_searcher(
+    allow_model_download: bool = False,
+    parent_kbs: str = "none",
+) -> "HybridSearcher":
     """Get the HybridSearcher, initializing lazily.
 
     Raises:
@@ -336,7 +353,7 @@ def get_searcher(allow_model_download: bool = False) -> "HybridSearcher":
         except ModuleNotFoundError as exc:
             missing = getattr(exc, "name", None) or str(exc)
             raise MemexError.dependency_missing("search", missing, suggestion=_install_hint(missing)) from exc
-    _maybe_initialize_searcher(_searcher)
+    _maybe_initialize_searcher(_searcher, parent_kbs=parent_kbs)
     return _searcher
 
 
@@ -502,11 +519,10 @@ def hydrate_content(results: list[SearchResult]) -> list[SearchResult]:
     if not results:
         return results
 
-    kb_root = get_kb_root()
     hydrated = []
 
     for result in results:
-        file_path = kb_root / result.path
+        file_path = resolve_scoped_path(result.path)
         content = None
 
         if file_path.exists():
@@ -1053,6 +1069,7 @@ async def search(
     kb_context: KBContext | None = None,
     strict: bool = False,
     scope: str | None = None,
+    parent_kbs: str | None = None,
 ) -> SearchResponse:
     """Search the knowledge base.
 
@@ -1068,12 +1085,14 @@ async def search(
         strict: If True, use a higher similarity threshold to filter out
                 low-confidence semantic matches. Prevents misleading scores
                 for gibberish or unrelated queries.
-        scope: Filter to specific scope - "project", "user", or None for all.
+        scope: Filter to a specific scope, or None for all active read scopes.
+        parent_kbs: Parent KB inclusion mode. None means read active .kbconfig.
 
     Returns:
         SearchResponse with results and optional warnings.
     """
-    searcher = get_searcher()
+    parent_kbs_mode = _config.resolve_parent_kbs_mode(parent_kbs)
+    searcher = get_searcher(parent_kbs=parent_kbs_mode)
     # Auto-detect project context for boosting entries from current project
     project_context = get_current_project()
     # Auto-discover KB context if not provided
@@ -1087,14 +1106,19 @@ async def search(
         kb_context=kb_context,
         strict=strict,
     )
-    warnings: list[str] = []
+    warnings: list[str] = _config.get_parent_kb_warnings(parent_kbs_mode)
 
     # Filter by scope if specified (matches @project/ or @user/ prefix in multi-KB mode)
     if scope:
-        is_multi_kb = any(scope_label for scope_label, _ in get_kb_roots_for_indexing())
+        available_roots = get_kb_roots_for_indexing(parent_kbs=parent_kbs_mode)
+        scoped_roots = get_kb_roots_for_indexing(scope=scope, parent_kbs=parent_kbs_mode)
+        if not scoped_roots:
+            results = []
+            return SearchResponse(results=results, warnings=warnings)
+        is_multi_kb = any(scope_label for scope_label, _ in available_roots)
         if is_multi_kb:
-            scope_prefix = f"@{scope}/"
-            results = [r for r in results if r.path.startswith(scope_prefix)]
+            scope_prefixes = [f"@{scope_label}/" for scope_label, _ in scoped_roots if scope_label]
+            results = [r for r in results if any(r.path.startswith(p) for p in scope_prefixes)]
         else:
             actual_scope: str | None = None
             if get_project_kb_root() and not get_user_kb_root():
@@ -1130,6 +1154,7 @@ async def expand_search_with_neighbors(
     results: list[SearchResult],
     depth: int = 1,
     include_content: bool = False,
+    parent_kbs: str = "none",
 ) -> list[dict]:
     """Expand search results to include linked entries (neighbors).
 
@@ -1143,6 +1168,7 @@ async def expand_search_with_neighbors(
                only direct neighbors are included. A depth of 2 includes
                neighbors of neighbors, etc.
         include_content: If True, include full document content in results.
+        parent_kbs: Parent KB inclusion mode used by the originating search.
 
     Returns:
         List of dicts with search result data plus is_neighbor and linked_from fields.
@@ -1160,7 +1186,7 @@ async def expand_search_with_neighbors(
         if not relative.endswith(".md"):
             relative = f"{relative}.md"
 
-        available_scopes = {scope for scope, _ in get_kb_roots_for_indexing()}
+        available_scopes = {scope for scope, _ in get_kb_roots_for_indexing(parent_kbs=parent_kbs)}
 
         # Explicitly scoped: only allow if that scope is available
         if scope_label is not None:
@@ -1175,7 +1201,7 @@ async def expand_search_with_neighbors(
 
     # Build title indexes per scope for wikilink resolution
     scope_indices = {}
-    for scope_label, kb_root in get_kb_roots_for_indexing():
+    for scope_label, kb_root in get_kb_roots_for_indexing(parent_kbs=parent_kbs):
         if kb_root.exists():
             scope_indices[scope_label] = build_title_index(kb_root, include_filename_index=True)
 

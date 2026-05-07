@@ -246,6 +246,10 @@ mx sessions hook claude --install --turns 5
 up the latest goal, progress, verification, blockers, and next steps without reading another
 harness's private session files.
 
+For nested KBs, add `parent_kbs: nearest` to the child `.kbconfig` to include the closest parent KB
+in search. Add `scope_name: memex` to the parent `.kbconfig` when you want parent results labeled
+as `@memex/...` instead of `@parent/...`.
+
 For Claude Code and Codex, install the generated `SessionStart` hook at startup/resume to load
 context. Add `--turns 5` to include a `UserPromptSubmit` hook that calls
 `mx sessions hook context --turns 5 --reminder`; the wrapper counts prompts per hook session and
