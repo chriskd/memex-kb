@@ -82,6 +82,13 @@ mx info
 mx context show
 mx context validate
 
+# Agent session handoffs
+mx sessions start --goal "Implement deployment cleanup" --harness codex
+mx sessions append --latest --summary "Updated deployment docs" --files README.md
+mx sessions append --latest --summary "Linked transcript" --transcript /tmp/session.jsonl
+mx sessions finish --latest --summary "Ready for review"
+mx sessions recent
+
 # Maintenance
 mx health
 mx doctor
@@ -120,8 +127,10 @@ Memex integrates with assistants in two layers:
 - `skills/memex-kb/` is the bundled reusable skill for harnesses that support `SKILL.md`.
 
 ```bash
-# Claude Code: install the session hook into machine-local settings
-mx session-context --install --install-path .claude/settings.local.json
+# Project-local hooks
+mx sessions hook claude --install --path .claude/settings.local.json
+mx sessions hook codex --install --path .codex/hooks.json
+mx sessions hook claude --install --turns 5
 
 # Claude Code native skill install from a repo checkout
 mkdir -p .claude/skills
@@ -137,10 +146,17 @@ python3 -c 'from importlib.resources import files; print(files("memex").joinpath
 # Portable helpers for any harness
 mx prime
 mx session-context
+mx sessions hook codex --instructions
+mx sessions hook codex --print
+mx sessions hook codex --print --turns 5
+mx sessions hook claude --print
 mx schema --compact
 mx batch < commands.txt
 mx --json-errors search "query"
 ```
+
+Hooks load context at session start. Add `--turns N` to install a periodic session-log reminder that
+asks the agent to append only the latest delta, not the whole session.
 
 For the full setup matrix, including Claude permissions, Codex skill conventions, and generic
 skill installation guidance, see `kb/guides/ai-integration.md`.

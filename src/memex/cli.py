@@ -1903,6 +1903,7 @@ def prime(as_json: bool, compact: bool, max_entries: int, max_recent: int, max_b
                 payload["project"] = session_result.project
                 payload["entries"] = session_result.entries
                 payload["recent_entries"] = session_result.recent_entries
+                payload["recent_sessions"] = session_result.recent_sessions
                 payload["cached"] = session_result.cached
             _emit_json(payload, compact=True, max_bytes=max_bytes)
         else:
@@ -1917,6 +1918,7 @@ def prime(as_json: bool, compact: bool, max_entries: int, max_recent: int, max_b
                 payload["project"] = session_result.project
                 payload["entries"] = session_result.entries
                 payload["recent_entries"] = session_result.recent_entries
+                payload["recent_sessions"] = session_result.recent_sessions
                 payload["cached"] = session_result.cached
             output(payload, as_json=True)
     else:
@@ -1946,7 +1948,7 @@ def prime(as_json: bool, compact: bool, max_entries: int, max_recent: int, max_b
 @click.option(
     "--install",
     is_flag=True,
-    help="Update the Claude settings file with the mx session-context SessionStart hook",
+    help="Update the Claude settings file with the quiet Memex SessionStart hook",
 )
 @click.option(
     "--install-path",
@@ -1978,6 +1980,7 @@ def session_context_command(
     Use --install to write the Claude Code SessionStart hook.
     """
     from .session_context import (
+        HOOK_CONTEXT_COMMAND,
         build_session_context,
         default_settings_path,
         install_session_hook,
@@ -1997,7 +2000,7 @@ def session_context_command(
         payload = {
             "installed": True,
             "settings_path": str(installed_path),
-            "command": "mx session-context",
+            "command": HOOK_CONTEXT_COMMAND,
         }
         if as_json:
             if compact:
@@ -2006,7 +2009,7 @@ def session_context_command(
                 output(payload, as_json=True)
         else:
             click.echo(f"✓ Updated Claude settings file at {installed_path}")
-            click.echo('SessionStart hook set to: "mx session-context"')
+            click.echo(f'SessionStart hook set to: "{HOOK_CONTEXT_COMMAND}"')
         return
 
     result = build_session_context(max_entries=max_entries, recent_limit=max_recent)
@@ -2015,6 +2018,7 @@ def session_context_command(
             "project": Path.cwd().name,
             "entries": [],
             "recent_entries": [],
+            "recent_sessions": [],
             "content": (
                 "## Memex Knowledge Base\n\n"
                 "No knowledge base is configured for this directory.\n\n"
@@ -2040,6 +2044,7 @@ def session_context_command(
                         "project": payload["project"],
                         "entries": payload["entries"],
                         "recent_entries": payload["recent_entries"],
+                        "recent_sessions": payload["recent_sessions"],
                         "cached": payload["cached"],
                         "kb_configured": payload["kb_configured"],
                         "suggested_commands": payload["suggested_commands"],
@@ -2060,6 +2065,7 @@ def session_context_command(
                     "project": result.project,
                     "entries": result.entries,
                     "recent_entries": result.recent_entries,
+                    "recent_sessions": result.recent_sessions,
                     "cached": result.cached,
                 },
                 compact=True,
@@ -2071,6 +2077,7 @@ def session_context_command(
                     "project": result.project,
                     "entries": result.entries,
                     "recent_entries": result.recent_entries,
+                    "recent_sessions": result.recent_sessions,
                     "content": result.content,
                     "cached": result.cached,
                 },
@@ -2078,6 +2085,405 @@ def session_context_command(
             )
     else:
         click.echo(result.content)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sessions (Agent Handoffs)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _resolve_optional_stdin_text(
+    *,
+    value: str | None,
+    stdin: bool,
+    field: str,
+    required: bool,
+) -> str | None:
+    if value and stdin:
+        raise UsageError(f"Only one of --{field} or --stdin can be used")
+    if stdin:
+        value = sys.stdin.read()
+    if value is not None:
+        value = value.strip()
+    if required and not value:
+        raise UsageError(f"Must provide --{field} or --stdin")
+    return value or None
+
+
+def _split_multi_values(values: tuple[str, ...]) -> list[str] | None:
+    items: list[str] = []
+    for value in values:
+        items.extend(part.strip() for part in value.split(",") if part.strip())
+    return items or None
+
+
+@cli.group()
+def sessions():
+    """Create and read portable agent session handoffs."""
+
+
+@sessions.command("start")
+@click.option("--goal", required=True, help="Session goal or task statement.")
+@click.option("--summary", help="Initial concise handoff summary.")
+@click.option("--stdin", "summary_stdin", is_flag=True, help="Read initial summary from stdin.")
+@click.option("--harness", help="Harness name, such as codex or claude.")
+@click.option("--transcript", help="Optional harness transcript/session reference path.")
+@click.option("--project", help="Project name override.")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Target KB scope.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def sessions_start(
+    ctx: click.Context,
+    goal: str,
+    summary: str | None,
+    summary_stdin: bool,
+    harness: str | None,
+    transcript: str | None,
+    project: str | None,
+    scope: str | None,
+    as_json: bool,
+):
+    """Start a new session handoff entry."""
+    from .session_log import start_session
+
+    try:
+        summary_value = _resolve_optional_stdin_text(
+            value=summary,
+            stdin=summary_stdin,
+            field="summary",
+            required=False,
+        )
+        record = run_async(
+            start_session(
+                goal=goal,
+                summary=summary_value,
+                harness=harness,
+                transcript=transcript,
+                project=project,
+                scope=scope,
+            )
+        )
+    except Exception as e:
+        _handle_error(ctx, e, fallback_message="Failed to start session handoff.")
+
+    payload = record.to_dict()
+    if as_json:
+        payload["schema_version"] = MX_JSON_SCHEMA_VERSION
+        payload["version"] = MEMEX_VERSION
+        output(payload, as_json=True)
+    else:
+        click.echo(f"Started session handoff: {record.path}")
+        click.echo(f"Next: mx sessions append {record.path} --summary \"...\"")
+
+
+@sessions.command("append")
+@click.argument("path", required=False)
+@click.option("--latest", is_flag=True, help="Append to the latest open session for this project.")
+@click.option("--summary", help="Concise progress summary.")
+@click.option("--stdin", "summary_stdin", is_flag=True, help="Read summary from stdin.")
+@click.option("--files", multiple=True, help="File paths touched; comma-separated or repeatable.")
+@click.option(
+    "--tests",
+    multiple=True,
+    help="Verification commands/results; comma-separated or repeatable.",
+)
+@click.option("--next", "next_steps", help="Next steps or handoff note.")
+@click.option("--transcript", help="Optional harness transcript/session reference path.")
+@click.option("--project", help="Project name override for --latest.")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="KB scope for --latest.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def sessions_append(
+    ctx: click.Context,
+    path: str | None,
+    latest: bool,
+    summary: str | None,
+    summary_stdin: bool,
+    files: tuple[str, ...],
+    tests: tuple[str, ...],
+    next_steps: str | None,
+    transcript: str | None,
+    project: str | None,
+    scope: str | None,
+    as_json: bool,
+):
+    """Append progress to an existing session handoff."""
+    from .session_log import append_session
+
+    try:
+        summary_value = _resolve_optional_stdin_text(
+            value=summary,
+            stdin=summary_stdin,
+            field="summary",
+            required=True,
+        )
+        assert summary_value is not None
+        record = run_async(
+            append_session(
+                path=path,
+                latest=latest,
+                summary=summary_value,
+                files=_split_multi_values(files),
+                tests=_split_multi_values(tests),
+                next_steps=next_steps,
+                transcript=transcript,
+                project=project,
+                scope=scope,
+            )
+        )
+    except Exception as e:
+        _handle_error(ctx, e, fallback_message="Failed to append session handoff.")
+
+    payload = record.to_dict()
+    if as_json:
+        payload["schema_version"] = MX_JSON_SCHEMA_VERSION
+        payload["version"] = MEMEX_VERSION
+        output(payload, as_json=True)
+    else:
+        click.echo(f"Appended to session handoff: {record.path}")
+
+
+@sessions.command("finish")
+@click.argument("path", required=False)
+@click.option("--latest", is_flag=True, help="Finish the latest open session for this project.")
+@click.option("--summary", help="Final session summary.")
+@click.option("--stdin", "summary_stdin", is_flag=True, help="Read summary from stdin.")
+@click.option("--files", multiple=True, help="File paths touched; comma-separated or repeatable.")
+@click.option(
+    "--tests",
+    multiple=True,
+    help="Verification commands/results; comma-separated or repeatable.",
+)
+@click.option("--next", "next_steps", help="Remaining next steps.")
+@click.option("--transcript", help="Optional harness transcript/session reference path.")
+@click.option("--project", help="Project name override for --latest.")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="KB scope for --latest.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def sessions_finish(
+    ctx: click.Context,
+    path: str | None,
+    latest: bool,
+    summary: str | None,
+    summary_stdin: bool,
+    files: tuple[str, ...],
+    tests: tuple[str, ...],
+    next_steps: str | None,
+    transcript: str | None,
+    project: str | None,
+    scope: str | None,
+    as_json: bool,
+):
+    """Close a session handoff with a final summary."""
+    from .session_log import finish_session
+
+    try:
+        summary_value = _resolve_optional_stdin_text(
+            value=summary,
+            stdin=summary_stdin,
+            field="summary",
+            required=True,
+        )
+        assert summary_value is not None
+        record = run_async(
+            finish_session(
+                path=path,
+                latest=latest,
+                summary=summary_value,
+                files=_split_multi_values(files),
+                tests=_split_multi_values(tests),
+                next_steps=next_steps,
+                transcript=transcript,
+                project=project,
+                scope=scope,
+            )
+        )
+    except Exception as e:
+        _handle_error(ctx, e, fallback_message="Failed to finish session handoff.")
+
+    payload = record.to_dict()
+    if as_json:
+        payload["schema_version"] = MX_JSON_SCHEMA_VERSION
+        payload["version"] = MEMEX_VERSION
+        output(payload, as_json=True)
+    else:
+        click.echo(f"Finished session handoff: {record.path}")
+
+
+@sessions.command("recent")
+@click.option("--limit", "-n", default=5, type=click.IntRange(min=1), help="Max sessions.")
+@click.option("--project", help="Project name override.")
+@click.option("--scope", type=click.Choice(["project", "user"]), help="Limit to one KB scope.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def sessions_recent(
+    ctx: click.Context,
+    limit: int,
+    project: str | None,
+    scope: str | None,
+    as_json: bool,
+):
+    """List recent session handoffs for this project."""
+    from .session_log import list_recent_sessions
+
+    try:
+        records = list_recent_sessions(project=project, scope=scope, limit=limit)
+    except Exception as e:
+        _handle_error(ctx, e, fallback_message="Failed to list session handoffs.")
+
+    rows = [record.to_dict() for record in records]
+    if as_json:
+        output(
+            {
+                "schema_version": MX_JSON_SCHEMA_VERSION,
+                "version": MEMEX_VERSION,
+                "sessions": rows,
+            },
+            as_json=True,
+        )
+        return
+
+    if not rows:
+        click.echo("No session handoffs found for this project.")
+        click.echo('Start one with: mx sessions start --goal "..."')
+        return
+
+    for row in rows:
+        status = str(row["status"]).upper()
+        click.echo(f"{status} {row['updated']}  {row['path']}")
+        click.echo(f"  {row['summary']}")
+
+
+@sessions.command("hook")
+@click.argument("harness", type=click.Choice(["claude", "codex", "context"]))
+@click.option("--print", "print_snippet", is_flag=True, help="Print hook/config snippet.")
+@click.option("--instructions", is_flag=True, help="Print Markdown agent instructions.")
+@click.option("--install", is_flag=True, help="Install supported hook config.")
+@click.option(
+    "--path",
+    "install_path",
+    type=click.Path(path_type=Path),
+    help="Install target path; implies --install.",
+)
+@click.option(
+    "--turns",
+    type=click.IntRange(min=1),
+    help="For prompt hooks, emit every N turns.",
+)
+@click.option(
+    "--reminder",
+    is_flag=True,
+    help="Emit a session-log reminder instead of startup context.",
+)
+@click.option(
+    "--max-entries",
+    type=int,
+    default=4,
+    show_default=True,
+    help="Maximum relevant entries for the context wrapper.",
+)
+@click.option(
+    "--max-recent",
+    type=int,
+    default=5,
+    show_default=True,
+    help="Maximum recent entries for the context wrapper.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+@click.pass_context
+def sessions_hook(
+    ctx: click.Context,
+    harness: str,
+    print_snippet: bool,
+    instructions: bool,
+    install: bool,
+    install_path: Path | None,
+    turns: int | None,
+    reminder: bool,
+    max_entries: int,
+    max_recent: int,
+    as_json: bool,
+):
+    """Print/install harness hooks or emit hook-safe context."""
+    from .session_log import build_agent_instructions, build_hook_snippet
+
+    installed_path: Path | None = None
+    try:
+        if harness == "context":
+            if print_snippet or instructions or install or install_path or as_json:
+                raise UsageError(
+                    "`mx sessions hook context` emits hook-safe context only; "
+                    "use `mx sessions hook claude|codex` for snippets and installs."
+                )
+            from .session_context import build_hook_context_output
+
+            stdin_text = None if sys.stdin.isatty() else sys.stdin.read()
+            content = build_hook_context_output(
+                turns=turns,
+                stdin_text=stdin_text,
+                max_entries=max_entries,
+                recent_limit=max_recent,
+                reminder=reminder,
+            )
+            if content:
+                click.echo(content)
+            return
+
+        if install or install_path:
+            from .session_context import (
+                HOOK_CONTEXT_COMMAND,
+                default_codex_hooks_path,
+                default_settings_path,
+                install_codex_hook,
+                install_session_hook,
+            )
+
+            if harness == "claude":
+                target = install_path or default_settings_path(Path.cwd())
+                installed_path = install_session_hook(
+                    target,
+                    command=HOOK_CONTEXT_COMMAND,
+                    turns=turns,
+                )
+            elif harness == "codex":
+                target = install_path or default_codex_hooks_path(Path.cwd())
+                installed_path = install_codex_hook(
+                    target,
+                    command=HOOK_CONTEXT_COMMAND,
+                    turns=turns,
+                )
+
+        show_instructions = instructions or (not print_snippet and installed_path is None)
+        payload = {
+            "harness": harness,
+            "instructions": build_agent_instructions(harness) if show_instructions else None,
+            "hook": build_hook_snippet(harness, turns=turns) if print_snippet else None,
+            "installed": installed_path is not None,
+            "settings_path": str(installed_path) if installed_path else None,
+            "command": "mx sessions hook context",
+            "turns": turns,
+        }
+    except Exception as e:
+        _handle_error(ctx, e, fallback_message="Failed to prepare session hook.")
+
+    if as_json:
+        payload["schema_version"] = MX_JSON_SCHEMA_VERSION
+        payload["version"] = MEMEX_VERSION
+        output(payload, as_json=True)
+        return
+
+    if payload["installed"]:
+        click.echo(f"Installed SessionStart hook at {payload['settings_path']}")
+        click.echo('SessionStart hook set to: "mx sessions hook context"')
+        if payload["turns"]:
+            prompt_command = f'mx sessions hook context --turns {payload["turns"]} --reminder'
+            click.echo(
+                f'UserPromptSubmit hook set to: "{prompt_command}"'
+            )
+    if payload["instructions"]:
+        click.echo(payload["instructions"])
+    if payload["hook"]:
+        click.echo(payload["hook"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -6499,6 +6905,32 @@ def _build_schema() -> dict:
                 "examples": [
                     "mx prime",
                     "mx prime --json",
+                ],
+            },
+            "sessions": {
+                "description": "Create and read portable agent session handoffs",
+                "aliases": [],
+                "arguments": [],
+                "subcommands": ["start", "append", "finish", "recent", "hook"],
+                "options": [],
+                "related": ["prime", "session-context", "add", "append"],
+                "common_mistakes": {
+                    "full transcripts": (
+                        "Store concise summaries and next steps, not full conversations."
+                    ),
+                    "forgetting handoff": (
+                        "Use 'mx sessions append --latest --summary ...' during work and "
+                        "'mx sessions finish --latest --summary ...' before stopping."
+                    ),
+                },
+                "examples": [
+                    'mx sessions start --goal "Implement OAuth cleanup" --harness codex',
+                    'mx sessions append --latest --summary "Updated auth tests"',
+                    'mx sessions finish --latest --summary "Ready for review"',
+                    "mx sessions recent --json",
+                    "mx sessions hook codex --instructions",
+                    "mx sessions hook codex --install --turns 5",
+                    "mx sessions hook context --turns 5 --reminder",
                 ],
             },
             "init": {

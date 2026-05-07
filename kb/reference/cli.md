@@ -630,10 +630,39 @@ Output dynamic project-relevant context (for hooks).
 ```bash
 mx session-context                   # Print session context
 mx session-context --max-entries 4   # Limit relevant entries
-mx session-context --install         # Update the Claude settings file hook
+mx session-context --install         # Update the local Claude settings hook
 mx session-context --install --install-path .claude/settings.local.json
 mx session-context --json            # JSON output
 ```
+
+### mx sessions
+
+Create, update, close, and read portable agent session handoffs.
+
+```bash
+mx sessions start --goal "Implement deployment cleanup" --harness codex
+mx sessions append --latest --summary "Updated docs and smoke tests"
+mx sessions append --latest --summary "Updated hooks" --files src/memex/cli.py --transcript /tmp/session.jsonl
+mx sessions append sessions/session-handoff.md --summary "Found a blocker"
+mx sessions finish --latest --summary "Ready for review"
+mx sessions recent --limit 5
+mx sessions hook codex --instructions
+mx sessions hook codex --print
+mx sessions hook codex --print --turns 5
+mx sessions hook codex --install --path .codex/hooks.json
+mx sessions hook claude --print
+mx sessions hook claude --install --path .claude/settings.local.json
+mx sessions hook claude --install --turns 5
+mx sessions hook context --turns 5 --reminder
+```
+
+Session handoffs are ordinary Markdown KB entries under `sessions/`. Store concise summaries,
+files touched, verification, blockers, next steps, and optional transcript references. Do not store
+full transcripts or secrets.
+For Claude Code and Codex, `--print` emits hooks snippets and `--install` writes project-local hook
+config. Generated hooks call `mx sessions hook context`, which exits quietly when no KB is
+configured. `--turns N` adds a prompt hook that reminds the agent to append only the latest delta to
+the session handoff every N prompt turns.
 
 ### mx schema
 

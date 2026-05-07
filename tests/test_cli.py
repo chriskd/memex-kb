@@ -85,6 +85,7 @@ ALL_COMMANDS = [
     "history",
     "prime",
     "quick-add",
+    "sessions",
     "context",
     "patch",
     "relations-lint",
@@ -3259,6 +3260,382 @@ class TestSessionContextCommand:
         assert result.exit_code == 0
         assert "No knowledge base is configured" in result.output
         assert "mx onboard --init --yes" in result.output
+
+
+class TestSessionsCommand:
+    """Tests for 'mx sessions' handoff commands."""
+
+    def test_sessions_start_append_finish_and_recent_json(
+        self, runner, tmp_kb, monkeypatch
+    ):
+        monkeypatch.setattr("memex.core.get_searcher", lambda: NoopSearcher())
+
+        start = runner.invoke(
+            cli,
+            [
+                "sessions",
+                "start",
+                "--goal",
+                "Implement portable session handoffs",
+                "--summary",
+                "Started the handoff feature.",
+                "--harness",
+                "codex",
+                "--transcript",
+                "/tmp/codex-session.jsonl",
+                "--json",
+            ],
+        )
+        assert start.exit_code == 0, start.output
+        start_payload = json.loads(start.output)
+        assert start_payload["status"] == "open"
+        assert start_payload["harness"] == "codex"
+        assert start_payload["transcript"] == "/tmp/codex-session.jsonl"
+        session_path = start_payload["path"]
+        assert (tmp_kb / session_path).exists()
+        assert "## Transcript Reference" in (tmp_kb / session_path).read_text()
+        assert "`/tmp/codex-session.jsonl`" in (tmp_kb / session_path).read_text()
+
+        append = runner.invoke(
+            cli,
+            [
+                "sessions",
+                "append",
+                "--latest",
+                "--summary",
+                "Added the core session log helper.",
+                "--files",
+                "src/memex/session_log.py",
+                "--tests",
+                "not run yet",
+                "--transcript",
+                "/tmp/codex-session-updated.jsonl",
+                "--json",
+            ],
+        )
+        assert append.exit_code == 0, append.output
+        append_payload = json.loads(append.output)
+        assert append_payload["status"] == "open"
+        assert append_payload["summary"] == "Added the core session log helper."
+        assert append_payload["transcript"] == "/tmp/codex-session-updated.jsonl"
+
+        finish = runner.invoke(
+            cli,
+            [
+                "sessions",
+                "finish",
+                "--latest",
+                "--summary",
+                "Session handoffs are implemented and ready to verify.",
+                "--next",
+                "Run focused tests.",
+                "--json",
+            ],
+        )
+        assert finish.exit_code == 0, finish.output
+        finish_payload = json.loads(finish.output)
+        assert finish_payload["status"] == "closed"
+
+        recent = runner.invoke(cli, ["sessions", "recent", "--json"])
+        assert recent.exit_code == 0, recent.output
+        recent_payload = json.loads(recent.output)
+        assert len(recent_payload["sessions"]) == 1
+        assert recent_payload["sessions"][0]["path"] == session_path
+        assert recent_payload["sessions"][0]["status"] == "closed"
+
+    def test_session_context_compact_includes_recent_sessions(
+        self, runner, tmp_kb, monkeypatch
+    ):
+        monkeypatch.setattr("memex.core.get_searcher", lambda: NoopSearcher())
+
+        warm_cache = runner.invoke(cli, ["session-context", "--json", "--compact"])
+        assert warm_cache.exit_code == 0, warm_cache.output
+
+        start = runner.invoke(
+            cli,
+            [
+                "sessions",
+                "start",
+                "--goal",
+                "Teach startup context about handoffs",
+                "--summary",
+                "A handoff exists for startup context.",
+                "--json",
+            ],
+        )
+        assert start.exit_code == 0, start.output
+
+        result = runner.invoke(cli, ["session-context", "--json", "--compact"])
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert "recent_sessions" in payload
+        assert payload["recent_sessions"]
+        assert payload["recent_sessions"][0]["summary"] == "A handoff exists for startup context."
+
+    def test_sessions_hook_prints_codex_instructions(self, runner):
+        result = runner.invoke(cli, ["sessions", "hook", "codex", "--instructions"])
+
+        assert result.exit_code == 0, result.output
+        assert "mx sessions start" in result.output
+        assert "mx sessions finish" in result.output
+        assert "mx sessions hook context --turns 5 --reminder" in result.output
+
+    def test_sessions_hook_prints_claude_instructions(self, runner):
+        result = runner.invoke(cli, ["sessions", "hook", "claude", "--instructions"])
+
+        assert result.exit_code == 0, result.output
+        assert "matcher `startup|resume`" in result.output
+        assert "mx sessions hook context --turns 5 --reminder" in result.output
+
+    def test_sessions_hook_prints_claude_hooks_json(self, runner):
+        result = runner.invoke(cli, ["sessions", "hook", "claude", "--print"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        hook = payload["hooks"]["SessionStart"][0]
+        assert hook["matcher"] == "startup|resume"
+        assert hook["hooks"][0] == {
+            "type": "command",
+            "command": "mx sessions hook context",
+            "statusMessage": "Loading Memex handoffs",
+        }
+
+    def test_sessions_hook_prints_periodic_prompt_hook(self, runner):
+        result = runner.invoke(cli, ["sessions", "hook", "claude", "--print", "--turns", "5"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        hook = payload["hooks"]["UserPromptSubmit"][0]
+        assert "matcher" not in hook
+        assert hook["hooks"][0] == {
+            "type": "command",
+            "command": "mx sessions hook context --turns 5 --reminder",
+        }
+
+    def test_sessions_hook_prints_codex_hooks_json(self, runner):
+        result = runner.invoke(cli, ["sessions", "hook", "codex", "--print"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        hook = payload["hooks"]["SessionStart"][0]
+        assert hook["matcher"] == "startup|resume"
+        assert hook["hooks"][0]["command"] == "mx sessions hook context"
+
+    def test_sessions_hook_installs_claude_session_start(self, runner, tmp_path):
+        settings = tmp_path / ".claude" / "settings.local.json"
+
+        result = runner.invoke(
+            cli,
+            ["sessions", "hook", "claude", "--install", "--path", str(settings), "--json"],
+        )
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload["installed"] is True
+        data = json.loads(settings.read_text())
+        hook = data["hooks"]["SessionStart"][0]
+        assert hook["matcher"] == "startup|resume"
+        assert hook["hooks"][0] == {
+            "type": "command",
+            "command": "mx sessions hook context",
+            "statusMessage": "Loading Memex handoffs",
+        }
+
+    def test_sessions_hook_defaults_to_claude_local_settings(
+        self, runner, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(cli, ["sessions", "hook", "claude", "--install", "--json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        settings = tmp_path / ".claude" / "settings.local.json"
+        assert payload["settings_path"] == str(settings)
+        assert settings.exists()
+
+    def test_sessions_hook_installs_codex_project_hooks(self, runner, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            cli,
+            ["sessions", "hook", "codex", "--install", "--turns", "5", "--json"],
+        )
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        hooks_path = tmp_path / ".codex" / "hooks.json"
+        assert payload["settings_path"] == str(hooks_path)
+        data = json.loads(hooks_path.read_text())
+        assert data["hooks"]["SessionStart"][0]["hooks"][0]["command"] == (
+            "mx sessions hook context"
+        )
+        assert data["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] == (
+            "mx sessions hook context --turns 5 --reminder"
+        )
+
+    def test_sessions_hook_migrates_legacy_claude_entry(self, runner, tmp_path):
+        settings = tmp_path / ".claude" / "settings.local.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text(
+            json.dumps({"hooks": {"SessionStart": [{"command": "mx session-context"}]}})
+            + "\n"
+        )
+
+        result = runner.invoke(
+            cli,
+            ["sessions", "hook", "claude", "--install", "--path", str(settings), "--json"],
+        )
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(settings.read_text())
+        session_start = data["hooks"]["SessionStart"]
+        assert session_start == [
+            {
+                "matcher": "startup|resume",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "mx sessions hook context",
+                        "statusMessage": "Loading Memex handoffs",
+                    }
+                ],
+            }
+        ]
+
+    def test_sessions_hook_context_is_quiet_without_kb(self, runner, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("MEMEX_SKIP_PROJECT_KB", "1")
+        monkeypatch.setenv("MEMEX_USER_KB_ROOT", str(tmp_path / "missing-kb"))
+
+        result = runner.invoke(cli, ["sessions", "hook", "context"])
+
+        assert result.exit_code == 0, result.output
+        assert result.output == ""
+
+    def test_sessions_hook_context_outputs_only_recent_session_log(
+        self, runner, tmp_kb, monkeypatch
+    ):
+        monkeypatch.setattr("memex.core.get_searcher", lambda: NoopSearcher())
+
+        start = runner.invoke(
+            cli,
+            [
+                "sessions",
+                "start",
+                "--goal",
+                "Shorten startup hook output",
+                "--summary",
+                "Keep the startup hook focused on handoffs.",
+                "--json",
+            ],
+        )
+        assert start.exit_code == 0, start.output
+
+        result = runner.invoke(cli, ["sessions", "hook", "context"])
+
+        assert result.exit_code == 0, result.output
+        assert "## Memex Session Log" in result.output
+        assert "Recent working sessions" in result.output
+        assert "Keep the startup hook focused on handoffs." in result.output
+        assert "**5-minute flow:**" not in result.output
+        assert "**Quick reference:**" not in result.output
+        assert "**Recent Entries:**" not in result.output
+        assert "**Next Commands:**" not in result.output
+
+    def test_sessions_hook_context_brief_status_without_session_log(self, runner, tmp_kb):
+        result = runner.invoke(cli, ["sessions", "hook", "context"])
+
+        assert result.exit_code == 0, result.output
+        assert "## Memex Session Log" in result.output
+        assert "no recent working sessions yet" in result.output
+        assert "**5-minute flow:**" not in result.output
+        assert "**Quick reference:**" not in result.output
+        assert "**Next Commands:**" not in result.output
+
+    def test_sessions_hook_context_emits_reminder_every_n_turns(
+        self, runner, tmp_kb, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("MEMEX_SESSION_HOOK_STATE", str(tmp_path / "hook-state.json"))
+        payload = json.dumps(
+            {
+                "session_id": "abc123",
+                "cwd": str(tmp_path),
+                "transcript_path": "/tmp/claude-transcript.jsonl",
+            }
+        )
+
+        first = runner.invoke(
+            cli,
+            ["sessions", "hook", "context", "--turns", "3", "--reminder"],
+            input=payload,
+        )
+        second = runner.invoke(
+            cli,
+            ["sessions", "hook", "context", "--turns", "3", "--reminder"],
+            input=payload,
+        )
+        third = runner.invoke(
+            cli,
+            ["sessions", "hook", "context", "--turns", "3", "--reminder"],
+            input=payload,
+        )
+
+        assert first.exit_code == 0, first.output
+        assert second.exit_code == 0, second.output
+        assert third.exit_code == 0, third.output
+        assert first.output == ""
+        assert second.output == ""
+        assert "## Memex Session Log Reminder" in third.output
+        assert "last 3 prompt turns" in third.output
+        assert "append only that delta" in third.output
+        assert "continuation-relevant files" in third.output
+        assert "Transcript reference from hook payload" in third.output
+        assert "/tmp/claude-transcript.jsonl" in third.output
+        assert "--transcript /tmp/claude-transcript.jsonl" in third.output
+        assert "--files path/to/file" in third.output
+        assert "--tests" in third.output
+        assert "--next" in third.output
+        assert "dump diffs" in third.output
+        assert "Do not re-summarize the whole session" in third.output
+
+    def test_sessions_progress_log_keeps_markdown_spacing(
+        self, runner, tmp_kb, monkeypatch
+    ):
+        monkeypatch.setattr("memex.core.get_searcher", lambda: NoopSearcher())
+
+        start = runner.invoke(
+            cli,
+            [
+                "sessions",
+                "start",
+                "--goal",
+                "Check markdown spacing",
+                "--summary",
+                "Initial summary.",
+                "--json",
+            ],
+        )
+        assert start.exit_code == 0, start.output
+
+        finish = runner.invoke(
+            cli,
+            [
+                "sessions",
+                "finish",
+                "--latest",
+                "--summary",
+                "Finished summary.",
+                "--next",
+                "Hand off cleanly.",
+                "--json",
+            ],
+        )
+        assert finish.exit_code == 0, finish.output
+
+        session_path = json.loads(finish.output)["path"]
+        content = (tmp_kb / session_path).read_text()
+        assert "Next:\nHand off cleanly.\n\n## Decisions" in content
 
 
 # ─────────────────────────────────────────────────────────────────────────────

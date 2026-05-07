@@ -110,11 +110,12 @@ Claude settings file only when they should be committed for everyone.
 Install the session hook into local settings:
 
 ```bash
-mx session-context --install --install-path .claude/settings.local.json
+mx sessions hook claude --install --path .claude/settings.local.json
 ```
 
-`mx session-context` injects project-relevant KB context at session start. This install flow updates
-the Claude settings file; it is separate from Claude's native skill installation.
+This writes a Claude Code `SessionStart` hook for `startup|resume` that runs
+`mx sessions hook context`. It loads project-relevant KB context without writing a handoff, stays
+silent when no KB is configured, and is separate from Claude's native skill installation.
 
 ### Claude Code Workflow
 
@@ -123,6 +124,11 @@ Useful companion commands:
 ```bash
 mx prime
 mx session-context
+mx sessions hook claude --print
+mx sessions hook claude --print --turns 5
+mx sessions start --goal "..." --harness claude
+mx sessions append --latest --summary "..."
+mx sessions finish --latest --summary "..."
 mx schema --compact
 mx --json-errors search "query"
 mx batch
@@ -201,11 +207,51 @@ Helpful commands for Codex-style workflows:
 - `mx context validate` - validate `kb_path` / `project_kb` and related paths
 - `mx prime` - emit a concise agent startup payload
 - `mx session-context` - emit live project context for the current session
+- `mx sessions recent` - show recent portable session handoffs
+- `mx sessions hook codex --instructions` - print an `AGENTS.md`-friendly handoff snippet
 - `mx schema --compact` - emit command metadata for introspection
 - `mx --json-errors` - keep errors machine-parseable
 
 Use the skill when you want reusable Memex-specific workflow guidance. Use direct `mx` commands when
 you want a thin shell-only integration.
+
+## Session Handoffs
+
+Use session handoffs when multiple agents or harnesses work in the same directory. A handoff is a
+normal Markdown KB entry under `sessions/`, written by the agent as concise summaries rather than a
+stored transcript.
+
+```bash
+mx sessions start --goal "Implement deployment cleanup" --harness codex
+mx sessions append --latest --summary "Updated docs and smoke tests" --files kb/guides/ai-integration.md
+mx sessions finish --latest --summary "Ready for review"
+mx sessions recent
+```
+
+Use `--transcript <path>` to store a pointer to a harness transcript or session log when available.
+Store the pointer only, not the transcript content.
+
+Hook helpers are print-first so you can inspect or place them yourself:
+
+```bash
+mx sessions hook codex --instructions
+mx sessions hook codex --print
+mx sessions hook codex --install --path .codex/hooks.json
+mx sessions hook claude --print
+mx sessions hook claude --install --path .claude/settings.local.json
+mx sessions hook claude --install --turns 5
+```
+
+`mx session-context` and `mx prime` include recent session handoffs, so a different harness can pick
+up the latest goal, progress, verification, blockers, and next steps without reading another
+harness's private session files.
+
+For Claude Code and Codex, install the generated `SessionStart` hook at startup/resume to load
+context. Add `--turns 5` to include a `UserPromptSubmit` hook that calls
+`mx sessions hook context --turns 5 --reminder`; the wrapper counts prompts per hook session and
+exits with no output except on the Nth turn, when it reminds the agent to append only the last
+interval's delta to the session handoff. If the hook payload includes a transcript path, the reminder
+prints it so the agent can pass it with `--transcript`.
 
 ## Other Harnesses
 
@@ -222,6 +268,7 @@ mx prime
 mx info
 mx context show
 mx search "deployment strategies"
+mx sessions recent
 mx whats-new --scope=project --days=7
 mx quick-add --stdin
 ```
@@ -270,6 +317,7 @@ Related commands:
 4. Link related entries with `[[wikilinks]]`.
 5. Keep entries focused on one topic.
 6. Update existing entries instead of duplicating them.
+7. For handoffs, store concise summaries and next steps, not full transcripts or secrets.
 
 ## See Also
 

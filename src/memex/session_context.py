@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
 import re
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -22,7 +25,14 @@ CACHE_TTL_SECONDS = 3600  # 1 hour
 DEFAULT_MAX_ENTRIES = 4
 DEFAULT_RECENT_DAYS = 14
 DEFAULT_RECENT_LIMIT = 5
-CACHE_VERSION = 4
+CACHE_VERSION = 5
+HOOK_CONTEXT_COMMAND = "mx sessions hook context"
+LEGACY_SESSION_CONTEXT_COMMAND = "mx session-context"
+SESSION_START_MATCHER = "startup|resume"
+SESSION_CONTEXT_STATUS_MESSAGE = "Loading Memex handoffs"
+SESSION_REMINDER_HEADING = "## Memex Session Log Reminder"
+HOOK_SESSION_LOG_HEADING = "## Memex Session Log"
+HOOK_STATE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 
 
 @dataclass
@@ -31,6 +41,7 @@ class SessionContextResult:
     entries: list[dict]
     content: str
     recent_entries: list[dict] = field(default_factory=list)
+    recent_sessions: list[dict] = field(default_factory=list)
     cached: bool = False
 
 
@@ -49,10 +60,11 @@ def _get_cache_path(
 ) -> Path:
     safe_name = _stable_cache_token(project_name)
     safe_kb = _stable_cache_token(str(kb_root.resolve()))
-    return (
-        CACHE_DIR
-        / f"memex-context-{safe_name}-{safe_kb}-{max_entries}-{recent_limit}-{recent_days}-v{CACHE_VERSION}.json"
+    cache_name = (
+        f"memex-context-{safe_name}-{safe_kb}-"
+        f"{max_entries}-{recent_limit}-{recent_days}-v{CACHE_VERSION}.json"
     )
+    return CACHE_DIR / cache_name
 
 
 def _load_cached_context(
@@ -80,6 +92,7 @@ def _load_cached_context(
                 project=data.get("project", project_name),
                 entries=data.get("entries", []),
                 recent_entries=data.get("recent_entries", []),
+                recent_sessions=data.get("recent_sessions", []),
                 content=data.get("content", ""),
                 cached=True,
             )
@@ -277,6 +290,7 @@ def _format_output(
     scope: str | None,
     context: KBContext | None,
     recent_entries: list[dict],
+    recent_sessions: list[dict],
 ) -> str:
     import importlib.util
 
@@ -318,8 +332,10 @@ def _format_output(
             "If you don't have a KB yet: `mx init` (project) or `mx init --user` (personal).",
             "1) `mx info` - active KB paths + categories",
             "2) `mx context show` - .kbconfig (primary category + default tags)",
-            "3) `mx add --title=\"...\" --tags=\"...\" --category=... --content=\"...\"` - create entry",
-            "   (omit --category if `.kbconfig` sets `primary`; otherwise defaults to KB root (.) with a warning)",
+            "3) `mx add --title=\"...\" --tags=\"...\" --category=... "
+            "--content=\"...\"` - create entry",
+            "   (omit --category if `.kbconfig` sets `primary`; otherwise defaults "
+            "to KB root (.) with a warning)",
             "4) `mx categories` - discover available categories (directories)",
             "5) `mx list --limit=5` - confirm entry path",
             "   Optional: `mx search \"query\"` - verify indexing",
@@ -329,7 +345,8 @@ def _format_output(
             "**Required frontmatter:**",
             "- `title`",
             "- `tags`",
-            "README.md inside the KB should include frontmatter or be excluded (prefix \"_\" or move it).",
+            "README.md inside the KB should include frontmatter or be excluded "
+            "(prefix \"_\" or move it).",
             "Quick fix: add frontmatter or rename it to _README.md.",
             "",
             "**Quick reference:**",
@@ -364,6 +381,17 @@ def _format_output(
             lines.append(f"- {date_str} {activity} `{path}` — {title}")
         lines.append("")
 
+    if recent_sessions:
+        lines.append("**Recent Session Handoffs:**")
+        lines.append("")
+        for session in recent_sessions:
+            status = str(session.get("status", "unknown")).upper()
+            date_str = str(session.get("updated", ""))
+            path = session.get("path", "")
+            summary = session.get("summary", "")
+            lines.append(f"- {date_str} {status} `{path}` - {summary}")
+        lines.append("")
+
     lines.append("**Next Commands:**")
     lines.append("")
     if scope:
@@ -394,6 +422,17 @@ def build_session_context(
     if not kb_root.exists():
         return None
 
+    scope = _resolve_recent_scope()
+    try:
+        from .session_log import list_recent_sessions
+
+        recent_sessions = [
+            record.to_dict()
+            for record in list_recent_sessions(project=project_name, scope=scope, limit=3)
+        ]
+    except Exception:
+        recent_sessions = []
+
     cached = _load_cached_context(
         project_name,
         kb_root=kb_root,
@@ -402,12 +441,21 @@ def build_session_context(
         recent_days=recent_days,
     )
     if cached:
+        cached.recent_sessions = recent_sessions
+        cached.content = _format_output(
+            cached.entries,
+            cached.project,
+            kb_root=kb_root,
+            scope=scope,
+            context=context,
+            recent_entries=cached.recent_entries,
+            recent_sessions=recent_sessions,
+        )
         return cached
 
     project_tokens = _get_project_tokens(project_name, cwd)
     entries = _scan_kb_entries(kb_root)
     relevant = _select_relevant_entries(entries, project_name, project_tokens, context, max_entries)
-    scope = _resolve_recent_scope()
     recent_entries = _get_recent_entries(scope, days=recent_days, limit=recent_limit)
     content = _format_output(
         relevant,
@@ -416,12 +464,14 @@ def build_session_context(
         scope=scope,
         context=context,
         recent_entries=recent_entries,
+        recent_sessions=recent_sessions,
     )
 
     result = SessionContextResult(
         project=project_name,
         entries=relevant,
         recent_entries=recent_entries,
+        recent_sessions=recent_sessions,
         content=content,
         cached=False,
     )
@@ -437,6 +487,7 @@ def build_session_context(
         "project": result.project,
         "entries": result.entries,
         "recent_entries": result.recent_entries,
+        "recent_sessions": result.recent_sessions,
         "content": result.content,
     }
     try:
@@ -444,6 +495,220 @@ def build_session_context(
     except OSError:
         pass
     return result
+
+
+def _has_hook_kb() -> bool:
+    try:
+        kb_root = get_kb_root()
+    except ConfigurationError:
+        return False
+    return kb_root.exists()
+
+
+def _get_recent_sessions_for_hook(project_name: str, scope: str | None, limit: int) -> list[dict]:
+    try:
+        from .session_log import list_recent_sessions
+
+        return [
+            record.to_dict()
+            for record in list_recent_sessions(project=project_name, scope=scope, limit=limit)
+        ]
+    except Exception:
+        return []
+
+
+def _format_hook_session_log(project_name: str, recent_sessions: list[dict]) -> str:
+    lines = [HOOK_SESSION_LOG_HEADING, ""]
+    if not recent_sessions:
+        lines.append(
+            f"Memex session log is available for `{project_name}`; no recent working sessions yet."
+        )
+        return "\n".join(lines)
+
+    lines.append(f"Recent working sessions for `{project_name}`:")
+    lines.append("")
+    for session in recent_sessions:
+        status = str(session.get("status", "unknown")).upper()
+        date_str = str(session.get("updated", ""))
+        path = session.get("path", "")
+        summary = session.get("summary", "")
+        lines.append(f"- {date_str} {status} `{path}` - {summary}")
+    return "\n".join(lines)
+
+
+def build_hook_session_log_output(*, recent_limit: int = DEFAULT_RECENT_LIMIT) -> str | None:
+    """Return the short session-start hook payload, or None when no KB exists."""
+    if not _has_hook_kb():
+        return None
+
+    cwd = Path.cwd()
+    context = get_kb_context()
+    project_name = _resolve_project_name(cwd, context)
+    scope = _resolve_recent_scope()
+    recent_sessions = _get_recent_sessions_for_hook(project_name, scope, recent_limit)
+    return _format_hook_session_log(project_name, recent_sessions)
+
+
+def _parse_hook_payload(stdin_text: str | None) -> dict:
+    if not stdin_text:
+        return {}
+    try:
+        payload = json.loads(stdin_text)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _hook_state_path() -> Path:
+    explicit = os.environ.get("MEMEX_SESSION_HOOK_STATE")
+    if explicit:
+        return Path(explicit).expanduser()
+
+    state_home = os.environ.get("XDG_STATE_HOME")
+    state_root = Path(state_home).expanduser() if state_home else Path.home() / ".local" / "state"
+    return state_root / "memex" / "session-hook-context.json"
+
+
+def _hook_state_key(payload: dict) -> str:
+    session_id = (
+        payload.get("session_id")
+        or payload.get("sessionId")
+        or payload.get("transcript_path")
+        or payload.get("transcriptPath")
+        or ""
+    )
+    event = (
+        payload.get("hook_event_name")
+        or payload.get("hookEventName")
+        or payload.get("event")
+        or ""
+    )
+    cwd = payload.get("cwd") or str(Path.cwd())
+    raw = json.dumps([cwd, session_id, event], sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _hook_transcript_reference(payload: dict) -> str | None:
+    value = (
+        payload.get("transcript_path")
+        or payload.get("transcriptPath")
+        or payload.get("session_path")
+        or payload.get("sessionPath")
+    )
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _load_hook_state(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_hook_state(path: Path, state: dict) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f"{path.name}.tmp")
+        tmp_path.write_text(json.dumps(state, sort_keys=True))
+        tmp_path.replace(path)
+    except OSError:
+        pass
+
+
+def _is_recent_hook_state_value(value: object, cutoff: float) -> bool:
+    if not isinstance(value, dict):
+        return False
+    try:
+        updated = float(value.get("updated", 0) or 0)
+    except (TypeError, ValueError):
+        return False
+    return updated >= cutoff
+
+
+def _should_emit_for_turn(payload: dict, turns: int | None) -> bool:
+    if turns is None or turns <= 1:
+        return True
+
+    state_path = _hook_state_path()
+    now = time.time()
+    state = _load_hook_state(state_path)
+    sessions = state.get("sessions")
+    if not isinstance(sessions, dict):
+        sessions = {}
+
+    cutoff = now - HOOK_STATE_MAX_AGE_SECONDS
+    sessions = {
+        key: value
+        for key, value in sessions.items()
+        if _is_recent_hook_state_value(value, cutoff)
+    }
+
+    key = _hook_state_key(payload)
+    current = sessions.get(key)
+    try:
+        count = int(current.get("count", 0)) if isinstance(current, dict) else 0
+    except (TypeError, ValueError):
+        count = 0
+    count += 1
+    sessions[key] = {"count": count, "updated": now}
+    state["sessions"] = sessions
+    _write_hook_state(state_path, state)
+    return count % turns == 0
+
+
+def build_hook_context_output(
+    *,
+    turns: int | None = None,
+    stdin_text: str | None = None,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
+    recent_limit: int = DEFAULT_RECENT_LIMIT,
+    reminder: bool = False,
+) -> str | None:
+    """Return hook-safe output, or None when hooks should stay silent."""
+    if not _has_hook_kb():
+        return None
+
+    payload = _parse_hook_payload(stdin_text)
+    if not _should_emit_for_turn(payload, turns):
+        return None
+
+    if reminder:
+        interval = f"last {turns} prompt turns" if turns and turns > 1 else "recent prompt turns"
+        transcript = _hook_transcript_reference(payload)
+        transcript_flag = f" --transcript {shlex.quote(transcript)}" if transcript else ""
+        transcript_lines = (
+            [
+                "",
+                f"Transcript reference from hook payload: `{transcript}`",
+                "Include it with `--transcript` if appending a handoff update.",
+            ]
+            if transcript
+            else []
+        )
+        return "\n".join(
+            [
+                SESSION_REMINDER_HEADING,
+                "",
+                f"If meaningful work happened in the {interval}, append only that delta to "
+                "the active Memex session handoff.",
+                "",
+                "Include only continuation-relevant files with `--files`; add `--tests` "
+                "and `--next` when useful.",
+                *transcript_lines,
+                "",
+                'Run: `mx sessions append --latest --summary "..." --files path/to/file '
+                f'--tests "..." --next "..."{transcript_flag}`',
+                "",
+                "Keep it compact: what changed, why it matters, files touched, verification, "
+                "blockers, and next steps. Do not re-summarize the whole session, dump diffs, "
+                "or store secrets/raw transcript.",
+            ]
+        )
+
+    return build_hook_session_log_output(recent_limit=recent_limit)
 
 
 def find_git_root(start_dir: Path) -> Path | None:
@@ -462,7 +727,12 @@ def find_git_root(start_dir: Path) -> Path | None:
 
 def default_settings_path(start_dir: Path) -> Path:
     repo_root = find_git_root(start_dir) or start_dir
-    return repo_root / ".claude" / "settings.json"
+    return repo_root / ".claude" / "settings.local.json"
+
+
+def default_codex_hooks_path(start_dir: Path) -> Path:
+    repo_root = find_git_root(start_dir) or start_dir
+    return repo_root / ".codex" / "hooks.json"
 
 
 def _load_settings(settings_path: Path) -> dict:
@@ -471,7 +741,7 @@ def _load_settings(settings_path: Path) -> dict:
 
     data = json.loads(settings_path.read_text())
     if not isinstance(data, dict):
-        raise ValueError("Claude settings must be a JSON object")
+        raise ValueError("Hook settings must be a JSON object")
     return data
 
 
@@ -480,60 +750,166 @@ def _remove_setup_remote(hook: dict) -> bool:
     return isinstance(command, str) and "setup-remote.sh" in command
 
 
-def _ensure_session_start(settings: dict, command: str) -> None:
+def _is_memex_context_command(hook: dict) -> bool:
+    command = hook.get("command")
+    if not isinstance(command, str):
+        return False
+    return command == LEGACY_SESSION_CONTEXT_COMMAND or command.startswith(HOOK_CONTEXT_COMMAND)
+
+
+def _session_context_hook(command: str, *, status_message: str | None) -> dict[str, str]:
+    hook = {"type": "command", "command": command}
+    if status_message:
+        hook["statusMessage"] = status_message
+    return hook
+
+
+def _ensure_hook_event(
+    settings: dict,
+    event: str,
+    *,
+    command: str,
+    matcher: str | None = None,
+    status_message: str | None = None,
+) -> None:
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
-        raise ValueError("Claude settings 'hooks' must be a JSON object")
+        raise ValueError("Hook settings 'hooks' must be a JSON object")
 
-    session_start = hooks.setdefault("SessionStart", [])
-    if not isinstance(session_start, list):
-        raise ValueError("Claude settings 'hooks.SessionStart' must be a list")
+    event_entries = hooks.setdefault(event, [])
+    if not isinstance(event_entries, list):
+        raise ValueError(f"Hook settings 'hooks.{event}' must be a list")
 
-    use_nested = any(isinstance(entry, dict) and "hooks" in entry for entry in session_start)
+    target_entry: dict | None = None
+    cleaned_entries: list[object] = []
+    for entry in event_entries:
+        if not isinstance(entry, dict):
+            cleaned_entries.append(entry)
+            continue
 
-    if use_nested:
-        if not session_start:
-            session_start.append({"hooks": []})
-
-        for entry in session_start:
-            if not isinstance(entry, dict):
+        if "hooks" not in entry:
+            if _remove_setup_remote(entry) or _is_memex_context_command(entry):
                 continue
-            hooks_list = entry.get("hooks")
-            if not isinstance(hooks_list, list):
-                hooks_list = []
-                entry["hooks"] = hooks_list
+            cleaned_entries.append(entry)
+            continue
 
-            hooks_list[:] = [
-                hook
-                for hook in hooks_list
-                if not (isinstance(hook, dict) and _remove_setup_remote(hook))
-            ]
+        hooks_list = entry.get("hooks")
+        if not isinstance(hooks_list, list):
+            hooks_list = []
+            entry["hooks"] = hooks_list
 
-            if not any(
+        hooks_list[:] = [
+            hook
+            for hook in hooks_list
+            if not (
                 isinstance(hook, dict)
-                and hook.get("type") == "command"
-                and hook.get("command") == command
-                for hook in hooks_list
-            ):
-                hooks_list.append({"type": "command", "command": command})
-    else:
-        session_start[:] = [
-            entry
-            for entry in session_start
-            if not (isinstance(entry, dict) and _remove_setup_remote(entry))
+                and (_remove_setup_remote(hook) or _is_memex_context_command(hook))
+            )
         ]
 
-        if not any(
-            isinstance(entry, dict) and entry.get("command") == command for entry in session_start
-        ):
-            session_start.append({"command": command})
+        if (matcher is None and "matcher" not in entry) or entry.get("matcher") == matcher:
+            target_entry = entry
+        cleaned_entries.append(entry)
+
+    event_entries[:] = cleaned_entries
+    if target_entry is None:
+        target_entry = {"hooks": []}
+        if matcher is not None:
+            target_entry["matcher"] = matcher
+        event_entries.append(target_entry)
+
+    hooks_list = target_entry.get("hooks")
+    if not isinstance(hooks_list, list):
+        hooks_list = []
+        target_entry["hooks"] = hooks_list
+    hooks_list.append(_session_context_hook(command, status_message=status_message))
 
 
-def install_session_hook(settings_path: Path, *, command: str = "mx session-context") -> Path:
+def _remove_memex_context_event(settings: dict, event: str) -> None:
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+
+    event_entries = hooks.get(event)
+    if not isinstance(event_entries, list):
+        return
+
+    cleaned_entries: list[object] = []
+    for entry in event_entries:
+        if not isinstance(entry, dict):
+            cleaned_entries.append(entry)
+            continue
+
+        if "hooks" not in entry:
+            if not _is_memex_context_command(entry):
+                cleaned_entries.append(entry)
+            continue
+
+        hooks_list = entry.get("hooks")
+        if isinstance(hooks_list, list):
+            entry["hooks"] = [
+                hook
+                for hook in hooks_list
+                if not (isinstance(hook, dict) and _is_memex_context_command(hook))
+            ]
+        if entry.get("hooks") or len(entry) > 1:
+            cleaned_entries.append(entry)
+
+    if cleaned_entries:
+        hooks[event] = cleaned_entries
+    else:
+        hooks.pop(event, None)
+
+
+def _ensure_session_start(settings: dict, command: str) -> None:
+    _ensure_hook_event(
+        settings,
+        "SessionStart",
+        command=command,
+        matcher=SESSION_START_MATCHER,
+        status_message=SESSION_CONTEXT_STATUS_MESSAGE,
+    )
+
+
+def _ensure_periodic_prompt_context(settings: dict, turns: int | None) -> None:
+    if turns is None:
+        _remove_memex_context_event(settings, "UserPromptSubmit")
+        return
+
+    _ensure_hook_event(
+        settings,
+        "UserPromptSubmit",
+        command=f"{HOOK_CONTEXT_COMMAND} --turns {turns} --reminder",
+    )
+
+
+def install_session_hook(
+    settings_path: Path,
+    *,
+    command: str = HOOK_CONTEXT_COMMAND,
+    turns: int | None = None,
+) -> Path:
     settings_path = settings_path.expanduser()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
 
     settings = _load_settings(settings_path)
     _ensure_session_start(settings, command)
+    _ensure_periodic_prompt_context(settings, turns)
     settings_path.write_text(json.dumps(settings, indent=2) + "\n")
     return settings_path
+
+
+def install_codex_hook(
+    hooks_path: Path,
+    *,
+    command: str = HOOK_CONTEXT_COMMAND,
+    turns: int | None = None,
+) -> Path:
+    hooks_path = hooks_path.expanduser()
+    hooks_path.parent.mkdir(parents=True, exist_ok=True)
+
+    settings = _load_settings(hooks_path)
+    _ensure_session_start(settings, command)
+    _ensure_periodic_prompt_context(settings, turns)
+    hooks_path.write_text(json.dumps(settings, indent=2) + "\n")
+    return hooks_path

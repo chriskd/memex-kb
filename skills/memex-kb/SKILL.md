@@ -5,192 +5,125 @@ description: Search, read, create, edit, and maintain knowledge in a Memex KB vi
 
 # Memex KB Workflow
 
-Use `mx` as the source of truth for KB state. If `mx` is not installed globally and you are working from a repo checkout, prefix examples with `uv run`.
+Use `mx` as the source of truth for KB state. From a repo checkout, prefix commands with `uv run`.
 
-## Start With Context
+## First Commands
 
-Run these first when you need to write, interpret scoped paths, or understand the current KB shape:
+Before writing or assuming paths:
 
 ```bash
 mx prime
 mx info
 mx context show
 mx context validate
+mx categories
 ```
 
-Use them to answer:
-- Which KBs are active (`project`, `user`, or both)
-- Which categories/directories exist
-- Whether `.kbconfig` sets a `primary` write directory
-- Whether scoped paths like `@project/...` or `@user/...` are necessary
-- Whether the configured paths and default write directory are valid before mutating anything
-
-Run `mx categories` before creating entries. Categories are KB-specific and may differ across repos.
-When both KBs are active, compare them explicitly:
+Use explicit scope when both KBs are active:
 
 ```bash
 mx categories --scope=project
 mx categories --scope=user
 ```
 
-## Search Before Writing
+Check these before creating entries:
+- active KBs and default write directory
+- valid categories/directories
+- whether paths need `@project/...` or `@user/...`
 
-Search for existing knowledge before answering from memory or adding new content.
+## Search First
 
-Start broad, then tighten:
+Search before answering from memory or creating content:
 
 ```bash
 mx search "query"
-mx search "query" --scope=project
 mx search "query" --mode=keyword
 mx search "query" --mode=semantic
 mx search "query" --include-neighbors
 mx search "query" --content
-mx search "query" --json
-```
-
-Use:
-- `--mode=keyword` for exact terms, command names, filenames, error strings
-- `--mode=semantic` for conceptual matches
-- `--include-neighbors` when relations or wikilinks matter
-- `--content` or `mx get <path>` once you have a candidate entry
-- `--scope=project|user` to avoid mixing team docs with personal notes
-
-If results are ambiguous, inspect candidates directly:
-
-```bash
-mx get path/to/entry.md
+mx search "query" --parents=nearest
 mx get @project/path/to/entry.md
 mx get --title="Entry Title"
 ```
 
-When both project and user KBs are active, prefer explicit scoped paths in edits and citations to avoid collisions.
+Use keyword mode for exact strings, filenames, command names, or errors. Use semantic mode for
+conceptual matches. Use `--scope=project|user` when mixing team and personal KBs would be confusing.
+In nested project KBs, parent KBs are opt-in for search; use `--parents=nearest` when shared parent
+workspace knowledge may matter. Parent results may appear as `@parent/...` or a configured parent
+scope like `@agents/...`; use those exact paths with `mx get`.
 
-## Choose The Right Write Path
+## Write Deliberately
 
-Prefer this order:
-1. Update an existing entry if the knowledge belongs there.
-2. Append to an existing log or ongoing note if the new material is incremental.
-3. Create a new entry only when the topic deserves its own durable page.
+Prefer updating an existing entry, then appending to a log/note, then creating a new page. Choose
+scope by audience: `project` for shared repo/team knowledge, `user` for personal notes.
 
-Decide scope with the content's audience:
-- `project`: team conventions, architecture, repo workflows, shared troubleshooting, operational docs
-- `user`: personal notes, drafts, experiments, cross-project personal workflows
-
-Decide category from the live KB, not from a hard-coded taxonomy:
-
-```bash
-mx categories
-mx categories --scope=project
-mx categories --scope=user
-mx tree --depth=2
-```
-
-If `.kbconfig` has no `primary`, `mx add` without `--category` writes to the KB root and warns. Prefer setting `--category` explicitly unless the existing KB conventions say otherwise.
-
-## Create Entries Deliberately
-
-Use the command that matches how much structure you already have:
+Useful write commands:
 
 ```bash
 mx add --title="..." --tags="..." --category=guides --scope=project --content="..."
-mx add --title="..." --tags="..." --category=inbox --scope=user --content="..."
 mx quick-add --content="..."
 mx ingest notes.md --directory=guides --scope=project
-```
-
-Prefer:
-- `mx add` when you already know the title, tags, category, and scope
-- `mx quick-add` when you have raw notes and want Memex to suggest metadata
-- `mx ingest` when importing an existing Markdown file into the KB
-
-Important:
-- `mx add` and `mx ingest` support explicit `--scope=project|user`
-- `mx quick-add` does not take `--scope`; use it only when the auto-detected active KB is the one you want
-
-After creating an entry:
-
-```bash
-mx list --limit=5
-mx get @project/path/to/new-entry.md
-mx suggest-links @project/path/to/new-entry.md
-```
-
-Use `mx tags` before inventing new tags. Reuse existing tags unless a new one is clearly warranted.
-
-For frontmatter, relations, and templates, read `references/entry-format.md`.
-
-## Update Entries Conservatively
-
-Prefer the least destructive edit command:
-
-```bash
 mx patch @project/path.md --find="old" --replace="new"
 mx append "Entry Title" --content="new section"
 mx replace @user/path.md --content="full replacement"
 ```
 
-Choose commands by intent:
-- `mx patch`: surgical edits, typo fixes, targeted updates
-- `mx append`: add notes or sections while preserving the existing document
-- `mx replace`: full rewrites or metadata/content replacement
+Notes:
+- `mx add` and `mx ingest` support `--scope=project|user`; `mx quick-add` does not.
+- If `.kbconfig` has no `primary`, pass `--category` explicitly.
+- Use `mx tags` before inventing new tags.
+- After creating, run `mx get <path>` and consider `mx suggest-links <path>`.
 
-Use `--dry-run` with `mx patch` when the replacement is risky or repetitive.
-When both KBs are active, prefer explicit scoped paths for all mutating commands.
+## Session Handoffs
 
-For relation maintenance, prefer dedicated relation commands when possible:
+For substantial work another agent may continue, keep a concise handoff:
+
+```bash
+mx sessions start --goal="..." --harness=codex
+mx sessions append --latest --summary="What changed, files touched, tests run, blockers" --files=path
+mx sessions append --latest --summary="Linked transcript" --transcript=/path/to/session.jsonl
+mx sessions finish --latest --summary="Final state and remaining next steps"
+mx sessions recent
+```
+
+Use `mx sessions hook <claude|codex> --instructions`, `--print`, or `--install` for harness hooks;
+add `--turns N` for periodic session-log reminders. Store summaries and next steps, not full
+transcripts or secrets. Store transcript paths with `--transcript`, not transcript content.
+
+## Relations And Health
 
 ```bash
 mx relations path.md --depth=2
 mx relations-add path.md --relation "other.md=documents"
 mx relations-remove path.md --relation "other.md=documents"
 mx relations-lint
-```
-
-## Audit And Maintain Quality
-
-Run these after meaningful writes or when the user asks about KB health:
-
-```bash
 mx health
-mx relations-lint
 mx whats-new --days=7
-mx whats-new --scope=project --days=7
 mx hubs
 mx doctor --timestamps
 mx doctor --timestamps --fix
 ```
 
-Use them to catch:
-- broken links
-- orphaned entries
-- stale content
-- relation type drift
-- timestamp problems
+Run health checks after meaningful writes or when auditing stale content, broken links, orphaned
+entries, relation type drift, or timestamp issues.
 
-`mx health` suppresses orphan warnings in very small KBs, so interpret orphan output in context.
-Use `mx doctor --timestamps --fix` when timestamps are missing, invalid, or stale because files were
-edited directly outside `mx`.
-
-## Keep Canonical Docs Canonical
+## Details Live Elsewhere
 
 Do not maintain a second copy of the CLI or schema inside this skill.
 
-Read these repo docs when you need detail:
+Read when needed:
 - `kb/reference/cli.md` for current command options and JSON output shapes
 - `kb/reference/entry-format.md` for frontmatter, links, semantic links, and typed relations
 - `kb/guides/quick-start.md` for onboarding flow and category conventions in the current repo
 - `kb/design/relations-graph/relations-graph-overview.md` when relation traversal or publish behavior matters
 
-The reference files bundled with this skill are navigation notes, not an independent source of truth.
+## Avoid
 
-## Anti-Patterns
-
-Avoid:
 - adding a new entry before searching for an existing one
-- hard-coding category names from an old repo into a new KB
-- assuming unscoped reads or writes target the KB you intended when both project and user KBs are active
-- using `mx quick-add` when you need an explicit project/user write target
-- using `mx replace` when `mx patch` or `mx append` would preserve context
+- assuming unscoped paths target the intended KB when multiple scopes are active
+- assuming a nested KB search includes parent KB results without `parent_kbs: nearest` or `--parents=nearest`
+- hard-coding categories from another repo
+- using `mx quick-add` when you need explicit scope
+- using `mx replace` when `mx patch` or `mx append` would preserve more context
 - creating personal scratch notes in the project KB
 - inventing new tags without checking `mx tags`
